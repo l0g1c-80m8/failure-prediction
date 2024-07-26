@@ -4,7 +4,7 @@
       "dockerfile": "../Dockerfile",
       "context": "..",
       "args": {
-        "BUILDPLATFORM": "${localEnv:BUILDPLATFORM}"
+        "BUILD_PLATFORM": "linux/arm64"
       }
     },
     // "runArgs": ["--gpus", "all"],
@@ -25,5 +25,6 @@
     "containerEnv": {
       "BUILDPLATFORM": "${localEnv:BUILDPLATFORM}"
     },
+    "onCreateCommand": "export $(grep -v '^#' .env | xargs)",
     "postCreateCommand": "pip3 install --user -r requirements.txt"
   }

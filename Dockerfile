@@ -1,4 +1,8 @@
-FROM --platform=linux/arm64 ubuntu:20.04
+# syntax=docker/dockerfile:1
+
+ARG BUILD_PLATFORM
+
+FROM --platform=${BUILD_PLATFORM} ubuntu:20.04
 
 ARG USERNAME=vscode
 ARG USER_UID=1000
