@@ -1,13 +1,29 @@
 {
-    "name": "[Simulation Dev Container]",
-    "dockerFile": "../Dockerfile",
-    "settings": {
-        "terminal.integrated.shell.linux": "/bin/bash"
+    "name": "MuJoCo Development Container",
+    "build": {
+      "dockerfile": "../Dockerfile",
+      "context": "..",
+      "args": {
+        "BUILDPLATFORM": "${localEnv:BUILDPLATFORM}"
+      }
     },
-    "extensions": [
-        "ms-python.python"
+    // "runArgs": ["--gpus", "all"],
+    "customizations": {
+      "vscode": {
+        "extensions": [
+          "ms-python.python",
+          "ms-python.vscode-pylance"
+        ]
+      }
+    },
+    "remoteUser": "vscode",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+    "workspaceFolder": "/workspace",
+    "mounts": [
+      "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
     ],
-    "forwardPorts": [],
-    "postCreateCommand": "pip install --user -r requirements.txt",
-    "remoteUser": "root"
-}
+    "containerEnv": {
+      "BUILDPLATFORM": "${localEnv:BUILDPLATFORM}"
+    },
+    "postCreateCommand": "pip3 install --user -r requirements.txt"
+  }
