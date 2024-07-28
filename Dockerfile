@@ -20,6 +20,15 @@ RUN apt-get update && apt-get install -y \
     sudo \
     bash-completion \
     git \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libxext6 \
+    libsm6 \
+    libxrender1 \
+    libglfw3-dev \
+    libglfw3 \
+    # debug x11 forwarding
+    # mesa-utils \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install mujoco
