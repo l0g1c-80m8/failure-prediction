@@ -27,13 +27,13 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     libglfw3-dev \
     libglfw3 \
-    # debug x11 forwarding
+    # Debug x11 forwarding
     # mesa-utils \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install mujoco
 
-# configure container runtime
+# Configure container runtime
 ENV NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
 ENV NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:+NVIDIA_DRIVER_CAPABILITIES,}graphics,compute,utility,display
 
