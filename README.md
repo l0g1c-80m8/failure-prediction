@@ -94,5 +94,5 @@ distribution channels. Once you have downloaded the `.deb` package, you can run 
 
 ## Test the Image ##
 - After the image builds, open a terminal in `VS Code` and run `python3 -m mujoco.viewer`.
-- You should see an empty `MuJoCo`` viewer window as shown below.
+- You should see an empty `MuJoCo` viewer window as shown below.
 ![mujoco-viewer.png](assets/mujoco-viewer.png)
