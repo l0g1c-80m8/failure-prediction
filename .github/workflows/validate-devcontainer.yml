@@ -3,6 +3,7 @@ name: Validate Dev Container
 permissions:
   checks: write
   contents: read
+  statuses: write
 
 on:
   workflow_dispatch:
