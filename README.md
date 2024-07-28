@@ -34,7 +34,7 @@ distribution channels. Once you have downloaded the `.deb` package, you can run 
 ### Docker ###
 - Please follow the instructions in [this](https://docs.docker.com/desktop/install/linux-install/) link to setup docker on your system.
 - It is recommended to install only the docker engine. You do not need to install docker desktop.
-- You can use the provided `.deb` package for the docker installation. Or alternatively, install it using the following commands:
+- You can use the provided `.deb` package for the docker installation. Or alternatively, install it using the following commands (recommended):
     ```
     # update your package database
     sudo apt-get update
