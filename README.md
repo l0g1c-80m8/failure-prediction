@@ -11,7 +11,7 @@
 # Failure Prediction #
 
 ## Prerequisite  ##
-This project requires you to have a `linux` (preferably debian based) host running on an `amd64` platform. <br>
+<b>This project requires you to have a `linux` (preferably debian based) host running on an `x86/amd64` platform.</b> <br>
 Additionally, the following requirements need to be met:
 
 - [Visual Studio Code](#visual-studio-code)
@@ -92,7 +92,7 @@ distribution channels. Once you have downloaded the `.deb` package, you can run 
 - Alternatively, if you see the below popup, click on the `Reopen in Container` button.
 ![build-container.png](assets/build-container.png)
 
-## Test the image ##
+## Test the Image ##
 - After the image builds, open a terminal in `VS Code` and run `python3 -m mujoco.viewer`.
 - You should see an empty `MuJoCo`` viewer window as shown below.
 ![mujoco-viewer.png](assets/mujoco-viewer.png)
