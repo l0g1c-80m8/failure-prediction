@@ -1,10 +1,5 @@
 name: Validate Dev Container
 
-permissions:
-  checks: write
-  contents: read
-  statuses: write
-
 on:
   workflow_dispatch:
     inputs:
@@ -13,10 +8,11 @@ on:
         required: true
         default: 'develop'
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [develop]
 
 jobs:
-  build:
+  validate-dev-container:  # Changed job name to match the expected check
     runs-on: ubuntu-latest
 
     steps:
@@ -50,31 +46,3 @@ jobs:
 
     - name: Validate Dev Container configuration
       run: devcontainer build --workspace-folder .
-
-    - name: Report success
-      if: success()
-      uses: actions/github-script@v5
-      with:
-        script: |
-          github.rest.repos.createCommitStatus({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            sha: context.sha,
-            state: 'success',
-            context: 'build',
-            description: 'The build succeeded!',
-          })
-
-    - name: Report failure
-      if: failure()
-      uses: actions/github-script@v5
-      with:
-        script: |
-          github.rest.repos.createCommitStatus({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            sha: context.sha,
-            state: 'failure',
-            context: 'build',
-            description: 'The build failed!',
-          })
