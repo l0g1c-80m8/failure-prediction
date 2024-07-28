@@ -4,10 +4,22 @@
       "dockerfile": "../Dockerfile",
       "context": "..",
       "args": {
-        "BUILD_PLATFORM": "linux/arm64"
+        "BUILD_PLATFORM": "linux/amd64"
       }
     },
-    // "runArgs": ["--gpus", "all"],
+    // enable graphics forwarding
+    "initializeCommand": "xhost +local:root",
+    "runArgs": [
+      "--name=mujoco-dev-container",
+      "--network=host",
+      "--memory=26g",
+      "--gpus=all",
+      "--tty",
+      "--device=/dev/dri/",
+      "--device=/dev/bus/usb",
+      "--runtime=nvidia",
+      "-e", "DISPLAY=${env:DISPLAY}"
+    ],
     "customizations": {
       "vscode": {
         "extensions": [
@@ -20,7 +32,12 @@
     "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
     "workspaceFolder": "/workspace",
     "mounts": [
-      "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+      // x11: graphics forwarding unix
+      "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+      // ssh keys for git
+      "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,readonly,type=bind,consistency=cached",
+      // override rules from known_hosts file
+      "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh/known_hosts,target=/home/vscode/.ssh/known_hosts,type=bind,consistency=cached"
     ],
     "containerEnv": {
       "BUILDPLATFORM": "${localEnv:BUILDPLATFORM}"
