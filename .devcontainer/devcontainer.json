@@ -32,7 +32,7 @@
     "workspaceFolder": "/workspace",
     "mounts": [
       // x11: graphics forwarding unix
-      "souce=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+      "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
       // ssh keys for git
       "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,readonly,type=bind,consistency=cached",
       // override rules from known_hosts file
