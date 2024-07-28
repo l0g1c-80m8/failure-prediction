@@ -17,7 +17,11 @@
       "--tty",
       "--device=/dev/dri/",
       "--device=/dev/bus/usb",
-      "--runtime=nvidia"
+      "--runtime=nvidia",
+      "-e", "DISPLAY=${localEnv:DISPLAY}",
+      "-e", "DISPLAY=${env:DISPLAY}",
+      "-e", "NVIDIA_VISIBLE_DEVICES=all",
+      "-e", "NVIDIA_DRIVER_CAPABILITIES=all"
     ],
     "customizations": {
       "vscode": {
@@ -39,7 +43,9 @@
       "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh/known_hosts,target=/home/vscode/.ssh/known_hosts,type=bind,consistency=cached"
     ],
     "containerEnv": {
-      "BUILDPLATFORM": "${localEnv:BUILDPLATFORM}"
+      "BUILDPLATFORM": "${localEnv:BUILDPLATFORM}",
+      "DISPLAY": "${localEnv:DISPLAY}",
+      "LIBGL_ALWAYS_INDIRECT": "1"
     },
     "onCreateCommand": "export $(grep -v '^#' .env | xargs)",
     "postCreateCommand": "pip3 install --user -r requirements.txt"
