@@ -4,7 +4,7 @@
       "dockerfile": "../Dockerfile",
       "context": "..",
       "args": {
-        "BUILD_PLATFORM": "linux/arm64"
+        "BUILD_PLATFORM": "linux/amd64"
       }
     },
     // enable graphics forwarding
