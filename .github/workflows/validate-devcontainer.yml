@@ -9,69 +9,72 @@ on:
         default: 'develop'
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [develop]
+    branches:
+      - develop
 
 jobs:
   validate-dev-container:
     runs-on: ubuntu-latest
+    permissions:
+      statuses: write  # Grant permission to update statuses
 
     steps:
-    - name: Set initial status
-      uses: Sibz/github-status-action@v1
-      with:
-        authToken: ${{secrets.GITHUB_TOKEN}}
-        context: 'Validate Dev Container'
-        description: 'Validation in progress'
-        state: 'pending'
-        sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Set initial status
+        uses: Sibz/github-status-action@v1
+        with:
+          authToken: ${{ secrets.GITHUB_TOKEN }}
+          context: 'Validate Dev Container'
+          description: 'Validation in progress'
+          state: 'pending'
+          sha: ${{ github.event.pull_request.head.sha || github.sha }}
 
-    - uses: actions/checkout@v3
-      with:
-        ref: ${{ github.event.inputs.branch || github.head_ref }}
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch || github.head_ref }}
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-    - name: Build Dev Container
-      uses: docker/build-push-action@v4
-      with:
-        context: .
-        file: ./Dockerfile
-        push: false
-        load: true
-        tags: mujoco-dev-container:latest
-        build-args: |
-          BUILD_PLATFORM=linux/amd64
-          USERNAME=vscode
-          USER_UID=1000
-          USER_GID=1000
+      - name: Build Dev Container
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: mujoco-dev-container:latest
+          build-args: |
+            BUILD_PLATFORM=linux/amd64
+            USERNAME=vscode
+            USER_UID=1000
+            USER_GID=1000
 
-    - name: Test Container
-      run: |
-        docker run --rm mujoco-dev-container:latest python3 -c "import mujoco; print('MuJoCo import successful')"
+      - name: Test Container
+        run: |
+          docker run --rm mujoco-dev-container:latest python3 -c "import mujoco; print('MuJoCo import successful')"
 
-    - name: Install Dev Container CLI (optional)
-      run: npm install -g @devcontainers/cli
+      - name: Install Dev Container CLI (optional)
+        run: npm install -g @devcontainers/cli
 
-    - name: Validate Dev Container configuration
-      run: devcontainer build --workspace-folder .
+      - name: Validate Dev Container configuration
+        run: devcontainer build --workspace-folder .
 
-    - name: Set success status
-      if: success()
-      uses: Sibz/github-status-action@v1
-      with:
-        authToken: ${{secrets.GITHUB_TOKEN}}
-        context: 'Validate Dev Container'
-        description: 'Validation successful'
-        state: 'success'
-        sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Set success status
+        if: ${{ success() }}
+        uses: Sibz/github-status-action@v1
+        with:
+          authToken: ${{ secrets.GITHUB_TOKEN }}
+          context: 'Validate Dev Container'
+          description: 'Validation successful'
+          state: 'success'
+          sha: ${{ github.event.pull_request.head.sha || github.sha }}
 
-    - name: Set failure status
-      if: failure()
-      uses: Sibz/github-status-action@v1
-      with:
-        authToken: ${{secrets.GITHUB_TOKEN}}
-        context: 'Validate Dev Container'
-        description: 'Validation failed'
-        state: 'failure'
-        sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Set failure status
+        if: ${{ failure() }}
+        uses: Sibz/github-status-action@v1
+        with:
+          authToken: ${{ secrets.GITHUB_TOKEN }}
+          context: 'Validate Dev Container'
+          description: 'Validation failed'
+          state: 'failure'
+          sha: ${{ github.event.pull_request.head.sha || github.sha }}
