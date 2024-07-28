@@ -16,6 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.inputs.branch || github.head_ref }}
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
@@ -38,8 +40,7 @@ jobs:
       run: |
         docker run --rm mujoco-dev-container:latest python3 -c "import mujoco; print('MuJoCo import successful')"
 
-    # Optional: Install and use Dev Container CLI
-    - name: Install Dev Container CLI
+    - name: Install Dev Container CLI (optional)
       run: npm install -g @devcontainers/cli
 
     - name: Validate Dev Container configuration
