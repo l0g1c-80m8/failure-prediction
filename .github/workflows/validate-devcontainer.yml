@@ -8,6 +8,7 @@ on:
         required: true
         default: 'develop'
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [develop]
 
 jobs:
