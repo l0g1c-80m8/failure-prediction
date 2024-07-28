@@ -7,6 +7,7 @@
         "BUILD_PLATFORM": "linux/arm64"
       }
     },
+    "initializeCommand": "xhost +local:root",
     // "runArgs": ["--gpus", "all"],
     "customizations": {
       "vscode": {
