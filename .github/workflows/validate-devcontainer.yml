@@ -12,10 +12,19 @@ on:
     branches: [develop]
 
 jobs:
-  validate-dev-container:  # Changed job name to match the expected check
-    runs-on: ubuntu-latest
+  validate-dev-container:
+  runs-on: ubuntu-latest
 
     steps:
+    - name: Set initial status
+      uses: Sibz/github-status-action@v1
+      with:
+        authToken: ${{secrets.GITHUB_TOKEN}}
+        context: 'Validate Dev Container'
+        description: 'Validation in progress'
+        state: 'pending'
+        sha: ${{ github.event.pull_request.head.sha || github.sha }}
+
     - uses: actions/checkout@v3
       with:
         ref: ${{ github.event.inputs.branch || github.head_ref }}
@@ -46,3 +55,23 @@ jobs:
 
     - name: Validate Dev Container configuration
       run: devcontainer build --workspace-folder .
+
+    - name: Set success status
+      if: success()
+      uses: Sibz/github-status-action@v1
+      with:
+        authToken: ${{secrets.GITHUB_TOKEN}}
+        context: 'Validate Dev Container'
+        description: 'Validation successful'
+        state: 'success'
+        sha: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    - name: Set failure status
+      if: failure()
+      uses: Sibz/github-status-action@v1
+      with:
+        authToken: ${{secrets.GITHUB_TOKEN}}
+        context: 'Validate Dev Container'
+        description: 'Validation failed'
+        state: 'failure'
+        sha: ${{ github.event.pull_request.head.sha || github.sha }}
