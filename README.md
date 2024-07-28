@@ -18,7 +18,8 @@ distribution channels. Once you have downloaded the `.deb` package, you can run 
     sudo dpkg -i <path/to/code*.deb>
     ```
 - Next, install the `Dev Container` extension in `VS Code`.
-![img.png](img.png)
+![dev-containers-ext.png](assets/dev-containers-ext.png)
+- For documentation on `VS Code` dev container, see [this](https://code.visualstudio.com/docs/devcontainers/containers).
 
 ### Docker ###
 - Please follow the instructions in [this](https://docs.docker.com/desktop/install/linux-install/) link to setup docker on your system.
@@ -73,3 +74,10 @@ distribution channels. Once you have downloaded the `.deb` package, you can run 
 - You can get install it by following [this](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) link.
 - Make sure to configure the docker after installation (see [this](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)).
 - <b>Troubleshoot:</b> If the `MuJoCo` environment fails to start, you can try to set this value `no-cgroups = false`, in the `/etc/nvidia-container-runtime/config.toml` file.
+
+## Build and Run the Container ##
+- After you have the [prerequisites](#prerequisite) set up, you can build the image and launch the container.
+- Press `ctrl + shift + P` to bring up the command palette in `VS Code`.
+- Select the `Rebuild and reopen in the Container Command`.
+- Alternatively, if you see the below popup, click on the `Reopen in Container` button.
+![build-container.png](assets/build-container.png)
