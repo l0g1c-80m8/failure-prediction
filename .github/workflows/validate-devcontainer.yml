@@ -1,8 +1,14 @@
 name: Validate Dev Container
 
 on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to run the workflow on'
+        required: true
+        default: 'develop'
   pull_request:
-    branches: [ develop ]
+    branches: [develop]
 
 jobs:
   build:
