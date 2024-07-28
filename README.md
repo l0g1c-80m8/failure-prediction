@@ -6,7 +6,7 @@ Additionally, the following requirements need to be met:
 
 - [Visual Studio Code](#visual-studio-code)
 - [Docker](#docker)
-- [Nvidia Container Toolkit for Docker]()
+- [Nvidia Container Toolkit for Docker](#nvidia-container-toolkit)
 
 Please refer to the individual sections for detailed instructions.
 
@@ -67,3 +67,9 @@ distribution channels. Once you have downloaded the `.deb` package, you can run 
     # verify docker installation
     docker version
     ```
+
+### Nvidia Container Toolkit ###
+- To allow gpu access from within a docker container, you need to have the nvidia container toolkit installed.
+- You can get install it by following [this](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) link.
+- Make sure to configure the docker after installation (see [this](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)).
+- <b>Troubleshoot:</b> If the `MuJoCo` environment fails to start, you can try to set this value `no-cgroups = false`, in the `/etc/nvidia-container-runtime/config.toml` file.
