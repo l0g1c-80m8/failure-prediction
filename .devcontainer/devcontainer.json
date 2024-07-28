@@ -1,4 +1,5 @@
 {
+    // hello, friend
     "name": "MuJoCo Development Container",
     "build": {
       "dockerfile": "../Dockerfile",
