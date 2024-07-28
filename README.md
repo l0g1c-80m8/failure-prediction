@@ -81,3 +81,9 @@ distribution channels. Once you have downloaded the `.deb` package, you can run 
 - Select the `Rebuild and reopen in the Container Command`.
 - Alternatively, if you see the below popup, click on the `Reopen in Container` button.
 ![build-container.png](assets/build-container.png)
+
+## Test the image ##
+- After the image builds, open a terminal in `VS Code` and run `python3 -m mujoco.viewer`.
+- You should see an empty `MuJoCo`` viewer window as shown below.
+![mujoco-viewer.png](assets/mujoco-viewer.png)
+- 
