@@ -22,12 +22,28 @@
     ],
     "customizations": {
       "vscode": {
+        "settings": {
+          "terminal.integrated.profiles.linux": {
+            "bash": {
+              "path": "bash"
+            }
+          },
+          "terminal.integrated.defaultProfile.linux": "bash",
+          "remote.autoForwardPorts": false
+        },
         "extensions": [
+          "dotjoshjohnson.xml",
+          "zachflower.uncrustify",
+          "ms-azuretools.vscode-docker",
           "ms-python.python",
-          "ms-python.vscode-pylance"
+          "redhat.vscode-yaml",
+          "smilerobotics.urdf",
+          "streetsidesoftware.code-spell-checker",
+          "yzhang.markdown-all-in-one",
+          "github.vscode-github-actions"
         ]
-      }
-    },
+			}
+		},
     "remoteUser": "vscode",
     "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
     "workspaceFolder": "/workspace",

@@ -1,0 +1,21 @@
+{
+    "scm.inputFontSize": 14,
+    "chat.editor.fontSize": 16,
+    "markdown.preview.fontSize": 16,
+    "remote.autoForwardPortsSource": "hybrid",
+    "files.autoSave": "afterDelay",
+    "redhat.telemetry.enabled": true,
+    "editor.fontSize": 16,
+    "C_Cpp.codeAnalysis.exclude": {
+        
+
+    },
+    "search.searchEditor.reusePriorSearchConfiguration": true,
+    "git.autofetch": true,
+    "git.confirmSync": false,
+    "git.openRepositoryInParentFolders": "never",
+    "terminal.integrated.enableMultiLinePasteWarning": false,
+    "workbench.iconTheme": "a-file-icon-vscode",
+    "workbench.colorTheme": "Red",
+    "terminal.integrated.fontSize": 16
+}
