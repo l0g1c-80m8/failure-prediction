@@ -40,7 +40,20 @@
           "smilerobotics.urdf",
           "streetsidesoftware.code-spell-checker",
           "yzhang.markdown-all-in-one",
-          "github.vscode-github-actions"
+          "github.vscode-github-actions",
+          "ms-python.vscode-pylance",
+          "ms-toolsai.jupyter",
+          "ms-vscode.cpptools",
+          "twxs.cmake",
+          "ms-vscode.cmake-tools",
+          "eamodio.gitlens",
+          "donjayamanne.python-extension-pack",
+          "visualstudioexptteam.vscodeintellicode",
+          "ms-python.black-formatter",
+          "njpwerner.autodocstring",
+          "kevinrose.vsc-python-indent",
+          "mhutchie.git-graph",
+          "oderwat.indent-rainbow"
         ]
 			}
 		},
