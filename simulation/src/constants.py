@@ -11,9 +11,11 @@ REPO_ROOT = os.path.dirname(SIM_ROOT_PATH)
 RES = SimpleNamespace(
     UR5_MODEL=os.path.join(SIM_ROOT_PATH, 'model/universal_robots_ur5e/ur5e.xml')
 )
-
-LOG_LEVEL = logging.INFO  # [FATAL/CRITICAL, ERROR, WARNING/WARN, INFO, DEBUG, NOTSET]
-LOG_FILE = os.path.join(SIM_ROOT_PATH, f'log/log-{uuid.uuid5()}.log')
+LOGGER_OPTIONS = SimpleNamespace(
+    LEVEL=logging.INFO  # [FATAL/CRITICAL, ERROR, WARNING/WARN, INFO, DEBUG, NOTSET],
+    FILE=os.path.join(SIM_ROOT_PATH, f'log/log-{uuid.uuid5()}.log'),
+    NAME='default_logger'
+)
 
 if __name__ == '__main__':
     current_module = globals()
