@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y \
     # mesa-utils \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install mujoco
+RUN pip3 install mujoco mujoco-py mujoco-python-viewer
 
 # Configure container runtime
 ENV NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
