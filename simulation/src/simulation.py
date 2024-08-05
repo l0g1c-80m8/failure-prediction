@@ -28,7 +28,6 @@ class MjSimulation:
         with mujoco.viewer.launch_passive(self._model, self._data) as viewer:
             dt: float = self._model.opt.timestep
             steps: int = int(duration / dt)
-            start = time.time()
             idx = 0
 
             while viewer.is_running() and (idx := idx + 1) < steps:
