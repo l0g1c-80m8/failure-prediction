@@ -4,6 +4,9 @@ import numpy as np
 import time
 from typing import List, Optional
 
+# local import
+from src.logger import LOGGER
+
 class MjSimulation:
     def __init__(self, model_path: str) -> None:
         self._model: mujoco.MjModel = mujoco.MjModel.from_xml_path(model_path)
@@ -31,7 +34,7 @@ class MjSimulation:
         steps: int = int(duration / dt)
 
         for idx in range(steps):
-            print(f'{idx} of {steps}')
+            LOGGER.info(f'on step {1 + idx} of {steps} steps')
             t: float = idx / steps
             current_qpos: np.ndarray = np.array(initial_qpos) + \
                 t * (np.array(target_qpos) - np.array(initial_qpos))
