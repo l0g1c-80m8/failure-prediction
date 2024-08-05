@@ -7,7 +7,7 @@ REPO_ROOT = os.path.join(SIM_ROOT_PATH, '..')
 
 
 RES = SimpleNamespace(
-    UR5_MODEL_DIR=os.path.join(SIM_ROOT_PATH, 'model/ur5e.xml')
+    UR5_MODEL=os.path.join(SIM_ROOT_PATH, 'model/ur5e.xml')
 )
 
 

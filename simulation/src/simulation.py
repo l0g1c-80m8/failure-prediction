@@ -3,7 +3,7 @@ import numpy as np
 import time
 from typing import List, Optional
 
-class Simulation:
+class MjSimulation:
     def __init__(self, model_path: str) -> None:
         self._model: mujoco.MjModel = mujoco.MjModel.from_xml_path(model_path)
         self._data: mujoco.MjData = mujoco.MjData(self._model)
