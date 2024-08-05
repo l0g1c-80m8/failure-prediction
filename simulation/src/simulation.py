@@ -7,13 +7,13 @@ class MjSimulation:
     def __init__(self, model_path: str) -> None:
         self._model: mujoco.MjModel = mujoco.MjModel.from_xml_path(model_path)
         self._data: mujoco.MjData = mujoco.MjData(self._model)
-        self._viewer: mujoco.MjModel = None
+        self._viewer: mujoco.MjViewer = None
     
     def set_joint_positions(self, positions: List[float]) -> None:
         self._data.qpos[:] = positions
     
     def create_viewer(self) -> None:
-        self._viewer = mujoco.Viewer(self._model, self._data)
+        self._viewer = mujoco.MjViewer(self._model, self._data)
     
     def run_trajectory(
         self, 
