@@ -31,6 +31,7 @@ class MjSimulation:
         steps: int = int(duration / dt)
 
         for idx in range(steps):
+            print(f'{idx} of {steps}')
             t: float = idx / steps
             current_qpos: np.ndarray = np.array(initial_qpos) + \
                 t * (np.array(target_qpos) - np.array(initial_qpos))
@@ -41,7 +42,7 @@ class MjSimulation:
             if self._viewer:
                 self._viewer.render()
             
-            time.sleep(5000)
+            time.sleep(dt)
 
     def keep_viewer_open(self) -> None:
         if self._viewer:
