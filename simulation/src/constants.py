@@ -2,12 +2,12 @@ import os
 from types import SimpleNamespace
 
 
-SIM_ROOT_PATH = os.path.join(__file__, '../..')
-REPO_ROOT = os.path.join(SIM_ROOT_PATH, '..')
+SIM_ROOT_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.dirname(SIM_ROOT_PATH)
 
 
 RES = SimpleNamespace(
-    UR5_MODEL=os.path.join(SIM_ROOT_PATH, 'model/ur5e.xml')
+    UR5_MODEL=os.path.join(SIM_ROOT_PATH, 'model/universal_robots_ur5e/ur5e.xml')
 )
 
 
