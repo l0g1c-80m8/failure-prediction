@@ -16,7 +16,8 @@ RES = SimpleNamespace(
 
 # logging options
 LOGGER_OPTIONS = SimpleNamespace(
-    # Options: [logging.FATAL, logging.CRITICAL, logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, logging.NOTSET]
+    # Options: [logging.FATAL, logging.CRITICAL, logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG,
+    # logging.NOTSET]
     LEVEL=logging.INFO,
     FILE=os.path.join(SIM_ROOT_PATH, f'log/sim-log-{uuid.uuid5(uuid.NAMESPACE_X500, "log.local")}.log'),
     NAME='default_logger'
