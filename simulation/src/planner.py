@@ -16,19 +16,19 @@ class RRTNode:
 class RRTPlanner:
     def __init__(
             self,
-            start: List[float],
-            goal: List[float],
+            start_pos: NDArray[np.float64],
+            goal_pos: NDArray[np.float64],
             bounds: NDArray[np.float64],
             max_iterations: int = 1000,
             step_size: float = 0.1
     ):
-        self._start_pos: RRTNode = RRTNode(start)
-        self._goal_pos: RRTNode = RRTNode(goal)
+        self._start_pos: RRTNode = RRTNode(start_pos)
+        self._goal_pos: RRTNode = RRTNode(goal_pos)
         self._bounds: NDArray[np.float64] = bounds
         self._max_iterations: int = max_iterations
         self._step_size: float = step_size
         self._nodes: List[RRTNode] = [self._start_pos]
-        self._tree: KDTree = KDTree([start])
+        self._tree: KDTree = KDTree([start_pos])
 
         self._plan = Optional[List[NDArray[np.float64]]]
 
