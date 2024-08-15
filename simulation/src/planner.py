@@ -115,16 +115,15 @@ class RRTPlanner:
 if __name__ == '__main__':
     rrt_planner: RRTPlanner = RRTPlanner(
         np.array([0, 0, 0], dtype=np.float64),
-        np.array([10, 10, 10], dtype=np.float64),
-        np.array([[-10, 10], [-10, 10], [-10, 10]])  # [min, max] for each dim
+        np.array([1, 1, 1], dtype=np.float64),
+        np.array([[-2, 2], [-2, 2], [-2, 2]])  # [min, max] for each dim
     )
 
     if rrt_planner.plan:
         print('Path found!')
-        rrt_planner.visualize()
     else:
         print('No path found.')
-        rrt_planner.visualize()
+    rrt_planner.visualize()
 
     # exit without error
     sys.exit(0)
