@@ -79,6 +79,7 @@ class RRTPlanner:
         if self._plan is None:
             self._generate_plan()
 
+        print(self._plan)
         return self._plan
 
     def visualize(self, path: Optional[List[NDArray[np.float64]]] = None) -> None:
@@ -112,7 +113,18 @@ class RRTPlanner:
 
 
 if __name__ == '__main__':
-    # p = Planner()
+    rrt_planner: RRTPlanner = RRTPlanner(
+        np.array([0, 0, 0], dtype=np.float64),
+        np.array([10, 10, 10], dtype=np.float64),
+        np.array([[-10, 10], [-10, 10], [-10, 10]])  # [min, max] for each dim
+    )
+
+    if rrt_planner.plan:
+        print('Path found!')
+        rrt_planner.visualize()
+    else:
+        print('No path found.')
+        rrt_planner.visualize()
 
     # exit without error
     sys.exit(0)
