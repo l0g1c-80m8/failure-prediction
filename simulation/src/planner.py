@@ -91,9 +91,11 @@ class RRTPlanner:
         for node in self._nodes[1:]:
             pose: NDArray[np.float64] = node.pose
             parent_pose: NDArray[np.float64] = node.parent.pose
-            ax.plot([pose[0], parent_pose[0]],
-                    [pose[1], parent_pose[1]],
-                    [pose[2], parent_pose[2]], 'b-', linewidth=0.5)
+            ax.plot(
+                [pose[0], parent_pose[0]],
+                [pose[1], parent_pose[1]],
+                [pose[2], parent_pose[2]], 'b-', linewidth=0.5
+            )
 
         ax.scatter(*self._start_pos.pose, c='g', s=50, label='Start')
         ax.scatter(*self._goal_pos.pose, c='r', s=50, label='Goal')
