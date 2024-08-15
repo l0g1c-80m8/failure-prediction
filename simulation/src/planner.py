@@ -30,7 +30,7 @@ class RRTPlanner:
         self._nodes: List[RRTNode] = [self._start_pos]
         self._tree: KDTree = KDTree([start_pos])
 
-        self._plan = Optional[List[NDArray[np.float64]]]
+        self._plan: Optional[List[NDArray[np.float64]]] = None
 
     def _random_pose(self) -> NDArray[np.float64]:
         return np.random.uniform(self._bounds[:, 0], self._bounds[:, 1])
