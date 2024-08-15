@@ -79,7 +79,6 @@ class RRTPlanner:
         if self._plan is None:
             self._generate_plan()
 
-        print(self._plan)
         return self._plan
 
     def visualize(self, path: Optional[List[NDArray[np.float64]]] = None) -> None:
