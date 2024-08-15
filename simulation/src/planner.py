@@ -19,7 +19,7 @@ class RRTPlanner:
             start_pos: NDArray[np.float64],
             goal_pos: NDArray[np.float64],
             bounds: NDArray[np.float64],
-            max_iterations: int = 1000,
+            max_iterations: int = 3000,
             step_size: float = 0.1
     ):
         self._start_pos: RRTNode = RRTNode(start_pos)
