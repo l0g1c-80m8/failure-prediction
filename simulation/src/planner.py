@@ -54,6 +54,8 @@ class RRTPlanner:
         return node
 
     def _generate_plan(self) -> None:
+        self._plan = None
+
         for _ in range(self._max_iterations):
             random_pose: NDArray[np.float64] = self._random_pose()
             nearest: RRTNode = self._nearest_node(random_pose)
@@ -63,8 +65,6 @@ class RRTPlanner:
             if np.linalg.norm(new_pose - self._goal_pos.pose) < self._step_size:
                 self._goal_pos.parent = new_node
                 self._plan = self._extract_path()
-
-        self._plan = None
 
     def _extract_path(self) -> List[NDArray[np.float64]]:
         path: List[NDArray[np.float64]] = []
