@@ -41,7 +41,7 @@ class RRTPlanner:
 
     def _new_pose(self, from_pose: NDArray[np.float64], to_pose: NDArray[np.float64]) -> NDArray[np.float64]:
         direction: NDArray[np.float64] = to_pose - from_pose
-        length: float = np.linalg.norm(direction)
+        length: float = np.linalg.norm(direction, ord=2)
         if length > self._step_size:
             direction = direction / length * self._step_size
         return from_pose + direction
