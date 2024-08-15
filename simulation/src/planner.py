@@ -30,6 +30,8 @@ class RRTPlanner:
         self._nodes: List[RRTNode] = [self._start_pos]
         self._tree: KDTree = KDTree([start])
 
+        self._plan = Optional[List[NDArray[np.float64]]]
+
     def _random_pose(self) -> NDArray[np.float64]:
         return np.random.uniform(self._bounds[:, 0], self._bounds[:, 1])
 
@@ -51,7 +53,7 @@ class RRTPlanner:
         self._tree = KDTree([n.pose for n in self._nodes])
         return node
 
-    def _generate_plan(self) -> Optional[List[NDArray[np.float64]]]:
+    def _generate_plan(self) -> None:
         for _ in range(self._max_iterations):
             random_pose: NDArray[np.float64] = self._random_pose()
             nearest: RRTNode = self._nearest_node(random_pose)
@@ -60,9 +62,9 @@ class RRTPlanner:
 
             if np.linalg.norm(new_pose - self._goal_pos.pose) < self._step_size:
                 self._goal_pos.parent = new_node
-                return self._extract_path()
+                self._plan = self._extract_path()
 
-        return None
+        self._plan = None
 
     def _extract_path(self) -> List[NDArray[np.float64]]:
         path: List[NDArray[np.float64]] = []
@@ -71,6 +73,13 @@ class RRTPlanner:
             path.append(node.pose)
             node = node.parent
         return path[::-1]
+
+    @property
+    def plan(self) -> Optional[List[NDArray[np.float64]]]:
+        if self._plan is None:
+            self._generate_plan()
+
+        return self._plan
 
     def visualize(self, path: Optional[List[NDArray[np.float64]]] = None) -> None:
         fig = plt.figure()
@@ -89,8 +98,8 @@ class RRTPlanner:
         ax.scatter(*self._start_pos.pose, c='g', s=50, label='Start')
         ax.scatter(*self._goal_pos.pose, c='r', s=50, label='Goal')
 
-        if path:
-            path_array: NDArray[np.float64] = np.array(path)
+        if self.plan:
+            path_array: NDArray[np.float64] = np.array(self.plan)
             ax.plot(path_array[:, 0], path_array[:, 1], path_array[:, 2], 'r-', linewidth=2, label='Path')
 
         ax.set_xlabel('X')
