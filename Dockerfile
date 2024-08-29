@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Set pip version
-RUN python3.10 -m pip install --upgrade pip
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 
 # Install MuJoCo
 RUN pip3 install mujoco mujoco-py mujoco-python-viewer
