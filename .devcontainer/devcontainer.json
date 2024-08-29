@@ -4,7 +4,10 @@
       "dockerfile": "../Dockerfile",
       "context": "..",
       "args": {
-        "BUILD_PLATFORM": "linux/amd64"
+        "BUILD_PLATFORM": "linux/amd64",
+        "USERNAME": "vscode",
+        "USER_UID": "1000",
+        "USER_GID": "1000"
       }
     },
     // enable graphics forwarding

@@ -4,14 +4,16 @@ ARG BUILD_PLATFORM
 
 FROM --platform=${BUILD_PLATFORM} ubuntu:20.04
 
-ARG USERNAME=vscode
-ARG USER_UID=1000
-ARG USER_GID=${USER_UID}
-
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Install packages
 RUN apt-get update && apt-get install -y \
-    python3 \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.10 \
+    python3.10-venv \
+    python3.10-dev \
     python3-pip \
     libgl1-mesa-glx \
     libglfw3 \
@@ -31,6 +33,10 @@ RUN apt-get update && apt-get install -y \
     # mesa-utils \
     && rm -rf /var/lib/apt/lists/*
 
+# Set pip version
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
+
+# Install MuJoCo
 RUN pip3 install mujoco mujoco-py mujoco-python-viewer
 
 # Configure container runtime
@@ -38,6 +44,10 @@ ENV NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
 ENV NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:+NVIDIA_DRIVER_CAPABILITIES,}graphics,compute,utility,display
 
 # Create a non-root user
+ARG USERNAME
+ARG USER_UID
+ARG USER_GID
+
 RUN groupadd --gid ${USER_GID} ${USERNAME} \
     && useradd -s /bin/bash --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME} \
     # Add sudo support for the non-root user
