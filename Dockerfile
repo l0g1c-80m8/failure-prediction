@@ -11,7 +11,12 @@ ARG USER_GID=${USER_UID}
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
-    python3 \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.10 \
+    python3.10-venv \
+    python3.10-dev \
     python3-pip \
     libgl1-mesa-glx \
     libglfw3 \
@@ -30,6 +35,8 @@ RUN apt-get update && apt-get install -y \
     # Debug x11 forwarding
     # mesa-utils \
     && rm -rf /var/lib/apt/lists/*
+
+RUN python3.10 -m pip install --upgrade pip
 
 RUN pip3 install mujoco mujoco-py mujoco-python-viewer
 
