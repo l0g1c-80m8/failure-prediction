@@ -6,7 +6,7 @@
       "args": {
         "BUILD_PLATFORM": "linux/amd64",
         "USERNAME": "vscode",
-        "USER_ID": "1000",
+        "USER_UID": "1000",
         "USER_GID": "1000"
       }
     },
