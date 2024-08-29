@@ -6,6 +6,7 @@ FROM --platform=${BUILD_PLATFORM} ubuntu:20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Install packages
 RUN apt-get update && apt-get install -y \
     software-properties-common \
     && add-apt-repository ppa:deadsnakes/ppa \
@@ -32,8 +33,10 @@ RUN apt-get update && apt-get install -y \
     # mesa-utils \
     && rm -rf /var/lib/apt/lists/*
 
+# Set pip version
 RUN python3.10 -m pip install --upgrade pip
 
+# Install MuJoCo
 RUN pip3 install mujoco mujoco-py mujoco-python-viewer
 
 # Configure container runtime
