@@ -1,7 +1,7 @@
 import logging
 
 # local imports
-from constants import LOGGER_OPTIONS
+from src.constants import LOGGER_OPTIONS
 
 
 LOGGER = logging.getLogger(LOGGER_OPTIONS.NAME)
