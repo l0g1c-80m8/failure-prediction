@@ -1,7 +1,6 @@
 import mujoco
 import numpy as np
 import sys
-from functools import lru_cache
 from typing import List, Tuple, Optional
 
 # local
@@ -32,7 +31,6 @@ class MjIkSolver:
         else:
             return None
 
-    @lru_cache(maxsize=128)
     def solve_trajectory(self, cartesian_waypoints: List[Tuple[float, float, float]]) -> List[np.ndarray]:
         joint_trajectory = []
         for waypoint in cartesian_waypoints:
