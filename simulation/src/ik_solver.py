@@ -38,7 +38,7 @@ class IkSolver:
             LOGGER.warning(f"IK failed. Error: {result.fun}")
             return None
 
-    def solve_trajectory(self, cartesian_waypoints: List[NDArray[np.float64]]) -> List[np.ndarray]:
+    def solve_trajectory(self, cartesian_waypoints: List[NDArray[np.float64]]) -> List[NDArray[np.float64]]:
         joint_trajectory = []
         for waypoint in cartesian_waypoints:
             LOGGER.info(f'Solving IK for waypoint: {waypoint}')
