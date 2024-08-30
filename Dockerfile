@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
     python3.10 \
     python3.10-venv \
     python3.10-dev \
-    python3-pip \
+    curl \
     libgl1-mesa-glx \
     libglfw3 \
     libglew2.1 \
@@ -29,11 +29,24 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     libglfw3-dev \
     libglfw3 \
-    # Debug x11 forwarding
-    # mesa-utils \
+    libglu1-mesa \
+    libxi6 \
+    libxrandr2 \
+    libxinerama1 \
+    libxcursor1 \
+    libxcomposite1 \
+    libasound2 \
+    libpulse0 \
+    libv4l-0 \
+    libxkbcommon0 \
+    libxcb-xinput0 \
+    libx11-xcb1 \
+    libxshmfence1 \
+    libxv1 \
+    x11-apps \
     && rm -rf /var/lib/apt/lists/*
 
-# Set pip version
+# Manually install pip
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 
 # Install pip packages
@@ -45,7 +58,7 @@ RUN pip3 install mujoco-py mujoco-python-viewer
 
 # Configure container runtime
 ENV NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
-ENV NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:+NVIDIA_DRIVER_CAPABILITIES,}graphics,compute,utility,display
+ENV NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-graphics,compute,utility,display}
 
 # Create a non-root user
 ARG USERNAME
