@@ -1,15 +1,16 @@
 import mujoco
 import numpy as np
 import sys
-from typing import List, Tuple, Optional
+from numpy.typing import NDArray
+from typing import List, Optional
 from scipy.optimize import minimize
 
 # local
-from constants import KEY, RES
-from logger import LOGGER
+from src.constants import KEY, RES
+from src.logger import LOGGER
 
 
-class MjIkSolver:
+class IkSolver:
     def __init__(self, model_path: str, end_effector_key: str) -> None:
         self._model = mujoco.MjModel.from_xml_path(model_path)
         self._data = mujoco.MjData(self._model)
@@ -37,7 +38,7 @@ class MjIkSolver:
             LOGGER.warning(f"IK failed. Error: {result.fun}")
             return None
 
-    def solve_trajectory(self, cartesian_waypoints: List[Tuple[float, float, float]]) -> List[np.ndarray]:
+    def solve_trajectory(self, cartesian_waypoints: List[NDArray[np.float64]]) -> List[np.ndarray]:
         joint_trajectory = []
         for waypoint in cartesian_waypoints:
             LOGGER.info(f'Solving IK for waypoint: {waypoint}')
@@ -59,7 +60,7 @@ class MjIkSolver:
 
 
 if __name__ == "__main__":
-    iks = MjIkSolver(RES.UR5_MODEL, KEY.UR5_EE)
+    iks = IkSolver(RES.UR5_MODEL, KEY.UR5_EE)
     waypoints = [
         (0.4, 0.2, 0.5),  # front, slightly to the right
         (0.4, -0.2, 0.5),  # front, slightly to the left
