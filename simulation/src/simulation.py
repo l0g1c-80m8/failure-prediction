@@ -10,7 +10,7 @@ from src.logger import LOGGER
 
 
 class MjSimulation:
-    def __init__(self, model_path: str, trajectory: List[NDArray[np.float64]], duration: float = 2.5) -> None:
+    def __init__(self, model_path: str, trajectory: List[NDArray[np.float64]], duration: float = 2.0) -> None:
         self._model: mujoco.MjModel = mujoco.MjModel.from_xml_path(model_path)
         self._data: mujoco.MjData = mujoco.MjData(self._model)
         self._trajectory = trajectory
