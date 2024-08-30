@@ -40,7 +40,7 @@ def get_joint_space_trajectory(
 def main() -> None:
     start_pos: NDArray[np.float64] = np.array([-0.4, -0.4, 0.5], dtype=np.float64)
     goal_pos: NDArray[np.float64] = np.array([0.4, 0.4, 0.5], dtype=np.float64)
-    bounds: NDArray[np.float64] = np.array([[-2, 2], [-2, 2], [-2, 2]], dtype=np.float64)
+    bounds: NDArray[np.float64] = np.array([[-2, 2], [-2, 2], [0.5, 0.5]], dtype=np.float64)
 
     trajectory: List[NDArray[np.float64]] = get_joint_space_trajectory(start_pos, goal_pos, bounds)
 
