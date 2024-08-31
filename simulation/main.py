@@ -44,8 +44,7 @@ def main() -> None:
 
     trajectory: List[NDArray[np.float64]] = get_joint_space_trajectory(start_pos, goal_pos, bounds)
 
-    simulator: MjSimulation = MjSimulation(model_path=RES.UR5_MODEL, trajectory=trajectory)
-
+    simulator: MjSimulation = MjSimulation(model_path=RES.UR5_MODEL, trajectory=trajectory, speed=0.7)
     simulator.run_trajectory()
 
 
