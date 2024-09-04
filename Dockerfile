@@ -42,9 +42,8 @@ RUN pip3 install \
     mujoco-python-viewer \
     virtualenv
 
-# Create symbolic links for python3 and pip3
-RUN ln -s /usr/bin/python3 /usr/bin/python && \
-    ln -s /usr/bin/pip3 /usr/bin/pip
+# Create symbolic links for python3
+RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Configure container runtime
 ENV NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
