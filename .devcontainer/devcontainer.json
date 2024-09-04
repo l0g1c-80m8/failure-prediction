@@ -75,5 +75,5 @@
       "BUILDPLATFORM": "${localEnv:BUILDPLATFORM}"
     },
     "onCreateCommand": "export $(grep -v '^#' .env | xargs)",
-    "postCreateCommand": "pip3 install --user -r requirements.txt"
+    "postCreateCommand": "/bin/bash /workspace/scripts/setup-envs.sh"
   }
