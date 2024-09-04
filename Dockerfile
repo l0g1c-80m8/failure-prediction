@@ -36,6 +36,12 @@ RUN apt-get update && apt-get install -y \
 # Set pip version
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 
+# Install pip dependencies
+RUN pip3 install \
+    mujoco-py \
+    mujoco-python-viewer \
+    virtualenv
+
 # Configure container runtime
 ENV NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
 ENV NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:+NVIDIA_DRIVER_CAPABILITIES,}graphics,compute,utility,display
