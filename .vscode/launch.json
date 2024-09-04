@@ -10,7 +10,23 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": true,
+            "python": "${workspaceFolder}/code/simulation/sim_env/bin/python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/code/simulation:${env:PYTHONPATH}"
+            }
+        },
+        {
+            "name": "Python Debugger: octo-main",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "python": "${workspaceFolder}/code/octo/octo_env/bin/python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/code/octo:${env:PYTHONPATH}"
+            }
         }
     ]
 }
