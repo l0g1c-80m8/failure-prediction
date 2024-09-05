@@ -2,8 +2,8 @@
 
 # list of directories to search
 directories=(
-    "/code/simulation"
-    "/code/octo"
+    "code/simulation"
+    "code/octo"
 )
 
 # function to remove environments
