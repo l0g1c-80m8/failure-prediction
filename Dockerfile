@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 ARG BUILD_PLATFORM
-FROM --platform=${BUILD_PLATFORM} ubuntu:20.04
+FROM --platform=${BUILD_PLATFORM} nvidia/cuda:12.1.1-cudnn8-devel-ubuntu20.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install packages
