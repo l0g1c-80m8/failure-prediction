@@ -2,12 +2,12 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Run nuke-docker.bash",
+            "label": "Run nuke-docker",
             "type": "shell",
             "command": "bash",
             "args": [
                 "-c",
-                "${workspaceFolder}/nuke-docker.bash; exit"
+                "${workspaceFolder}/scripts/nuke-docker.sh; exit"
             ],
             "group": "none",
             "problemMatcher": [],
