@@ -29,6 +29,14 @@ RUN apt-get update && apt-get install -y \
     libglfw3 \
     && rm -rf /var/lib/apt/lists/*
 
+# Install cuda dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cuda-compiler-12-1 \
+    cuda-libraries-dev-12-1 \
+    cuda-driver-dev-12-1 \
+    cuda-cudart-dev-12-1 \
+    cuda-command-line-tools-12-1
+
 # Install pip for Python 3.10
 RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py \
     && python3.10 get-pip.py \
