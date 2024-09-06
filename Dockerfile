@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 ARG BUILD_PLATFORM
-FROM --platform=${BUILD_PLATFORM} ubuntu:20.04
+FROM --platform=${BUILD_PLATFORM} nvidia/cuda:12.1.1-cudnn8-devel-ubuntu20.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install packages
@@ -29,6 +29,14 @@ RUN apt-get update && apt-get install -y \
     libglfw3 \
     && rm -rf /var/lib/apt/lists/*
 
+# Install cuda dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cuda-compiler-12-1 \
+    cuda-libraries-dev-12-1 \
+    cuda-driver-dev-12-1 \
+    cuda-cudart-dev-12-1 \
+    cuda-command-line-tools-12-1
+
 # Install pip for Python 3.10
 RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py \
     && python3.10 get-pip.py \
@@ -48,6 +56,11 @@ RUN ln -sf /usr/bin/python3.10 /usr/bin/python3 && \
 # Configure container runtime
 ENV NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
 ENV NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:+$NVIDIA_DRIVER_CAPABILITIES,}graphics,compute,utility,display
+
+# Set cuda environment variables
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=${CUDA_HOME}/bin:${PATH}
+ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
 
 # Create a non-root user
 ARG USERNAME

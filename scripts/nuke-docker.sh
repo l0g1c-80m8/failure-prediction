@@ -25,3 +25,5 @@ echo "Removing build cache..."
 docker builder prune -af
 
 echo "Docker environment cleaned successfully!"
+docker system df
+

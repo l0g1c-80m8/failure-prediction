@@ -1,29 +1,31 @@
-gym == 0.26.2
-numpy == 1.24.3
-ml_dtypes == 0.2.0
-chex == 0.1.85
-optax == 0.1.5
-tensorflow_probability == 0.23.0
-tensorflow == 2.15.0
-orbax-checkpoint == 0.4.4
-jax == 0.4.20
-distrax == 0.1.5
-flax == 0.7.5
-ml_collections == 0.1.1
-tqdm ==4.66.5
-absl-py == 2.1.0
-jaxlib == 0.4.20
-scipy == 1.9.3
-wandb == 0.17.5
-einops == 0.8.0
-imageio == 2.34.2
-moviepy == 1.0.3
-pre-commit == 3.3.3
-transformers == 4.44.0
-tensorflow_hub == 0.16.1
-tensorflow_text == 2.15.0
-tensorflow_datasets == 4.9.2
-tensorflow_graphics == 2021.12.3
+--find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+jax[cuda12_pip]==0.4.20
+
+gym==0.26.2
+numpy==1.24.3
+ml_dtypes==0.2.0
+chex==0.1.85
+optax==0.1.5
+tensorflow_probability==0.23.0
+tensorflow==2.15.0
+orbax-checkpoint==0.4.4
+distrax==0.1.5
+flax==0.7.5
+ml_collections==0.1.1
+tqdm==4.66.5
+absl-py==2.1.0
+jaxlib==0.4.20
+scipy==1.9.3
+wandb==0.17.5
+einops==0.8.0
+imageio==2.34.2
+moviepy==1.0.3
+pre-commit==3.3.3
+transformers==4.44.0
+tensorflow_hub==0.16.1
+tensorflow_text==2.15.0
+tensorflow_datasets==4.9.2
+tensorflow_graphics==2021.12.3
 dlimp @ git+https://github.com/kvablack/dlimp@5edaa4691567873d495633f2708982b42edf1972
-plotly == 5.23.0
+plotly==5.23.0
 matplotlib
