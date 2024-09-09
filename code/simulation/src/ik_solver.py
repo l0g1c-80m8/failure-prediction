@@ -60,7 +60,7 @@ class IkSolver:
 
 
 if __name__ == "__main__":
-    iks = IkSolver(RES.UR5_MODEL, KEY.UR5_EE)
+    iks = IkSolver(UR5_MODEL, KEY.UR5_EE)
     waypoints = [
         (0.4, 0.2, 0.5),  # front, slightly to the right
         (0.4, -0.2, 0.5),  # front, slightly to the left
