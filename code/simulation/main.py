@@ -18,7 +18,7 @@ def get_joint_space_trajectory(
         bounds: NDArray[np.float64],
         max_tries: int = 10
 ) -> Optional[List[NDArray[np.float64]]]:
-    ik_solver: IkSolver = IkSolver(RES.PLAN_MODEL, KEY.UR5_EE)
+    ik_solver: IkSolver = IkSolver(RES.UR5_MODEL, KEY.UR5_EE)
     trajectory: Optional[List[NDArray[np.float64]]] = None
     tries = 0
 
@@ -44,7 +44,7 @@ def main() -> None:
 
     trajectory: List[NDArray[np.float64]] = get_joint_space_trajectory(start_pos, goal_pos, bounds)
 
-    simulator: MjSimulation = MjSimulation(model_path=RES.SIM_MODEL, trajectory=trajectory, speed=0.7)
+    simulator: MjSimulation = MjSimulation(model_path=RES.UR5_MODEL, trajectory=trajectory, speed=0.7)
     simulator.run_trajectory()
 
 

@@ -12,8 +12,7 @@ REPO_ROOT = os.path.dirname(SIM_ROOT_PATH)
 
 # resources
 RES = SimpleNamespace(
-    SIM_MODEL=os.path.join(SIM_ROOT_PATH, 'model/universal_robots_ur5e/ur5e.xml'),
-    PLAN_MODEL=os.path.join(SIM_ROOT_PATH, 'model/universal_robots_ur5e/ur5e_with_gripper.xml')
+    UR5_MODEL=os.path.join(SIM_ROOT_PATH, 'model/universal_robots_ur5e/ur5e.xml'),
 )
 
 # Keys / IDs
