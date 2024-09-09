@@ -1,0 +1,4 @@
+<mujoco>
+  <include file="ur5e.xml"/>
+
+</mujoco>
