@@ -112,7 +112,7 @@
                   <geom material="linkgray" mesh="wrist3" class="visual"/>
                   <geom class="eef_collision" pos="0 0.08 0" quat="1 1 0 0" size="0.04 0.02"/>
                   <site name="attachment_site" pos="0 0.1 0" quat="-1 1 0 0"/>
-                  <body name="fixed_box" pos="0 0 0">
+                  <body name="fixed_box" pos="0 0.25 0">
                     <geom type="box" size="0.075 0.15 0.01" rgba="0.8 0.2 0.2 1"/> <!-- Box dimensions and color -->
                     <inertial mass="0.5" pos="0 0 0" quat="0 0 0 1" diaginertia="0.001 0.001 0.001"/>
                   </body>
