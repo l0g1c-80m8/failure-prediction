@@ -20,7 +20,7 @@ def get_joint_space_trajectory(
 ) -> Optional[List[NDArray[np.float64]]]:
     ik_solver: IkSolver = IkSolver(RES.UR5_MODEL, KEY.UR5_EE)
     trajectory: Optional[List[NDArray[np.float64]]] = None
-    tries = 0
+    tries: int = 0
 
     while trajectory is None and (tries := tries + 1) <= max_tries:
         LOGGER.info(f'Generating trajectory - trial #{tries}')
