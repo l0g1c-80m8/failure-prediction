@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
     libglfw3 \
     vim \
     nano \
+    htop \
     && rm -rf /var/lib/apt/lists/*
 
 # Install cuda dependencies
