@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     software-properties-common \
     curl \
+    wget \
     && add-apt-repository ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y \
     python3.10 \
@@ -27,6 +28,8 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     libglfw3-dev \
     libglfw3 \
+    vim \
+    nano \
     && rm -rf /var/lib/apt/lists/*
 
 # Install cuda dependencies
