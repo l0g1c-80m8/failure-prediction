@@ -8,6 +8,7 @@ from mujoco_base import MuJoCoBase
 class Projectile(MuJoCoBase):
     def __init__(self, xml_path):
         super().__init__(xml_path)
+        self.angular_speed = 1.0  # Angular speed in radians per second
 
     def reset(self):
         # Set initial position of cube
@@ -22,7 +23,7 @@ class Projectile(MuJoCoBase):
         self.cam.distance = 2.5
         self.cam.elevation = -40.0
 
-    #     mj.set_mjcb_control(self.controller)
+        mj.set_mjcb_control(self.controller)
 
     # def controller(self, model, data):
     #     """
@@ -36,6 +37,21 @@ class Projectile(MuJoCoBase):
     #     self.data.qfrc_applied[0] = -c * v * vx
     #     self.data.qfrc_applied[1] = -c * v * vy
     #     self.data.qfrc_applied[2] = -c * v * vz
+
+    def controller(self, model, data):  
+        """
+        This controller moves the `shoulder_pan` joint in a circular motion.
+        """
+        # Get current time
+        t = data.time
+
+        # Calculate the desired position of the shoulder_pan_joint
+        angular_velocity = self.angular_speed  # rad/s
+        desired_position = np.sin(angular_velocity * t)  # Sinusoidal motion
+
+        # Set the control input for `shoulder_pan_joint`
+        joint_index = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, 'shoulder_pan_joint')
+        data.ctrl[joint_index] = desired_position
 
     def simulate(self):
         while not glfw.window_should_close(self.window):
@@ -51,7 +67,7 @@ class Projectile(MuJoCoBase):
             viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
 
             # Make camera track cube
-            self.cam.lookat[0] = self.data.qpos[0]
+            # self.cam.lookat[0] = self.data.qpos[0]
 
             # Show world frame
             # self.opt.frame = mj.mjtFrame.mjFRAME_WORLD
