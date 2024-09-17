@@ -1,8 +1,8 @@
 import numpy as np
 from numpy.typing import NDArray
 from scipy.spatial import KDTree
-import matplotlib
-matplotlib.use('TkAgg')  # Choose an interactive backend
+# import matplotlib
+# matplotlib.use('TkAgg')  # Choose an interactive backend
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from typing import List, Optional
