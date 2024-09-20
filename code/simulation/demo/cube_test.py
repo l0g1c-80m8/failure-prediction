@@ -1,8 +1,10 @@
+import os
 import mujoco as mj
 import numpy as np
 from mujoco.glfw import glfw
 
 from mujoco_base import MuJoCoBase
+import imageio
 
 
 class Projectile(MuJoCoBase):
@@ -62,6 +64,14 @@ class Projectile(MuJoCoBase):
         data.ctrl[joint_index] = desired_position
 
     def simulate(self):
+        video_dir = './demo'
+        video_filename = os.path.join(video_dir, 'simulation_video.mp4')
+
+        # Create directory if it does not exist
+        os.makedirs(video_dir, exist_ok=True)
+
+        writer = imageio.get_writer(video_filename, fps=60)
+
         while not glfw.window_should_close(self.window):
             simstart = self.data.time
 
@@ -81,12 +91,27 @@ class Projectile(MuJoCoBase):
                                mj.mjtCatBit.mjCAT_ALL.value, self.scene)
             mj.mjr_render(viewport, self.scene, self.context)
 
+            # Capture the current frame
+            framebuffer = np.zeros((viewport_height, viewport_width, 3), dtype=np.uint8)
+            # print("framebuffer1", framebuffer.shape)  # (900, 1200, 3)
+            
+
+            # Ensure to pass the context to the mjr_readPixels function
+            mj.mjr_readPixels(framebuffer, None, viewport, self.context)
+
+            # Flip the framebuffer vertically
+            framebuffer = framebuffer[::-1, :, :]  # Reverse the order of rows
+            # print("framebuffer2", framebuffer.shape)  # (900, 1200, 3)
+
+            writer.append_data(framebuffer)
+
             # swap OpenGL buffers (blocking call due to v-sync)
             glfw.swap_buffers(self.window)
 
             # process pending GUI events, call GLFW callbacks
             glfw.poll_events()
 
+        writer.close()
         glfw.terminate()
         # Save the trajectory data to a file or plot it
         self.save_trajectory()
