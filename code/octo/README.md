@@ -47,6 +47,14 @@ pip install --upgrade "jax[tpu]==0.4.20" -f https://storage.googleapis.com/jax-r
 ```
 See the [Jax Github page](https://github.com/google/jax) for more details on installing Jax.
 
+For reduce jax pre-allocate
+```bash
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
+export XLA_PYTHON_CLIENT_MEM_FRACTION=.50
+export XLA_PYTHON_CLIENT_ALLOCATOR=platform
+```
+
+
 Test the installation by finetuning on the debug dataset:
 ```bash
 python scripts/finetune.py --config.pretrained_path=hf://rail-berkeley/octo-small-1.5 --debug
