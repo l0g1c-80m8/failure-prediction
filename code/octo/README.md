@@ -57,7 +57,8 @@ export XLA_PYTHON_CLIENT_ALLOCATOR=platform
 
 Test the installation by finetuning on the debug dataset:
 ```bash
-python scripts/finetune.py --config.pretrained_path=hf://rail-berkeley/octo-small-1.5 --debug
+CUDA_VISIBLE_DEVICES=0,1 python scripts/finetune.py --config.pretrained_path=hf://rail-berkeley/octo-small-1.5
+# CUDA_VISIBLE_DEVICES=0,1 python examples/02_finetune_new_observation_action.py --pretrained_path=hf://rail-berkeley/octo-small-1.5 --data_dir="/home/zeyu/AI_PROJECTS/Material_handling_2024/DATA/example_sim_data/aloha_sim_dataset"
 ```
 
 ## Checkpoints
