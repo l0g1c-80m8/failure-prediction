@@ -57,21 +57,3 @@ class IkSolver:
             LOGGER.info('Failed to find a trajectory.')
 
         return joint_trajectory
-
-
-if __name__ == "__main__":
-    iks = IkSolver(RES.UR5_MODEL, KEY.UR5_EE)
-    waypoints = [
-        (0.4, 0.2, 0.5),  # front, slightly to the right
-        (0.4, -0.2, 0.5),  # front, slightly to the left
-        (0.6, 0.0, 0.3),  # further front, lower
-        (0.5, 0.3, 0.7),  # higher position
-        (0.4, 0.0, 0.5)  # back to a central position
-    ]
-    trajectory = iks.solve_trajectory(waypoints)
-
-    if trajectory:
-        print(f'Trajectory found with {len(trajectory)} points.')
-
-    # exit without error
-    sys.exit(0)

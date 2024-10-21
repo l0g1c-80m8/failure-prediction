@@ -111,20 +111,3 @@ class RRTPlanner:
         ax.set_zlabel('Z')
         ax.legend()
         plt.show()
-
-
-if __name__ == '__main__':
-    rrt_planner: RRTPlanner = RRTPlanner(
-        np.array([0, 0, 0], dtype=np.float64),
-        np.array([1, 1, 1], dtype=np.float64),
-        np.array([[-2, 2], [-2, 2], [-2, 2]])  # [min, max] for each dim
-    )
-
-    if rrt_planner.plan:
-        print('Path found!')
-    else:
-        print('No path found.')
-    rrt_planner.visualize()
-
-    # exit without error
-    sys.exit(0)
