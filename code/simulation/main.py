@@ -2,7 +2,7 @@ import sys
 import numpy as np
 from datetime import datetime
 from numpy.typing import NDArray
-from typing import List, Optional
+from typing import List, Optional, Dict, Tuple
 
 # local imports
 from src.simulation import MjSimulation
@@ -16,9 +16,10 @@ def get_joint_space_trajectory(
         start_pos: NDArray[np.float64],
         goal_pos: NDArray[np.float64],
         bounds: NDArray[np.float64],
+        constraints: Dict[int, Tuple[float, float]],
         max_tries: int = 10
 ) -> Optional[List[NDArray[np.float64]]]:
-    ik_solver: IkSolver = IkSolver(RES.UR5_MODEL, KEY.UR5_EE)
+    ik_solver: IkSolver = IkSolver(RES.UR5_MODEL, KEY.UR5_EE, joint_constraints=constraints)
     trajectory: Optional[List[NDArray[np.float64]]] = None
     tries: int = 0
 
@@ -38,11 +39,19 @@ def get_joint_space_trajectory(
 
 
 def main() -> None:
-    start_pos: NDArray[np.float64] = np.array([-0.4, -0.4, 0.5], dtype=np.float64)
-    goal_pos: NDArray[np.float64] = np.array([0.4, 0.4, 0.5], dtype=np.float64)
-    bounds: NDArray[np.float64] = np.array([[-2, 2], [-2, 2], [0.5, 0.5]], dtype=np.float64)
+    start_pos: NDArray[np.float64] = np.array([0, -0.997, 0.089], dtype=np.float64)
+    goal_pos: NDArray[np.float64] = np.array([0, 0.997, 0.089], dtype=np.float64)
+    bounds: NDArray[np.float64] = np.array([[-2, 2], [-2, 2], [-2, 2]], dtype=np.float64)
+    constraints: Dict[int, Tuple[float, float]] = {
+    0: (-np.pi / 2, np.pi / 2),
+    1: (-np.pi / 2, -np.pi / 2),
+    2: (np.pi / 2, np.pi / 2),
+    3: (0, 0),
+    4: (0, 0),
+    5: (0, 0),
+}
 
-    trajectory: List[NDArray[np.float64]] = get_joint_space_trajectory(start_pos, goal_pos, bounds)
+    trajectory: List[NDArray[np.float64]] = get_joint_space_trajectory(start_pos, goal_pos, bounds, constraints)
 
     simulator: MjSimulation = MjSimulation(model_path=RES.UR5_MODEL, trajectory=trajectory, speed=0.7)
     simulator.run_trajectory()

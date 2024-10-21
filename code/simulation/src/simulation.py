@@ -20,6 +20,9 @@ class MjSimulation:
         if len(positions) != self._model.nq:
             raise ValueError(f'Expected {self._model.nq} joint positions, got {len(positions)}')
         self._data.qpos[:] = positions
+    
+    def wait(self, count: int):
+        time.sleep(1 * count)
 
     def run_trajectory(self) -> None:
         if not self._trajectory or len(self._trajectory) == 0:
@@ -37,6 +40,8 @@ class MjSimulation:
             segment_durations = [np.linalg.norm(self._trajectory[i + 1] - self._trajectory[i]) / self._speed
                                  for i in range(trajectory_length - 1)]
             total_duration = sum(segment_durations)
+
+            self.wait(5)
 
             while viewer.is_running() and total_time < total_duration:
                 step_start = time.time()
@@ -90,3 +95,5 @@ class MjSimulation:
             viewer.sync()
 
             LOGGER.info(f"Trajectory completed in {time.time() - start_time:.2f} seconds.")
+
+            self.wait(15)
