@@ -122,14 +122,14 @@ LOGGER = logging.getLogger(__name__)
 class JointTrajectoryPlanner:
     def __init__(self, 
                  joint_constraints: Dict[int, Tuple[float, float]], 
-                 num_joints: int,
-                 dt: float = 1):
+                 num_joints: int = 13,  # Updated to match UR5 MuJoCo model
+                 dt: float = 0.01):
         """
-        Initialize trajectory planner with joint constraints.
+        Initialize trajectory planner with joint constraints for UR5 robot.
         
         Args:
             joint_constraints: Dictionary mapping joint indices to (min, max) angle limits
-            num_joints: Number of joints in the robot
+            num_joints: Number of joints in the robot (13 for UR5 MuJoCo model)
             dt: Time step for trajectory discretization
         """
         self.dt = dt
@@ -142,7 +142,8 @@ class JointTrajectoryPlanner:
                 self.joint_constraints[i] = joint_constraints[i]
             else:
                 # Default constraints if not specified
-                self.joint_constraints[i] = (-2 * np.pi, 2 * np.pi)
+                # More conservative defaults for unspecified joints
+                self.joint_constraints[i] = (-0.1, 0.1)
     
     def _check_joint_limits(self, joint_angles: np.ndarray) -> bool:
         """
@@ -176,6 +177,21 @@ class JointTrajectoryPlanner:
             clipped[i] = np.clip(joint_angles[i], min_angle, max_angle)
         return clipped
     
+    def _pad_joint_state(self, joint_angles: np.ndarray) -> np.ndarray:
+        """
+        Pad joint angles to match MuJoCo model's expected dimensions.
+        
+        Args:
+            joint_angles: Array of primary joint angles
+            
+        Returns:
+            np.ndarray: Padded joint state vector
+        """
+        padded = np.zeros(self.num_joints)
+        active_joints = min(len(joint_angles), 6)  # UR5 has 6 main joints
+        padded[:active_joints] = joint_angles[:active_joints]
+        return padded
+    
     def plan_trajectory(self, 
                        start_pose: np.ndarray, 
                        end_pose: np.ndarray, 
@@ -185,30 +201,34 @@ class JointTrajectoryPlanner:
         Plan a trajectory from start pose to end pose using linear interpolation.
         
         Args:
-            start_pose: Starting joint angles
-            end_pose: Target joint angles
+            start_pose: Starting joint angles (6 DOF for UR5)
+            end_pose: Target joint angles (6 DOF for UR5)
             velocity: Desired velocity scaling factor (1.0 = normal speed)
             check_constraints: Whether to verify and enforce joint constraints
             
         Returns:
             List of joint configurations forming the trajectory, or None if invalid
         """
+        # Pad input poses to match MuJoCo model dimensions
+        start_pose_padded = self._pad_joint_state(start_pose)
+        end_pose_padded = self._pad_joint_state(end_pose)
+        
         # Validate input poses
-        if len(start_pose) != self.num_joints or len(end_pose) != self.num_joints:
-            LOGGER.error("Invalid pose dimensions")
+        if len(start_pose_padded) != self.num_joints or len(end_pose_padded) != self.num_joints:
+            LOGGER.error(f"Invalid pose dimensions. Expected {self.num_joints}")
             return None
             
         # Check if start and end poses are within constraints
         if check_constraints:
-            if not self._check_joint_limits(start_pose):
+            if not self._check_joint_limits(start_pose_padded):
                 LOGGER.error("Start pose violates joint constraints")
                 return None
-            if not self._check_joint_limits(end_pose):
+            if not self._check_joint_limits(end_pose_padded):
                 LOGGER.error("End pose violates joint constraints")
                 return None
                 
         # Calculate the maximum joint difference to determine trajectory duration
-        max_diff = np.max(np.abs(end_pose - start_pose))
+        max_diff = np.max(np.abs(end_pose_padded - start_pose_padded))
         duration = max_diff / velocity  # Scale duration by velocity factor
         
         # Calculate number of waypoints based on duration and timestep
@@ -219,7 +239,7 @@ class JointTrajectoryPlanner:
         for i in range(num_waypoints):
             t = i / (num_waypoints - 1)  # Normalized time from 0 to 1
             # Linear interpolation
-            waypoint = (1 - t) * start_pose + t * end_pose
+            waypoint = (1 - t) * start_pose_padded + t * end_pose_padded
             
             if check_constraints:
                 # Clip to joint limits if needed
@@ -229,17 +249,6 @@ class JointTrajectoryPlanner:
             
         return trajectory
     
-    def visualize_trajectory(self, trajectory: List[np.ndarray]) -> None:
-        """
-        Print trajectory information for visualization/debugging.
-        
-        Args:
-            trajectory: List of joint configurations
-        """
-        LOGGER.info(f"Trajectory contains {len(trajectory)} waypoints")
-        for i, waypoint in enumerate(trajectory):
-            LOGGER.info(f"Waypoint {i}: {waypoint}")
-            
     def get_trajectory_statistics(self, trajectory: List[np.ndarray]) -> Dict:
         """
         Calculate basic statistics about the trajectory.
@@ -284,34 +293,3 @@ class JointTrajectoryPlanner:
             })
             
         return stats
-
-# Example usage
-def main():
-    # Define joint constraints (in radians)
-    constraints = {
-        0: (-np.pi/2, np.pi/2),    # Joint 0: ±90 degrees
-        1: (0, np.pi),             # Joint 1: 0 to 180 degrees
-        2: (-np.pi/4, np.pi/4),    # Joint 2: ±45 degrees
-    }
-    
-    # Create planner for a 3-joint robot
-    planner = JointTrajectoryPlanner(constraints, num_joints=3, dt=0.01)
-    
-    # Define start and end poses
-    start_pose = np.array([0.0, 0.0, 0.0])
-    end_pose = np.array([np.pi/4, np.pi/2, -np.pi/8])
-    
-    # Plan trajectory
-    trajectory = planner.plan_trajectory(
-        start_pose=start_pose,
-        end_pose=end_pose,
-        velocity=1.0,
-        check_constraints=True
-    )
-    
-    if trajectory is not None:
-        # Get trajectory statistics
-        stats = planner.get_trajectory_statistics(trajectory)
-        LOGGER.info(f"Trajectory stats: {stats}")
-    else:
-        LOGGER.error("Failed to plan trajectory")
