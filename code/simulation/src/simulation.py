@@ -9,6 +9,7 @@ from typing import List, Optional
 from src.logger import LOGGER
 
 
+
 class MjSimulation:
     def __init__(self, model_path: str, trajectory: List[NDArray[np.float64]], speed: float = 1.0) -> None:
         self._model: mujoco.MjModel = mujoco.MjModel.from_xml_path(model_path)
@@ -22,15 +23,33 @@ class MjSimulation:
         
         # Reset the simulation
         mujoco.mj_resetData(self._model, self._data)
-        
-        # Initialize cube position
-        self.reset_cube()
 
+    def get_panel_position(self) -> np.ndarray:
+        """Get the current world position of the panel"""
+        # Forward kinematics to get panel position
+        mujoco.mj_forward(self._model, self._data)
+        # Get the site ID for the panel (assuming it's named 'panel')
+        panel_body_id = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_BODY, "fixed_box")
+        if panel_body_id == -1:
+            raise ValueError("Panel body not found in model")
+        # Get panel position in world coordinates
+        return self._data.xpos[panel_body_id].copy()
+        
     def reset_cube(self):
-        """Reset cube to initial position above panel"""
-        # The first 6 values are robot joints, next 7 are cube position (3 pos + 4 quat)
-        self._data.qpos[self._cube_start_idx:self._cube_start_idx+3] = [0, 0.25, 0.04]  # x, y, z
-        self._data.qpos[self._cube_start_idx+3:self._cube_start_idx+7] = [1, 0, 0, 0]   # quaternion
+        """Reset cube to position above the panel"""
+        # Get current panel position
+        panel_pos = self.get_panel_position()
+        
+        # Place cube slightly above the panel
+        cube_offset = np.array([0, 0, 0.025])  # 0.025m above panel surface
+        cube_pos = panel_pos + cube_offset
+        
+        # Set cube position and orientation
+        self._data.qpos[self._cube_start_idx:self._cube_start_idx+3] = cube_pos
+        self._data.qpos[self._cube_start_idx+3:self._cube_start_idx+7] = [1, 0, 0, 0]  # quaternion
+        
+        # Reset cube velocity
+        self._data.qvel[self._cube_start_idx:self._cube_start_idx+6] = 0
         
     def set_robot_position(self, positions: List[float]) -> None:
         """Set only robot joint positions"""
@@ -90,11 +109,13 @@ class MjSimulation:
             # 1. Set initial robot position and let it settle
             LOGGER.info("Setting initial position...")
             self.set_robot_position(initial_position)
+            mujoco.mj_forward(self._model, self._data)  # Update forward kinematics
             self.run_physics_with_fixed_robot(0.5, initial_position, viewer)
             
-            # 2. Let cube fall and settle while holding robot position
-            LOGGER.info("Letting cube fall and settle...")
-            self.run_physics_with_fixed_robot(5.0, initial_position, viewer)
+            # 2. Place cube on panel and let it settle
+            LOGGER.info("Placing cube and letting it settle...")
+            self.reset_cube()  # This now places the cube relative to panel position
+            self.run_physics_with_fixed_robot(2.0, initial_position, viewer)
             
             # 3. Execute trajectory with smooth motion
             LOGGER.info("Executing robot trajectory...")
