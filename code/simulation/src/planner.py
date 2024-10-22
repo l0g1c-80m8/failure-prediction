@@ -111,3 +111,207 @@ class RRTPlanner:
         ax.set_zlabel('Z')
         ax.legend()
         plt.show()
+
+import numpy as np
+from typing import List, Dict, Tuple, Optional
+from numpy.typing import NDArray
+import logging
+
+LOGGER = logging.getLogger(__name__)
+
+class JointTrajectoryPlanner:
+    def __init__(self, 
+                 joint_constraints: Dict[int, Tuple[float, float]], 
+                 num_joints: int,
+                 dt: float = 1):
+        """
+        Initialize trajectory planner with joint constraints.
+        
+        Args:
+            joint_constraints: Dictionary mapping joint indices to (min, max) angle limits
+            num_joints: Number of joints in the robot
+            dt: Time step for trajectory discretization
+        """
+        self.dt = dt
+        self.num_joints = num_joints
+        
+        # Initialize constraints for all joints
+        self.joint_constraints = {}
+        for i in range(num_joints):
+            if i in joint_constraints:
+                self.joint_constraints[i] = joint_constraints[i]
+            else:
+                # Default constraints if not specified
+                self.joint_constraints[i] = (-2 * np.pi, 2 * np.pi)
+    
+    def _check_joint_limits(self, joint_angles: np.ndarray) -> bool:
+        """
+        Check if joint angles are within constraints.
+        
+        Args:
+            joint_angles: Array of joint angles to check
+            
+        Returns:
+            bool: True if all joints are within limits
+        """
+        for i, angle in enumerate(joint_angles):
+            min_angle, max_angle = self.joint_constraints[i]
+            if angle < min_angle or angle > max_angle:
+                return False
+        return True
+    
+    def _clip_to_joint_limits(self, joint_angles: np.ndarray) -> np.ndarray:
+        """
+        Clip joint angles to within their constraints.
+        
+        Args:
+            joint_angles: Array of joint angles to clip
+            
+        Returns:
+            np.ndarray: Clipped joint angles
+        """
+        clipped = joint_angles.copy()
+        for i in range(len(joint_angles)):
+            min_angle, max_angle = self.joint_constraints[i]
+            clipped[i] = np.clip(joint_angles[i], min_angle, max_angle)
+        return clipped
+    
+    def plan_trajectory(self, 
+                       start_pose: np.ndarray, 
+                       end_pose: np.ndarray, 
+                       velocity: float = 1.0,
+                       check_constraints: bool = True) -> Optional[List[np.ndarray]]:
+        """
+        Plan a trajectory from start pose to end pose using linear interpolation.
+        
+        Args:
+            start_pose: Starting joint angles
+            end_pose: Target joint angles
+            velocity: Desired velocity scaling factor (1.0 = normal speed)
+            check_constraints: Whether to verify and enforce joint constraints
+            
+        Returns:
+            List of joint configurations forming the trajectory, or None if invalid
+        """
+        # Validate input poses
+        if len(start_pose) != self.num_joints or len(end_pose) != self.num_joints:
+            LOGGER.error("Invalid pose dimensions")
+            return None
+            
+        # Check if start and end poses are within constraints
+        if check_constraints:
+            if not self._check_joint_limits(start_pose):
+                LOGGER.error("Start pose violates joint constraints")
+                return None
+            if not self._check_joint_limits(end_pose):
+                LOGGER.error("End pose violates joint constraints")
+                return None
+                
+        # Calculate the maximum joint difference to determine trajectory duration
+        max_diff = np.max(np.abs(end_pose - start_pose))
+        duration = max_diff / velocity  # Scale duration by velocity factor
+        
+        # Calculate number of waypoints based on duration and timestep
+        num_waypoints = int(np.ceil(duration / self.dt)) + 1
+        
+        # Generate trajectory
+        trajectory = []
+        for i in range(num_waypoints):
+            t = i / (num_waypoints - 1)  # Normalized time from 0 to 1
+            # Linear interpolation
+            waypoint = (1 - t) * start_pose + t * end_pose
+            
+            if check_constraints:
+                # Clip to joint limits if needed
+                waypoint = self._clip_to_joint_limits(waypoint)
+                
+            trajectory.append(waypoint)
+            
+        return trajectory
+    
+    def visualize_trajectory(self, trajectory: List[np.ndarray]) -> None:
+        """
+        Print trajectory information for visualization/debugging.
+        
+        Args:
+            trajectory: List of joint configurations
+        """
+        LOGGER.info(f"Trajectory contains {len(trajectory)} waypoints")
+        for i, waypoint in enumerate(trajectory):
+            LOGGER.info(f"Waypoint {i}: {waypoint}")
+            
+    def get_trajectory_statistics(self, trajectory: List[np.ndarray]) -> Dict:
+        """
+        Calculate basic statistics about the trajectory.
+        
+        Args:
+            trajectory: List of joint configurations
+            
+        Returns:
+            Dictionary containing trajectory statistics
+        """
+        if not trajectory:
+            return {}
+            
+        # Convert to numpy array for easier calculations
+        traj_array = np.array(trajectory)
+        
+        # Calculate statistics
+        stats = {
+            "num_waypoints": len(trajectory),
+            "total_time": (len(trajectory) - 1) * self.dt,
+            "joint_ranges": [],
+            "max_joint_velocities": []
+        }
+        
+        # Calculate range of motion for each joint
+        for joint in range(self.num_joints):
+            joint_positions = traj_array[:, joint]
+            stats["joint_ranges"].append({
+                "joint": joint,
+                "min": np.min(joint_positions),
+                "max": np.max(joint_positions),
+                "range": np.max(joint_positions) - np.min(joint_positions)
+            })
+            
+        # Calculate maximum velocities
+        velocities = np.diff(traj_array, axis=0) / self.dt
+        max_velocities = np.max(np.abs(velocities), axis=0)
+        for joint in range(self.num_joints):
+            stats["max_joint_velocities"].append({
+                "joint": joint,
+                "max_velocity": max_velocities[joint]
+            })
+            
+        return stats
+
+# Example usage
+def main():
+    # Define joint constraints (in radians)
+    constraints = {
+        0: (-np.pi/2, np.pi/2),    # Joint 0: ±90 degrees
+        1: (0, np.pi),             # Joint 1: 0 to 180 degrees
+        2: (-np.pi/4, np.pi/4),    # Joint 2: ±45 degrees
+    }
+    
+    # Create planner for a 3-joint robot
+    planner = JointTrajectoryPlanner(constraints, num_joints=3, dt=0.01)
+    
+    # Define start and end poses
+    start_pose = np.array([0.0, 0.0, 0.0])
+    end_pose = np.array([np.pi/4, np.pi/2, -np.pi/8])
+    
+    # Plan trajectory
+    trajectory = planner.plan_trajectory(
+        start_pose=start_pose,
+        end_pose=end_pose,
+        velocity=1.0,
+        check_constraints=True
+    )
+    
+    if trajectory is not None:
+        # Get trajectory statistics
+        stats = planner.get_trajectory_statistics(trajectory)
+        LOGGER.info(f"Trajectory stats: {stats}")
+    else:
+        LOGGER.error("Failed to plan trajectory")
