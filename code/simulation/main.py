@@ -65,7 +65,7 @@ def main() -> None:
     goal_joint_pos: NDArray[np.float64] = np.array([np.pi / 2, -np.pi / 2, np.pi / 2, 0, 0, 0], dtype=np.float64)
 
 
-    trajectory: List[NDArray[np.float64]] = get_joint_space_trajectory(start_pos, goal_pos, bounds, constraints)
+    # trajectory: List[NDArray[np.float64]] = get_joint_space_trajectory(start_pos, goal_pos, bounds, constraints)
     trajectory: List[NDArray[np.float64]] = get_simple_joint_trajectory(start_joint_pos, goal_joint_pos, constraints)
 
     simulator: MjSimulation = MjSimulation(model_path=RES.UR5_MODEL, trajectory=trajectory, speed=0.7)
