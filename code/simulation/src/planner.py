@@ -122,7 +122,7 @@ LOGGER = logging.getLogger(__name__)
 class JointTrajectoryPlanner:
     def __init__(self, 
                  joint_constraints: Dict[int, Tuple[float, float]], 
-                 num_joints: int = 13,  # Updated to match UR5 MuJoCo model
+                 num_joints: int = 6,  # Updated to match UR5 MuJoCo model
                  dt: float = 0.01):
         """
         Initialize trajectory planner with joint constraints for UR5 robot.
