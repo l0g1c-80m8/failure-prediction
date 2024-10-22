@@ -41,7 +41,7 @@ def get_simple_joint_trajectory(
     start_pos: NDArray[np.float64],
     goal_pos: NDArray[np.float64],
     constraints: Dict[int, Tuple[float, float]]) -> Optional[List[NDArray[np.float64]]]:
-    planner = JointTrajectoryPlanner(constraints, num_joints=6)
+    planner = JointTrajectoryPlanner(constraints)
     
     trajectory = planner.plan_trajectory(start_pos, goal_pos, velocity=1.0)
     
