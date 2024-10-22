@@ -41,7 +41,7 @@ class MjSimulation:
                                  for i in range(trajectory_length - 1)]
             total_duration = sum(segment_durations)
 
-            self.wait(5)
+            self.wait(2)
 
             while viewer.is_running() and total_time < total_duration:
                 step_start = time.time()
