@@ -109,7 +109,9 @@ We provide a [minimal example](examples/02_finetune_new_observation_action.py) f
 We also provide a more advanced finetuning script that allows you to change hyperparameters via a config file and logs finetuning
 metrics. To run advanced finetuning, use:
 ```bash
-python scripts/finetune.py --config.pretrained_path=hf://rail-berkeley/octo-small-1.5
+
+CUDA_VISIBLE_DEVICES=1 python scripts/finetune.py --config.pretrained_path=hf://rail-berkeley/octo-small-1.5 --config.save_dir="./exp/" --config.batch_size=128  --debug
+# CUDA_VISIBLE_DEVICES=1 python examples/02_finetune_new_observation_action.py --pretrained_path=hf://rail-berkeley/octo-small-1.5 --data_dir="/home/zeyu/AI_PROJECTS/Material_handling_2024/DATA/example_sim_data/aloha_sim_dataset"  --save_dir="/home/zeyu/AI_PROJECTS/Material_handling_2024/zeyu-octo/exp/"
 ```
 
 We offer three finetuning modes depending on the parts of the model that are kept frozen: ```head_only```, ```head_mlp_only```, and ```full``` to finetune the full model.
