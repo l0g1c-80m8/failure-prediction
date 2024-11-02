@@ -127,7 +127,7 @@
     <!-- New Cube Body -->
     <body name="free_cube" pos="-0.4 0.8 0.2"> <!-- Slightly above the box -->
       <!-- <joint name="free_cube" type="free" /> -->
-      <geom type="box" size="0.01 0.01 0.01" rgba="0.2 0.8 0.2 1"/> <!-- Cube dimensions and color -->
+      <geom type="box" size="0.015 0.015 0.015" rgba="0.2 0.8 0.2 1"/> <!-- Cube dimensions and color -->
       <joint type="free"/>
       <inertial mass="1" pos="0 0 0" quat="1 0 0 0" diaginertia="0.01 0.01 0.01"/>
     </body>
