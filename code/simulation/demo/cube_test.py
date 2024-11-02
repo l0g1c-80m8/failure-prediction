@@ -2,6 +2,7 @@ import os
 import mujoco as mj
 import numpy as np
 from mujoco.glfw import glfw
+import sys
 
 from mujoco_base import MuJoCoBase
 import imageio
@@ -16,11 +17,11 @@ EPISODE_LENGTH = 2000  # Number of points in trajectory
 
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_LOW = 0.05
-DISPLACEMENT_THRESHOLD_HIGH = 0.1
+DISPLACEMENT_THRESHOLD_HIGH = 0.2
 LINEAR_SPEED_THRESHOLD_LOW = 0.05
-LINEAR_SPEED_THRESHOLD_HIGH = 0.1
+LINEAR_SPEED_THRESHOLD_HIGH = 0.6
 ANGULAR_SPEED_THRESHOLD_LOW = 0.1
-ANGULAR_SPEED_THRESHOLD_HIGH = 1.0
+ANGULAR_SPEED_THRESHOLD_HIGH = 0.8
 
 
 class Projectile(MuJoCoBase):
@@ -44,6 +45,10 @@ class Projectile(MuJoCoBase):
         self.start_time = None
         # Clear position data
         self.positions = []
+
+        cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
+        fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
+        self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [0.4, 0.45, 0.6]
 
         mj.set_mjcb_control(self.controller)
 
@@ -87,7 +92,7 @@ class Projectile(MuJoCoBase):
         relative_displacement = np.linalg.norm(cube_pos - fixed_box_pos)
 
         # Optionally print or log these values
-        # print(f"Time: {self.data.time:.2f}s | Linear Speed: {linear_speed:.2f} m/s | Angular Speed: {angular_speed:.2f} rad/s | Relative Displacement: {relative_displacement:.2f} m")
+        print(f"Time: {self.data.time:.2f}s | Linear Speed: {linear_speed:.2f} m/s | Angular Speed: {angular_speed:.2f} rad/s | Relative Displacement: {relative_displacement:.2f} m")
         
         # Calculate the action based on the thresholds and interpolation logic
         action_value = self.calculate_action(relative_displacement, linear_speed, angular_speed)
@@ -158,6 +163,11 @@ class Projectile(MuJoCoBase):
 
         for episode_num in range(N_EPISODES):
             self.episode = []  # Reset episode data for each new episode
+
+            # Load the 'home' keyframe for initial position
+            keyframe_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_KEY, 'home')
+            if keyframe_id >= 0:
+                mj.mj_resetDataKeyframe(self.model, self.data, keyframe_id)
             self.reset()  # Reset simulation
 
             for step_num in range(EPISODE_LENGTH):
@@ -244,7 +254,7 @@ def main():
 
     sim = Projectile(xml_path, initial_delay=0.5)  # Set the delay to 3 seconds
     sim.reset()
-    sim.simulate("val")
+    sim.simulate(sys.argv[1])
 
 
 if __name__ == "__main__":
