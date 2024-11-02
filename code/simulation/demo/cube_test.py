@@ -16,15 +16,9 @@ class Projectile(MuJoCoBase):
         self.positions = []  # To store the position data
 
     def reset(self):
-        # Set initial position of the cube
-        self.data.qpos[2] = 1.0  # Adjust according to your cube's z position
-
-        # Reset cube velocity
-        cube_joint_index = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_JOINT, 'free_cube')
-        self.data.qvel[cube_joint_index] = 0.0
 
         # Set camera configuration
-        self.cam.azimuth = 90.0
+        self.cam.azimuth = 270.0
         self.cam.distance = 2.5
         self.cam.elevation = -40.0
 
@@ -37,8 +31,11 @@ class Projectile(MuJoCoBase):
 
     def controller(self, model, data):
         if self.start_time is None:
-            # Set start time when controller is first called
+            # Set start time and initial position when controller is first called
             self.start_time = data.time
+            # Get the initial position of the shoulder_pan_joint
+            joint_index = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, 'shoulder_pan_joint')
+            self.initial_position = data.qpos[joint_index]
             return
 
         elapsed_time = data.time - self.start_time
@@ -46,18 +43,10 @@ class Projectile(MuJoCoBase):
             # Delay not yet passed, do nothing
             return
 
-        # Apply gravity or velocity to make the cube drop after the delay
-        # Set the free_cube joint velocity to simulate dropping
-        joint_index = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, 'free_cube')
-        # gravity = -9.81  # Gravity constant
-
-        # Apply initial downward velocity or force if needed
-        # Adjust this to fit your exact scenario
-        # self.data.qvel[joint_index] = gravity
-
-        # Calculate the desired position of the shoulder_pan_joint
+        # Calculate the desired position of the shoulder_pan_joint starting from initial_position
         angular_velocity = self.angular_speed  # rad/s
-        desired_position = np.sin(angular_velocity * (elapsed_time - self.initial_delay))  # Sinusoidal motion
+        offset = np.sin(angular_velocity * (elapsed_time - self.initial_delay))  # Sinusoidal offset
+        desired_position = self.initial_position + offset
 
         # Set the control input for `shoulder_pan_joint`
         joint_index = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, 'shoulder_pan_joint')
@@ -69,6 +58,14 @@ class Projectile(MuJoCoBase):
 
         # Create directory if it does not exist
         os.makedirs(video_dir, exist_ok=True)
+
+        # Load the 'home' keyframe for initial position
+        keyframe_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_KEY, 'home')
+        if keyframe_id >= 0:
+            mj.mj_resetDataKeyframe(self.model, self.data, keyframe_id)
+
+        cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
+        self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [0.4, 0.45, 0.6]
 
         writer = imageio.get_writer(video_filename, fps=60)
 
@@ -88,21 +85,13 @@ class Projectile(MuJoCoBase):
 
             # Update scene and render
             mj.mjv_updateScene(self.model, self.data, self.opt, None, self.cam,
-                               mj.mjtCatBit.mjCAT_ALL.value, self.scene)
+                            mj.mjtCatBit.mjCAT_ALL.value, self.scene)
             mj.mjr_render(viewport, self.scene, self.context)
 
             # Capture the current frame
             framebuffer = np.zeros((viewport_height, viewport_width, 3), dtype=np.uint8)
-            # print("framebuffer1", framebuffer.shape)  # (900, 1200, 3)
-            
-
-            # Ensure to pass the context to the mjr_readPixels function
             mj.mjr_readPixels(framebuffer, None, viewport, self.context)
-
-            # Flip the framebuffer vertically
             framebuffer = framebuffer[::-1, :, :]  # Reverse the order of rows
-            # print("framebuffer2", framebuffer.shape)  # (900, 1200, 3)
-
             writer.append_data(framebuffer)
 
             # swap OpenGL buffers (blocking call due to v-sync)
@@ -113,8 +102,8 @@ class Projectile(MuJoCoBase):
 
         writer.close()
         glfw.terminate()
-        # Save the trajectory data to a file or plot it
         self.save_trajectory()
+
 
     def save_trajectory(self):
         """
