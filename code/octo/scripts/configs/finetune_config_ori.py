@@ -16,9 +16,9 @@ def get_config(config_string="full,multimodal"):
     # and second image key should be the wrist view (None if not used)
 
     FINETUNING_KWARGS = {
-        "name": "zeyu_example_dataset",
+        "name": "bridge_dataset",
         "data_dir": "./tests/debug_dataset",
-        "image_obs_keys": {"primary": "image", "wrist": None},
+        "image_obs_keys": {"primary": "image_0", "wrist": None},
         "proprio_obs_key": "proprio",
         "language_key": "language_instruction",
         "action_proprio_normalization_type": "normal",

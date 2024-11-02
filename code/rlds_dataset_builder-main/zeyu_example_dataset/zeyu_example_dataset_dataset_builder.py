@@ -26,7 +26,7 @@ class ZeyuExampleDataset(tfds.core.GeneratorBasedBuilder):
                 'steps': tfds.features.Dataset({
                     'observation': tfds.features.FeaturesDict({
                         'image': tfds.features.Image(
-                            shape=(64, 64, 3),
+                            shape=(900, 1200, 3),
                             dtype=np.uint8,
                             encoding_format='png',
                             doc='Main camera RGB observation.',
@@ -38,7 +38,7 @@ class ZeyuExampleDataset(tfds.core.GeneratorBasedBuilder):
                             doc='Wrist camera RGB observation.',
                         ),
                         'state': tfds.features.Tensor(
-                            shape=(16,),
+                            shape=(9,),
                             dtype=np.float32,
                             doc='Robot state, consists of [7x robot joint angles, '
                                 '3x relative_motion_vector, 3x linear_velocity, 3x angular_velocity].',
@@ -152,4 +152,3 @@ class ZeyuExampleDataset(tfds.core.GeneratorBasedBuilder):
         #         beam.Create(episode_paths)
         #         | beam.Map(_parse_example)
         # )
-
