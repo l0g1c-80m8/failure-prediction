@@ -110,7 +110,7 @@ We also provide a more advanced finetuning script that allows you to change hype
 metrics. To run advanced finetuning, use:
 ```bash
 
-CUDA_VISIBLE_DEVICES=0 python scripts/finetune.py --config.pretrained_path=hf://rail-berkeley/octo-small-1.5 --config.save_dir="./exp/" --config.batch_size=128 --debug
+CUDA_VISIBLE_DEVICES=0 python scripts/finetune.py --config=scripts/configs/finetune_config.py:full,multimodal --config.pretrained_path=hf://rail-berkeley/octo-small-1.5 --config.save_dir="./exp/" --config.batch_size=128 --debug
 # CUDA_VISIBLE_DEVICES=1 python examples/02_finetune_new_observation_action.py --pretrained_path=hf://rail-berkeley/octo-small-1.5 --data_dir="/home/zeyu/AI_PROJECTS/Material_handling_2024/DATA/example_sim_data/aloha_sim_dataset"  --save_dir="/home/zeyu/AI_PROJECTS/Material_handling_2024/zeyu-octo/exp/"
 ```
 
