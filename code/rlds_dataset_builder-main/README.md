@@ -27,11 +27,10 @@ everything is installed correctly. Run the following lines to create some dummy 
 ```
 cd example_dataset
 python3 create_example_data.py
-tfds build
+tfds build --data_dir /home/zeyu/PHD_LAB/zeyu-failure-prediction/code/
 ```
 
-This should create a new dataset in `~/tensorflow_datasets/example_dataset`. Please verify that the example
-conversion worked before moving on.
+This should create a new dataset in `/home/zeyu/PHD_LAB/zeyu-failure-prediction/code/`. Please verify that the example conversion worked before moving on.
 
 
 ## Converting your Own Dataset to RLDS

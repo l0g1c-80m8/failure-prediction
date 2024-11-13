@@ -59,6 +59,10 @@
     <mesh file="wrist3.obj"/>
   </asset>
 
+  <contact>
+    <pair geom1="sliding_cube" geom2="panel" friction="0.2 0.5 0.001"/>
+  </contact>
+
   <worldbody>
     <light name="spotlight" mode="targetbodycom" target="wrist_2_link" pos="0 -1 2"/>
     <body name="base" quat="1 0 0 1" childclass="ur5e">
@@ -113,7 +117,7 @@
                   <geom class="eef_collision" pos="0 0.08 0" quat="1 1 0 0" size="0.04 0.02"/>
                   <site name="attachment_site" pos="0 0.1 0" quat="-1 1 0 0"/>
                   <body name="fixed_box" pos="0 0.25 0">
-                    <geom type="box" size="0.075 0.15 0.01" rgba="0.8 0.2 0.2 1"/> <!-- Box dimensions and color -->
+                    <geom name="panel" type="box" size="0.075 0.15 0.01" rgba="0.8 0.2 0.2 1"/> <!-- Box dimensions and color -->
                     <inertial mass="0.5" pos="0 0 0" quat="0 0 0 1" diaginertia="0.001 0.001 0.001"/>
                   </body>
                 </body>
@@ -127,7 +131,7 @@
     <!-- New Cube Body -->
     <body name="free_cube" pos="-0.4 0.8 0.2"> <!-- Slightly above the box -->
       <!-- <joint name="free_cube" type="free" /> -->
-      <geom type="box" size="0.015 0.015 0.015" rgba="0.2 0.8 0.2 1"/> <!-- Cube dimensions and color -->
+      <geom name="sliding_cube" type="box" size="0.015 0.015 0.015" rgba="0.2 0.8 0.2 1"/> <!-- Cube dimensions and color -->
       <joint type="free"/>
       <inertial mass="1" pos="0 0 0" quat="1 0 0 0" diaginertia="0.01 0.01 0.01"/>
     </body>

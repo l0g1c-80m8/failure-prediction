@@ -93,13 +93,21 @@ class ZeyuExampleDataset(tfds.core.GeneratorBasedBuilder):
             }))
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
-        """Define data splits."""
+        """Define data splits with dynamically set sharding."""
+        # Count the number of episodes in the directory
+        train_episodes = glob.glob('data/train/episode_*.npy')
+        val_episodes = glob.glob('data/val/episode_*.npy')
+        
+        # Use the count as the number of shards
+        num_train_shards = len(train_episodes)
+        num_val_shards = len(val_episodes)
+
         return {
-            'train': self._generate_examples(path='data/train/episode_*.npy'),
-            'val': self._generate_examples(path='data/val/episode_*.npy'),
+            'train': self._generate_examples(path='data/train/episode_*.npy', num_shards=num_train_shards),
+            'val': self._generate_examples(path='data/val/episode_*.npy', num_shards=num_val_shards),
         }
 
-    def _generate_examples(self, path) -> Iterator[Tuple[str, Any]]:
+    def _generate_examples(self, path, num_shards=None) -> Iterator[Tuple[str, Any]]:
         """Generator of examples for each split."""
 
         def _parse_example(episode_path):
