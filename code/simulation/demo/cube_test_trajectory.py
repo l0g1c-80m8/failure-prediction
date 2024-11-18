@@ -14,7 +14,7 @@ import ast
 
 N_TRAIN_EPISODES = 10
 N_VAL_EPISODES = 10
-EPISODE_LENGTH = 300  # Number of points in trajectory
+EPISODE_LENGTH = 400  # Number of points in trajectory
 
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_HIGH = 0.2
@@ -25,6 +25,8 @@ class Projectile(MuJoCoBase):
         super().__init__(xml_path)
         self.init_angular_speed = 1.0  # Angular speed in radians per second
         self.initial_delay = initial_delay  # Delay before starting movement
+        self.speed_scale = random.uniform(0.5, 2.0)  # New parameter to control joint speed
+        self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
         self.start_time = None  # To track the start time
         self.positions = []  # To store the position data
         self.episode = [] # To store the episode data
@@ -37,6 +39,9 @@ class Projectile(MuJoCoBase):
         self.traj_file = traj_file
         self.trajectory = self.load_trajectory()
         self.current_step = 0
+        self.current_target = None
+        self.next_target = None
+        self.transition_start_time = None
 
     def load_trajectory(self):
         with open(self.traj_file, "r") as file:
@@ -75,76 +80,83 @@ class Projectile(MuJoCoBase):
         self.positions = []
         self.episode = []  # Reset episode data for each new episode
 
+        self.current_step = 0
+        self.current_target = None
+        self.next_target = None
+        self.transition_start_time = None
+        self.speed_scale = random.uniform(0.5, 2.0)  # New parameter to control joint speed
+        self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
+
         cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
         fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
         self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [0.4, -0.45, 0.6]
 
         mj.set_mjcb_control(self.controller)
 
-    # def controller(self, model, data):
-    #     if self.start_time is None:
-    #         # Set start time and initial position when controller is first called
-    #         self.start_time = data.time
-    #         # Get the initial position of the shoulder_pan_joint
-    #         joint_index = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, 'shoulder_pan_joint')
-    #         self.initial_position = data.qpos[joint_index]
-    #         return
-
-    #     elapsed_time = data.time - self.start_time
-    #     if elapsed_time < self.initial_delay:
-    #         # Delay not yet passed, do nothing
-    #         return
-
-    #     # Define the angular position in radians and calculate the offset
-    #     angular_position = self.initial_position + (elapsed_time - self.initial_delay) * self.angular_speed
-
-    #     # Apply a sudden speed increase
-    #     if angular_position >= self.speed_up:
-    #         self.angular_speed *= 2.0  # Double the speed at 90 degrees
-    #         self.human_intervene = True
-
-    #     # Clamp the desired position to 0–π radians
-    #     desired_position = np.clip(angular_position, -np.pi/2, np.pi/2)
-
-    #     # Set the control for `shoulder_pan_joint`
-    #     joint_index = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, 'shoulder_pan_joint')
-    #     data.ctrl[joint_index] = desired_position
 
     def controller(self, model, data):
         if self.start_time is None:
-            # Set start time and load 'home' keyframe
             self.start_time = data.time
-            # keyframe_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_KEY, 'home')
-            # if keyframe_id >= 0:
-            #     mj.mj_resetDataKeyframe(self.model, self.data, keyframe_id)
             self.current_step = 0
+            self.transition_start_time = data.time
+            self.current_target = self.trajectory[0]
+            self.next_target = self.trajectory[1] if len(self.trajectory) > 1 else None
+            # self.joint_pause = 0.5  # Duration of pause at each key pose in seconds
+            self.is_pausing = True  # Start with a pause at the first pose
+            self.pause_start_time = data.time
             return
 
         elapsed_time = data.time - self.start_time
         if elapsed_time < self.initial_delay:
-            # Wait for the initial delay
             return
 
-        # Sequence of poses: home -> start -> start_up -> end_up -> end
-        sequence = [
-            None,  # 'home' is already set
-            self.trajectory[0],  # 'start'
-            self.trajectory[1],  # 'start_up'
-            self.trajectory[2],  # 'end_up'
-            self.trajectory[3],  # 'end'
-        ]
+        # Handle pausing at key poses
+        if self.is_pausing:
+            pause_elapsed = data.time - self.pause_start_time
+            if pause_elapsed < self.joint_pause:
+                # Hold the current position during pause
+                if self.current_target is not None:
+                    for joint_idx, position in enumerate(self.current_target):
+                        data.ctrl[joint_idx] = position
+                return
+            else:
+                # End pause and prepare for next transition
+                self.is_pausing = False
+                self.transition_start_time = data.time
 
-        if self.current_step < len(sequence):
-            target_positions = sequence[self.current_step]
-            if target_positions is not None:
-                print(f"Step: {self.current_step}, Target Positions: {target_positions}")
-                for joint_idx, position in enumerate(target_positions):
-                    data.ctrl[joint_idx] = position
+        # Calculate transition duration based on speed scale
+        transition_duration = 1.0 / self.speed_scale  # Adjust this base duration as needed
+        
+        # Check if we need to move to the next target
+        current_transition_time = data.time - self.transition_start_time
+        if current_transition_time >= transition_duration and self.next_target is not None:
+            self.current_step += 1
+            self.current_target = self.next_target
+            self.next_target = (self.trajectory[self.current_step + 1] 
+                              if self.current_step + 1 < len(self.trajectory) 
+                              else None)
+            self.transition_start_time = data.time
+            current_transition_time = 0
+            # Start pause at new key pose
+            self.is_pausing = True
+            self.pause_start_time = data.time
+            return
 
-            # Move to the next step after a delay
-            if elapsed_time >= self.initial_delay + self.current_step:
-                self.current_step += 1
-                print(f"Moving to next step: {self.current_step}")
+        # If we have both current and next targets, interpolate between them
+        if self.current_target is not None and self.next_target is not None:
+            # Calculate interpolation factor
+            t = min(current_transition_time / transition_duration, 1.0)
+            
+            # Linear interpolation between current and next target
+            for joint_idx in range(len(self.current_target)):
+                current_pos = self.current_target[joint_idx]
+                next_pos = self.next_target[joint_idx]
+                interpolated_pos = current_pos + t * (next_pos - current_pos)
+                data.ctrl[joint_idx] = interpolated_pos
+        # If we only have current target (last position), hold it
+        elif self.current_target is not None:
+            for joint_idx, position in enumerate(self.current_target):
+                data.ctrl[joint_idx] = position
 
 
     def data_collection(self, cube_body_id, fixed_box_body_id):
@@ -349,7 +361,7 @@ class Projectile(MuJoCoBase):
 
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene.xml"
-    traj_path = "/home/zeyu/PHD_LAB/zeyu-failure-prediction/code/ur5-scripts/traj.txt"  # Adjust path as needed
+    traj_path = "/home/zeyu/AI_PROJECTS/Material_handling_2024/zeyu-failure-prediction/code/ur5-scripts/traj.txt"  # Adjust path as needed
 
     os.makedirs('data/train', exist_ok=True)
     os.makedirs('data/val', exist_ok=True)
