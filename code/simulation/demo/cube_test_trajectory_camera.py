@@ -11,8 +11,11 @@ import random
 import tqdm
 from scipy.interpolate import CubicSpline
 import ast
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
-N_TRAIN_EPISODES = 10
+N_TRAIN_EPISODES = 2
 N_VAL_EPISODES = 10
 EPISODE_LENGTH = 400  # Number of points in trajectory
 
@@ -90,7 +93,7 @@ class Projectile(MuJoCoBase):
 
         cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
         fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
-        self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [0.4, -0.45, 0.6]
+        self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [0.4, -0.45, 0.35]
 
         mj.set_mjcb_control(self.controller)
 
@@ -226,7 +229,7 @@ class Projectile(MuJoCoBase):
         # Define ranges for camera randomization
         # Wider ranges for more noticeable variation
         pos_ranges = {
-            'x': (-0.5, 0.5),    # Wider range for x offset
+            'x': (-0.3, 0.3),    # Wider range for x offset
             'y': (-0.5, -0.3),    # Wider range for y offset
             'z': (2.0, 2.5),     # Height variation
             'azimuth': (-15, 15),  # Degrees of rotation around vertical axis
@@ -324,7 +327,7 @@ class Projectile(MuJoCoBase):
         
         # Get image dimensions
         width = 640  # Set to be divisible by 16
-        height = 480  # Set to be divisible by 16
+        height = 640  # Set to be divisible by 16
         
         # Initialize image array
         img = np.zeros((height, width, 3), dtype=np.uint8)
@@ -399,6 +402,11 @@ class Projectile(MuJoCoBase):
         elif dataset == "val":
             N_EPISODES = N_VAL_EPISODES
 
+        # Initialize lists to store metrics
+        linear_velocities = []
+        angular_velocities = []
+        displacements = []
+
 
         for episode_num in range(N_EPISODES):
 
@@ -451,6 +459,9 @@ class Projectile(MuJoCoBase):
 
 
                 state_padded = self.data_collection(cube_body_id, fixed_box_body_id)
+                displacements.append(state_padded[0])  # Displacement
+                linear_velocities.append(state_padded[1])  # Linear velocity
+                angular_velocities.append(state_padded[2])  # Angular velocity
                 displacement = state_padded[0]
 
                 if self.human_intervene and not self.is_intervene_step_set:
@@ -464,7 +475,7 @@ class Projectile(MuJoCoBase):
                         self.is_high_threshold_step_set = True
 
                 self.episode.append({
-                'image': framebuffer,
+                'image': top_camera_frame,
                 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
                 'state': np.asarray(state_padded, dtype=np.float32),  # Save the padded state
                 # 'action': action_value,  # Ensure action is a tensor of shape (1,)
@@ -484,11 +495,14 @@ class Projectile(MuJoCoBase):
             #     print("Generating val examples...")
             #     np.save(f'data/val/episode_{episode_num}.npy', self.episode)
 
+        # Plot after simulation
+
 
         writer.close()
         top_camera_writer.close()
         glfw.terminate()
         self.save_trajectory()
+        self.plot_metrics(linear_velocities, angular_velocities, displacements)
 
 
     def save_trajectory(self):
@@ -511,6 +525,39 @@ class Projectile(MuJoCoBase):
             # plt.savefig('cube_trajectory.png')
             # plt.show()
 
+    def plot_metrics(self, linear_velocities, angular_velocities, displacements):
+        """
+        Plot linear velocity, angular velocity, and displacement over time.
+        """
+        time_steps = range(len(linear_velocities))
+        # print("range", range(len(linear_velocities)), range(len(angular_velocities)), range(len(displacements)))  # 800
+
+        plt.figure(figsize=(12, 8))
+
+        plt.subplot(3, 1, 1)
+        plt.plot(time_steps, linear_velocities, label='Linear Velocity')
+        plt.xlabel('Time Step')
+        plt.ylabel('Linear Velocity (m/s)')
+        plt.legend()
+        plt.grid()
+
+        plt.subplot(3, 1, 2)
+        plt.plot(time_steps, angular_velocities, label='Angular Velocity', color='orange')
+        plt.xlabel('Time Step')
+        plt.ylabel('Angular Velocity (rad/s)')
+        plt.legend()
+        plt.grid()
+
+        plt.subplot(3, 1, 3)
+        plt.plot(time_steps, displacements, label='Displacement', color='green')
+        plt.xlabel('Time Step')
+        plt.ylabel('Displacement (m)')
+        plt.legend()
+        plt.grid()
+
+        plt.tight_layout()
+        plt.show()
+        plt.savefig('cube_trajectory.png')
 
 # def main():
 #     xml_path = "./model/universal_robots_ur5e/test_scene.xml"
@@ -524,7 +571,7 @@ class Projectile(MuJoCoBase):
 
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene.xml"
-    traj_path = "/home/zeyu/AI_PROJECTS/Material_handling_2024/zeyu-failure-prediction/code/ur5-scripts/traj.txt"  # Adjust path as needed
+    traj_path = "/home/zeyu/PHD_LAB/Material_handling_2024/zeyu-failure-prediction/code/ur5-scripts/traj.txt"  # Adjust path as needed
 
     os.makedirs('data/train', exist_ok=True)
     os.makedirs('data/val', exist_ok=True)
