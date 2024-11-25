@@ -12,14 +12,14 @@ if __name__ == '__main__':
     # print('Right robot joints: ', joints_right)
 
     # starting states for our robots in GELLO and real-world experiments
-    starting_robot_joints_left = [6.108484466475944, -0.8206405732561044, -2.292379400175988, -3.087181887648819, -0.3205311336615182, 2.7729978630161582]
-    # starting_robot_joints_left = [1.3780459778509433, -1.523749890442781, -1.5899893346228173, -1.523211104456275, 1.722199931031265, -0.20266514321065365]
+    starting_robot_joints_left = [-0.4576556451698419, -1.702239491119661, -2.4280773476305115, -2.141959032909326, -2.0758073576539102, 3.1436171248763953]
+    # starting_robot_joints_left = [-0.4576745003503593, -1.2852380311658416, -1.9249888475127885, -3.0619757909783183, -2.0758073576539102, 3.143600922204323]
     # starting_robot_joints_right = [-1.6545815648737472, -1.6381940802802397, 1.795800360316563, -1.7138684258221923, -1.7362808437379504, -0.01120622072583366]
 
-    for i in range(100):
-        robot_left.servoj(
-            starting_robot_joints_left, vel=0.1, acc=0.3, t=0.35, lookahead_time=0.2, gain=100, wait=False
-        )
+    # for i in range(50):
+    robot_left.servoj(
+        starting_robot_joints_left, vel=0.1, acc=0.1, t=5, lookahead_time=0.2, gain=100, wait=False
+    )
     time.sleep(1)
     print('Finished moving the left arm to starting states.')
 
