@@ -31,3 +31,12 @@ The scripts control the UR5s using the [python-urx](https://github.com/SintefMan
 **`simultaneous_motion.py`**
 
 - Example code that executes both arms simultaneously.
+
+**`run a container:`**
+
+```
+sudo docker run -it --device /dev/tty1 --device /dev/input --privileged -v /etc/localtime:/etc/localtime:ro -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=$DISPLAY --shm-size 8g -e GDK_SCALE -e GDK_DPI_SCALE --network host  --ipc=host  -v /home/:/home --name {container_name} {image_id}
+```
+
+
+
