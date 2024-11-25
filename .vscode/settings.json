@@ -16,6 +16,6 @@
     "git.openRepositoryInParentFolders": "never",
     "terminal.integrated.enableMultiLinePasteWarning": false,
     "workbench.iconTheme": "a-file-icon-vscode",
-    "workbench.colorTheme": "Kimbie Dark",
+    "workbench.colorTheme": "Monokai",
     "terminal.integrated.fontSize": 16
 }
