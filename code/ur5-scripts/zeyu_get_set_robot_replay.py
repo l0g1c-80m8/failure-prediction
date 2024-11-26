@@ -1,5 +1,7 @@
 import urx
 import time
+import random
+import math
 
 def parse_trajectory(file_path):
     trajectory = {}
@@ -17,11 +19,17 @@ def execute_trajectory(robot, trajectory, n):
 
     for _ in range(n):
         for pose_name in full_sequence:
-            print(f"Moving to {pose_name}", trajectory[pose_name])
+            randomized_trajectory = trajectory[pose_name][:]  # Create a copy of the trajectory
+            # Add a random gain of ±5 degrees to the 6th joint
+            random_gain = random.uniform(-10, 10)  # Generate random angle in degrees
+            randomized_trajectory[5] += math.radians(random_gain)  # Convert to radians and apply
+            
+            print(f"Moving to {pose_name} with randomized trajectory: {randomized_trajectory}")
+            # print(f"Moving to {pose_name}", trajectory[pose_name])
             # for i in range(100):
-            robot.servoj(trajectory[pose_name], vel=0.1, acc=0.1, t=2, lookahead_time=0.2, gain=100, wait=True)
-
-        time.sleep(1)  # Pause between rounds
+            t_tmp = random.uniform(1.4, 2.0)
+            robot.servoj(randomized_trajectory, vel=0.1, acc=0.1, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
+        time.sleep(0.5)  # Pause between rounds
 
     print('Finished moving the left arm to starting states.')
 
