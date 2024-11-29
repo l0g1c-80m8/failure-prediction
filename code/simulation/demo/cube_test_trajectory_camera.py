@@ -20,7 +20,12 @@ N_VAL_EPISODES = 10
 EPISODE_LENGTH = 400  # Number of points in trajectory
 
 # Thresholds for action calculation
-DISPLACEMENT_THRESHOLD_HIGH = 0.2
+DISPLACEMENT_THRESHOLD_HIGH = 0.12
+DISPLACEMENT_THRESHOLD_LOW = 0.05
+LINEAR_SPEED_THRESHOLD_HIGH = 1.0
+LINEAR_SPEED_THRESHOLD_LOW = 0.05
+ANGULAR_SPEED_THRESHOLD_HIGH = 0.8
+ANGULAR_SPEED_THRESHOLD_LOW = 0.1
 
 
 class Projectile(MuJoCoBase):
@@ -33,9 +38,9 @@ class Projectile(MuJoCoBase):
         self.start_time = None  # To track the start time
         self.positions = []  # To store the position data
         self.episode = [] # To store the episode data
-        self.human_intervene = False  # New attribute to track cube drop
-        self.intervene_step = 0  # Step when human intervention occurs
-        self.is_intervene_step_set = False
+        # self.human_intervene = False  # New attribute to track cube drop
+        # self.intervene_step = 0  # Step when human intervention occurs
+        # self.is_intervene_step_set = False
         self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
         self.is_high_threshold_step_set = False
         
@@ -72,9 +77,9 @@ class Projectile(MuJoCoBase):
         self.randomize_camera_position()
 
         self.angular_speed = self.init_angular_speed
-        self.human_intervene = False  # New attribute to track cube drop
-        self.intervene_step = 0  # Step when human intervention occurs
-        self.is_intervene_step_set = False
+        # self.human_intervene = False  # New attribute to track cube drop
+        # self.intervene_step = 0  # Step when human intervention occurs
+        # self.is_intervene_step_set = False
         self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
         self.is_high_threshold_step_set = False
 
@@ -197,26 +202,31 @@ class Projectile(MuJoCoBase):
 
 
     # Function to calculate action value based on displacement, linear speed, and angular speed
-    def calculate_action(self, displacement, current_step):
-        # Set action to 0 if no human intervention
-        if current_step <= self.intervene_step:
-            return 0
+    def calculate_action(self, displacement, linear_speed, angular_speed):
+        # Check if all values are in the lower range
+        if np.linalg.norm(displacement) < DISPLACEMENT_THRESHOLD_LOW and \
+        linear_speed < LINEAR_SPEED_THRESHOLD_LOW and \
+        abs(angular_speed) < ANGULAR_SPEED_THRESHOLD_LOW:
+            return 0  # Set action to 0
 
-        # Set action to 1 if displacement exceeds the high threshold
-        if displacement >= DISPLACEMENT_THRESHOLD_HIGH:
-            return 1
+        # Check if any value exceeds the higher thresholds
+        if np.linalg.norm(displacement) > DISPLACEMENT_THRESHOLD_HIGH or \
+        linear_speed > LINEAR_SPEED_THRESHOLD_HIGH or \
+        abs(angular_speed) > ANGULAR_SPEED_THRESHOLD_HIGH:
+            return 1  # Set action to 1
 
-        # print("current_step > self.intervene_step", current_step > self.intervene_step)
-        # print("self.high_threshold_step", self.high_threshold_step)
-        # print("self.intervene_step", self.intervene_step)
-        # Exponential interpolation for action between intervention and high threshold
-        if current_step > self.intervene_step and self.high_threshold_step > self.intervene_step:
-            # Normalize the current step between intervene and high threshold steps
-            normalized_step = (current_step - self.intervene_step) / (self.high_threshold_step - self.intervene_step)
-            # print("normalized_step", normalized_step)
-            # Exponential growth from 0 to 1
-            action_value = 1 - np.exp(-5 * normalized_step)
-            return action_value
+        # If the values fall between thresholds, interpolate a reasonable action
+        # Normalize between 0 and 1 based on distance from the lower to upper threshold
+        displacement_factor = (np.linalg.norm(displacement) - DISPLACEMENT_THRESHOLD_LOW) / \
+                            (DISPLACEMENT_THRESHOLD_HIGH - DISPLACEMENT_THRESHOLD_LOW)
+        linear_speed_factor = (linear_speed - LINEAR_SPEED_THRESHOLD_LOW) / \
+                            (LINEAR_SPEED_THRESHOLD_HIGH - LINEAR_SPEED_THRESHOLD_LOW)
+        angular_speed_factor = (abs(angular_speed) - ANGULAR_SPEED_THRESHOLD_LOW) / \
+                            (ANGULAR_SPEED_THRESHOLD_HIGH - ANGULAR_SPEED_THRESHOLD_LOW)
+
+        # Combine the factors with an average, assuming equal importance
+        action_value = (displacement_factor + linear_speed_factor + angular_speed_factor) / 3.0
+        return action_value
 
     def randomize_camera_position(self):
         """
@@ -406,6 +416,7 @@ class Projectile(MuJoCoBase):
         linear_velocities = []
         angular_velocities = []
         displacements = []
+        action_values = []
 
 
         for episode_num in range(N_EPISODES):
@@ -463,31 +474,36 @@ class Projectile(MuJoCoBase):
                 linear_velocities.append(state_padded[1])  # Linear velocity
                 angular_velocities.append(state_padded[2])  # Angular velocity
                 displacement = state_padded[0]
+                linear_speed = state_padded[1]
+                angular_speed = state_padded[2]
 
-                if self.human_intervene and not self.is_intervene_step_set:
-                    self.intervene_step = step_num
-                    self.is_intervene_step_set = True
-                    print("intervene_step", self.intervene_step)
+                # if self.human_intervene and not self.is_intervene_step_set:
+                #     self.intervene_step = step_num
+                #     self.is_intervene_step_set = True
+                #     print("intervene_step", self.intervene_step)
 
                 if displacement >= DISPLACEMENT_THRESHOLD_HIGH:
                     if not self.is_high_threshold_step_set:
                         self.high_threshold_step = step_num  # Mark the step for interpolation endpoint
                         self.is_high_threshold_step_set = True
 
+                action_value = self.calculate_action(displacement, linear_speed, angular_speed)
+                action_values.append(action_value) # Action value
+
                 self.episode.append({
                 'image': top_camera_frame,
                 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
                 'state': np.asarray(state_padded, dtype=np.float32),  # Save the padded state
-                # 'action': action_value,  # Ensure action is a tensor of shape (1,)
+                'action': action_value,  # Ensure action is a tensor of shape (1,)
                 'language_instruction': 'dummy instruction',
                     })
             
-            for step_num in range(EPISODE_LENGTH):
-                displacement = self.episode[step_num]["state"][0]
-                action_value = self.calculate_action(displacement, step_num)
-                print("step_num", step_num, "action_value", action_value)
-                # Ensure action is stored as a (1,) tensor, not as a scalar
-                self.episode[step_num]["action"] = np.asarray([action_value], dtype=np.float32)  # Ensure action is a tensor of shape (1,)
+            # for step_num in range(EPISODE_LENGTH):
+            #     displacement = self.episode[step_num]["state"][0]
+            #     action_value = self.calculate_action(displacement, step_num)
+            #     print("step_num", step_num, "action_value", action_value)
+            #     # Ensure action is stored as a (1,) tensor, not as a scalar
+            #     self.episode[step_num]["action"] = np.asarray([action_value], dtype=np.float32)  # Ensure action is a tensor of shape (1,)
             # if dataset == "train":
             #     print("Generating train examples...")
             #     np.save(f'data/train/episode_{episode_num}.npy', self.episode)
@@ -502,7 +518,7 @@ class Projectile(MuJoCoBase):
         top_camera_writer.close()
         glfw.terminate()
         self.save_trajectory()
-        self.plot_metrics(linear_velocities, angular_velocities, displacements)
+        self.plot_metrics(linear_velocities, angular_velocities, displacements, action_values)
 
 
     def save_trajectory(self):
@@ -525,39 +541,46 @@ class Projectile(MuJoCoBase):
             # plt.savefig('cube_trajectory.png')
             # plt.show()
 
-    def plot_metrics(self, linear_velocities, angular_velocities, displacements):
+    def plot_metrics(self, linear_velocities, angular_velocities, displacements, action_values):
         """
         Plot linear velocity, angular velocity, and displacement over time.
         """
         time_steps = range(len(linear_velocities))
-        # print("range", range(len(linear_velocities)), range(len(angular_velocities)), range(len(displacements)))  # 800
+        # print("range", range(len(linear_velocities)), range(len(angular_velocities)), range(len(displacements)), range(len(action_values)))  # 800
 
-        plt.figure(figsize=(12, 8))
+        plt.figure(figsize=(16, 8))
 
-        plt.subplot(3, 1, 1)
+        plt.subplot(4, 1, 1)
         plt.plot(time_steps, linear_velocities, label='Linear Velocity')
         plt.xlabel('Time Step')
         plt.ylabel('Linear Velocity (m/s)')
         plt.legend()
         plt.grid()
 
-        plt.subplot(3, 1, 2)
+        plt.subplot(4, 1, 2)
         plt.plot(time_steps, angular_velocities, label='Angular Velocity', color='orange')
         plt.xlabel('Time Step')
         plt.ylabel('Angular Velocity (rad/s)')
         plt.legend()
         plt.grid()
 
-        plt.subplot(3, 1, 3)
+        plt.subplot(4, 1, 3)
         plt.plot(time_steps, displacements, label='Displacement', color='green')
         plt.xlabel('Time Step')
         plt.ylabel('Displacement (m)')
         plt.legend()
         plt.grid()
 
+        plt.subplot(4, 1, 4)
+        plt.plot(time_steps, action_values, label='Action_values', color='red')
+        plt.xlabel('Time Step')
+        plt.ylabel('Action_values')
+        plt.legend()
+        plt.grid()
+
         plt.tight_layout()
-        plt.show()
-        plt.savefig('cube_trajectory.png')
+        # plt.show()
+        plt.savefig('./demo/cube_trajectory.png')
 
 # def main():
 #     xml_path = "./model/universal_robots_ur5e/test_scene.xml"
@@ -571,7 +594,7 @@ class Projectile(MuJoCoBase):
 
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene.xml"
-    traj_path = "/home/zeyu/PHD_LAB/Material_handling_2024/zeyu-failure-prediction/code/ur5-scripts/traj.txt"  # Adjust path as needed
+    traj_path = "/home/zeyu/PHD_LAB/zeyu-failure-prediction/code/ur5-scripts/traj.txt"  # Adjust path as needed
 
     os.makedirs('data/train', exist_ok=True)
     os.makedirs('data/val', exist_ok=True)
