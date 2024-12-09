@@ -1,0 +1,68 @@
+{
+  "os": "Linux-6.8.0-49-generic-x86_64-with-glibc2.31",
+  "python": "3.10.15",
+  "startedAt": "2024-11-30T00:26:23.242733Z",
+  "args": [
+    "--vla_path",
+    "openvla/openvla-7b",
+    "--data_root_dir",
+    "/workspace/datasets/",
+    "--dataset_name",
+    "bridge_orig",
+    "--run_root_dir",
+    "/workspace/code/openvla/vla-scripts/my_runs",
+    "--adapter_tmp_dir",
+    "/workspace/code/openvla/vla-scripts/my_runs",
+    "--lora_rank",
+    "32",
+    "--batch_size",
+    "2",
+    "--grad_accumulation_steps",
+    "5",
+    "--learning_rate",
+    "5e-4"
+  ],
+  "program": "/workspace/code/openvla/vla-scripts/finetune.py",
+  "codePath": "vla-scripts/finetune.py",
+  "git": {
+    "remote": "https://github.com/openvla/openvla.git",
+    "commit": "0214a0c7c09942fb8e0ec3c3948c00e4e8949911"
+  },
+  "root": "/workspace/code/openvla",
+  "host": "blackcoffee",
+  "username": "vscode",
+  "executable": "/workspace/code/openvla/openvla_env/bin/python",
+  "codePathLocal": "vla-scripts/finetune.py",
+  "cpu_count": 16,
+  "cpu_count_logical": 32,
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "gpu_count": 2,
+  "disk": {
+    "/": {
+      "total": "3778773131264",
+      "used": "3372554620928"
+    }
+  },
+  "memory": {
+    "total": "270093705216"
+  },
+  "cpu": {
+    "count": 16,
+    "countLogical": 32
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA GeForce RTX 4090",
+      "memoryTotal": "25757220864",
+      "cudaCores": 16384,
+      "architecture": "Ada"
+    },
+    {
+      "name": "NVIDIA GeForce RTX 4090",
+      "memoryTotal": "25757220864",
+      "cudaCores": 16384,
+      "architecture": "Ada"
+    }
+  ],
+  "cudaVersion": "12.4"
+}
