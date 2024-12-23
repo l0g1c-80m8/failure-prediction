@@ -5,28 +5,18 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: simulation-main",
+            "name": "MuJoCo Viewer",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "main.py",
             "console": "integratedTerminal",
-            "justMyCode": true,
-            "python": "${workspaceFolder}/code/simulation/sim_env/bin/python",
+            "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/code/simulation:${env:PYTHONPATH}"
-            }
-        },
-        {
-            "name": "Python Debugger: octo-main",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "python": "${workspaceFolder}/code/octo/octo_env/bin/python",
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}/code/octo:${env:PYTHONPATH}"
-            }
+                "PYTHONPATH": "${workspaceFolder}",
+                "MUJOCO_GL": "egl"
+            },
+            "python": "/workspace/code/simulation/sim_env/bin/python3",
+            "cwd": "${workspaceFolder}/code/simulation"
         }
     ]
 }

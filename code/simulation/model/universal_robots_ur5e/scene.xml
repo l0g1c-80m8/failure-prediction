@@ -1,0 +1,114 @@
+<?xml version="1.0" ?>
+<mujoco model="ur5e_pick_place">
+    <compiler angle="radian" autolimits="true"/>
+
+    <option integrator="implicitfast" gravity="0 0 -9.81">
+        <flag contact="enable"/>
+    </option>
+
+    <!-- Default settings for physics and contact -->
+    <default>
+        <geom friction="1 0.005 0.0001" condim="3"/>
+    </default>
+
+    <!-- Define materials -->
+    <asset>
+        <material name="black" rgba="0.033 0.033 0.033 1"/>
+        <material name="blue" rgba="0.49 0.678 0.8 1"/>
+        <material name="gray" rgba="0.82 0.82 0.82 1"/>
+        <material name="bin1_color" rgba="0.2 0.3 0.7 0.8"/>
+        <material name="bin2_color" rgba="0.7 0.3 0.2 0.8"/>
+        <material name="cube_color" rgba="0.1 0.8 0.1 1"/>
+        <material name="floor_color" rgba="0.9 0.9 0.9 1"/>
+        <material name="eef_color" rgba="0.7 0.7 0.7 1"/>
+    </asset>
+
+    <worldbody>
+        <!-- Floor -->
+        <geom name="floor" type="plane" size="2 2 0.1" material="floor_color"/>
+        
+        <!-- Lighting -->
+        <light name="spotlight" pos="0 0 3" dir="0 0 -1" diffuse="0.5 0.5 0.5"/>
+        <light name="ambient" pos="0 0 4" dir="0 0 -1" diffuse="0.2 0.2 0.2"/>
+        
+        <!-- UR5e Robot - Using primitive shapes -->
+        <body name="base" pos="0 0 0">
+            <geom type="cylinder" size="0.06 0.05" material="black"/>
+            <body name="shoulder" pos="0 0 0.163">
+                <joint name="shoulder_pan" type="hinge" axis="0 0 1" range="-6.28319 6.28319"/>
+                <geom type="cylinder" size="0.06 0.08" material="blue"/>
+                <body name="upper_arm" pos="0 0.138 0">
+                    <joint name="shoulder_lift" type="hinge" axis="0 1 0" range="-6.28319 6.28319"/>
+                    <geom type="capsule" size="0.05" fromto="0 0 0 0 0 0.425" material="gray"/>
+                    <body name="forearm" pos="0 0 0.425">
+                        <joint name="elbow" type="hinge" axis="0 1 0" range="-3.1415 3.1415"/>
+                        <geom type="capsule" size="0.04" fromto="0 0 0 0 0 0.392" material="blue"/>
+                        <body name="wrist_1" pos="0 0 0.392">
+                            <joint name="wrist_1_joint" type="hinge" axis="0 1 0" range="-6.28319 6.28319"/>
+                            <geom type="capsule" size="0.03" fromto="0 0 0 0 0.127 0" material="gray"/>
+                            <body name="wrist_2" pos="0 0.127 0">
+                                <joint name="wrist_2_joint" type="hinge" axis="0 0 1" range="-6.28319 6.28319"/>
+                                <geom type="capsule" size="0.03" fromto="0 0 0 0 0 0.1" material="blue"/>
+                                <body name="wrist_3" pos="0 0 0.1">
+                                    <joint name="wrist_3_joint" type="hinge" axis="0 1 0" range="-6.28319 6.28319"/>
+                                    <!-- End effector attachment -->
+                                    <geom name="eef_base" type="box" size="0.02 0.08 0.005" pos="0 0.08 0" 
+                                          material="eef_color" mass="0.1"/>
+                                    <site name="eef_site" pos="0 0.08 0" size="0.01 0.01 0.01"/>
+                                </body>
+                            </body>
+                        </body>
+                    </body>
+                </body>
+            </body>
+        </body>
+
+        <!-- Bin 1 -->
+        <body name="bin1" pos="0.3 0.4 0.5">
+            <geom name="bin1_bottom" type="box" size="0.15 0.15 0.01" material="bin1_color"
+                mass="1"/>
+            <geom name="bin1_side1" type="box" size="0.15 0.01 0.1" pos="0 0.15 0.1" material="bin1_color"/>
+            <geom name="bin1_side2" type="box" size="0.15 0.01 0.1" pos="0 -0.15 0.1" material="bin1_color"/>
+            <geom name="bin1_side3" type="box" size="0.01 0.15 0.1" pos="0.15 0 0.1" material="bin1_color"/>
+        </body>
+
+        <!-- Bin 2 -->
+        <body name="bin2" pos="-0.3 0.4 0.5">
+            <geom name="bin2_bottom" type="box" size="0.15 0.15 0.01" material="bin2_color"
+                mass="1"/>
+            <geom name="bin2_side1" type="box" size="0.15 0.01 0.1" pos="0 0.15 0.1" material="bin2_color"/>
+            <geom name="bin2_side2" type="box" size="0.15 0.01 0.1" pos="0 -0.15 0.1" material="bin2_color"/>
+            <geom name="bin2_side3" type="box" size="0.01 0.15 0.1" pos="0.15 0 0.1" material="bin2_color"/>
+        </body>
+
+        <!-- Cubes -->
+        <body name="cube1" pos="0.3 0.4 0.6">
+            <freejoint/>
+            <geom name="cube1_geom" type="box" size="0.02 0.02 0.02" material="cube_color" mass="0.05"/>
+        </body>
+        <body name="cube2" pos="0.25 0.35 0.6">
+            <freejoint/>
+            <geom name="cube2_geom" type="box" size="0.02 0.02 0.02" material="cube_color" mass="0.05"/>
+        </body>
+        <body name="cube3" pos="0.35 0.45 0.6">
+            <freejoint/>
+            <geom name="cube3_geom" type="box" size="0.02 0.02 0.02" material="cube_color" mass="0.05"/>
+        </body>
+    </worldbody>
+
+    <!-- Actuators -->
+    <actuator>
+        <motor joint="shoulder_pan" name="shoulder_pan_motor" gear="100" ctrlrange="-2.0 2.0"/>
+        <motor joint="shoulder_lift" name="shoulder_lift_motor" gear="100" ctrlrange="-2.0 2.0"/>
+        <motor joint="elbow" name="elbow_motor" gear="100" ctrlrange="-2.0 2.0"/>
+        <motor joint="wrist_1_joint" name="wrist_1_motor" gear="100" ctrlrange="-2.0 2.0"/>
+        <motor joint="wrist_2_joint" name="wrist_2_motor" gear="100" ctrlrange="-2.0 2.0"/>
+        <motor joint="wrist_3_joint" name="wrist_3_motor" gear="100" ctrlrange="-2.0 2.0"/>
+    </actuator>
+
+    <!-- Sensors -->
+    <sensor>
+        <framepos objtype="site" objname="eef_site"/>
+        <touch name="eef_touch" site="eef_site"/>
+    </sensor>
+</mujoco>

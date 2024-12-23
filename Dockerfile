@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 ARG BUILD_PLATFORM
 FROM --platform=${BUILD_PLATFORM} nvidia/cuda:12.1.1-cudnn8-devel-ubuntu20.04
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install packages
@@ -31,6 +32,20 @@ RUN apt-get update && apt-get install -y \
     vim \
     nano \
     htop \
+    # Additional dependencies for MuJoCo
+    libosmesa6-dev \
+    libglew-dev \
+    libgl1-mesa-dev \
+    libgl1-mesa-glx \
+    libglfw3 \
+    libglfw3-dev \
+    libglu1-mesa \
+    libglu1-mesa-dev \
+    libgl1-mesa-dri \
+    x11-apps \
+    mesa-utils \
+    xvfb \
+    xserver-xorg-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install cuda dependencies
@@ -85,5 +100,12 @@ USER ${USERNAME}
 # Set up Python path
 ENV PATH="/home/${USERNAME}/.local/bin:${PATH}"
 ENV DEBIAN_FRONTEND=
+
+# Add environment variables for X11 forwarding
+ENV DISPLAY=:0
+ENV QT_X11_NO_MITSHM=1
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=all
+
 WORKDIR /workspace
 CMD ["/bin/bash"]
