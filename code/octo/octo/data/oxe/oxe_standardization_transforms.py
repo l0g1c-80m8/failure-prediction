@@ -21,6 +21,7 @@ from octo.data.utils.data_utils import (
     invert_gripper_actions,
     rel2abs_gripper_actions,
     relabel_actions,
+    zeyu_relabel_actions,
 )
 
 
@@ -29,8 +30,8 @@ def bridge_dataset_transform(trajectory: Dict[str, Any]) -> Dict[str, Any]:
     # can find at https://rail.eecs.berkeley.edu/datasets/bridge_release/data/tfds/
     trajectory["action"] = tf.concat(
         [
-            trajectory["action"][:, :6],
-            binarize_gripper_actions(trajectory["action"][:, -1])[:, None],
+            trajectory["action"][:, :6], # Selects the first six components of the action (e.g., spatial movement, rotation).
+            binarize_gripper_actions(trajectory["action"][:, -1])[:, None], # Converts the gripper's action (e.g., opening/closing) into a binary representation, ensuring consistency for training.
         ],
         axis=1,
     )
@@ -38,6 +39,27 @@ def bridge_dataset_transform(trajectory: Dict[str, Any]) -> Dict[str, Any]:
     trajectory["observation"]["proprio"] = trajectory["observation"]["state"]
     return trajectory
 
+def zeyu_dataset_transform(trajectory: Dict[str, Any]) -> Dict[str, Any]:
+    # NOTE: this is not actually the official OXE copy of bridge, it is our own more up-to-date copy that you
+    # can find at https://rail.eecs.berkeley.edu/datasets/bridge_release/data/tfds/
+    # print(f"Initial keys in trajectory！!！!！!！!！!！!！!！: {trajectory.keys()}")  # dict_keys(['discount', 'is_terminal', 'is_last', 'language_instruction', 'language_embedding', 'reward', 'observation', 'action', 'is_first', 'traj_metadata', '_len', '_traj_index', '_frame_index'])
+    # print(f"Shape of trajectory['action']！!！!！!！!！!！!！!！: {trajectory['action'].shape}")  # (None, 1)
+    # print(f"Shape of trajectory['observation']['state']！!！!！!！!！!！!！!！: {trajectory['observation']['state'].shape}")  # (None, 9)
+
+    trajectory["action"] = tf.concat(
+        [
+            trajectory["action"][:, :1],
+            # binarize_gripper_actions(trajectory["action"][:, -1])[:, None],
+        ],
+        axis=1,
+    )
+    # print(f"Shape of trajectory['action'] after binarization！!！!！!！!！!！!！!！: {trajectory['action'].shape}") # (None, 1)
+
+    # Nonesense, because our state have no physical relationship with the action
+    # trajectory = zeyu_relabel_actions(trajectory)
+    trajectory["observation"]["proprio"] = trajectory["observation"]["state"]  # 
+    # print(f"Shape of trajectory['observation']['proprio']！!！!！!！!！!！!！!！: {trajectory['observation']['proprio'].shape}")
+    return trajectory
 
 def rt1_dataset_transform(trajectory: Dict[str, Any]) -> Dict[str, Any]:
     # make gripper action absolute action, +1 = open, 0 = close
@@ -969,6 +991,7 @@ def mujoco_manip_dataset_transform(trajectory: Dict[str, Any]) -> Dict[str, Any]
 
 
 OXE_STANDARDIZATION_TRANSFORMS = {
+    "zeyu_example_dataset": zeyu_dataset_transform,
     "bridge_dataset": bridge_dataset_transform,
     "fractal20220817_data": rt1_dataset_transform,
     "kuka": kuka_dataset_transform,

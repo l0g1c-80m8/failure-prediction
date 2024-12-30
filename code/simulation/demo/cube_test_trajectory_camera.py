@@ -15,8 +15,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-N_TRAIN_EPISODES = 2
-N_VAL_EPISODES = 10
+N_TRAIN_EPISODES = 20
+N_VAL_EPISODES = 20
 EPISODE_LENGTH = 400  # Number of points in trajectory
 
 # Thresholds for action calculation
@@ -494,7 +494,7 @@ class Projectile(MuJoCoBase):
                 'image': top_camera_frame,
                 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
                 'state': np.asarray(state_padded, dtype=np.float32),  # Save the padded state
-                'action': action_value,  # Ensure action is a tensor of shape (1,)
+                'action': np.asarray([action_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
                 'language_instruction': 'dummy instruction',
                     })
             
@@ -504,12 +504,12 @@ class Projectile(MuJoCoBase):
             #     print("step_num", step_num, "action_value", action_value)
             #     # Ensure action is stored as a (1,) tensor, not as a scalar
             #     self.episode[step_num]["action"] = np.asarray([action_value], dtype=np.float32)  # Ensure action is a tensor of shape (1,)
-            # if dataset == "train":
-            #     print("Generating train examples...")
-            #     np.save(f'data/train/episode_{episode_num}.npy', self.episode)
-            # elif dataset == "val":
-            #     print("Generating val examples...")
-            #     np.save(f'data/val/episode_{episode_num}.npy', self.episode)
+            if dataset == "train":
+                print("Generating train examples...")
+                np.save(f'data/train/episode_{episode_num}.npy', self.episode)
+            elif dataset == "val":
+                print("Generating val examples...")
+                np.save(f'data/val/episode_{episode_num}.npy', self.episode)
 
         # Plot after simulation
 

@@ -382,6 +382,7 @@ def make_dataset_from_rlds(
     builder = tfds.builder(name, data_dir=data_dir)
 
     # load or compute dataset statistics
+    # print("dataset.py！!！!！!！!！!！!！!！isinstance(dataset_statistics, str)", isinstance(dataset_statistics, str))  # False
     if isinstance(dataset_statistics, str):
         with tf.io.gfile.GFile(dataset_statistics, "r") as f:
             dataset_statistics = json.load(f)
