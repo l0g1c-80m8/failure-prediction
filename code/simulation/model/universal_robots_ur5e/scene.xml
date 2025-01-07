@@ -70,6 +70,7 @@
             <geom name="bin1_side1" type="box" size="0.15 0.01 0.1" pos="0 0.15 0.1" material="bin1_color"/>
             <geom name="bin1_side2" type="box" size="0.15 0.01 0.1" pos="0 -0.15 0.1" material="bin1_color"/>
             <geom name="bin1_side3" type="box" size="0.01 0.15 0.1" pos="0.15 0 0.1" material="bin1_color"/>
+            <!-- <geom name="bin1_side4" type="box" size="0.01 0.15 0.1" pos="-0.15 0 0.1" material="bin1_color"/> -->
         </body>
 
         <!-- Bin 2 -->
@@ -78,7 +79,8 @@
                 mass="1"/>
             <geom name="bin2_side1" type="box" size="0.15 0.01 0.1" pos="0 0.15 0.1" material="bin2_color"/>
             <geom name="bin2_side2" type="box" size="0.15 0.01 0.1" pos="0 -0.15 0.1" material="bin2_color"/>
-            <geom name="bin2_side3" type="box" size="0.01 0.15 0.1" pos="0.15 0 0.1" material="bin2_color"/>
+            <!-- <geom name="bin2_side3" type="box" size="0.01 0.15 0.1" pos="0.15 0 0.1" material="bin2_color"/> -->
+            <geom name="bin2_side4" type="box" size="0.01 0.15 0.1" pos="-0.15 0 0.1" material="bin2_color"/>
         </body>
 
         <!-- Cubes -->
