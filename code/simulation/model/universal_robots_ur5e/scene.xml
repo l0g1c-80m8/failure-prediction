@@ -143,7 +143,7 @@
 
 
         <!-- Bin 1 -->
-        <body name="bin1" pos="0.3 0.4 0.5">
+        <body name="bin1" pos="0.6 0.4 0.5">
             <geom name="bin1_bottom" type="box" size="0.15 0.15 0.01" material="bin1_color"
                 mass="1"/>
             <geom name="bin1_side1" type="box" size="0.15 0.01 0.1" pos="0 0.15 0.1" material="bin1_color"/>
@@ -153,7 +153,7 @@
         </body>
 
         <!-- Bin 2 -->
-        <body name="bin2" pos="-0.3 0.4 0.5">
+        <body name="bin2" pos="-0.6 0.4 0.5">
             <geom name="bin2_bottom" type="box" size="0.15 0.15 0.01" material="bin2_color"
                 mass="1"/>
             <geom name="bin2_side1" type="box" size="0.15 0.01 0.1" pos="0 0.15 0.1" material="bin2_color"/>
@@ -163,15 +163,15 @@
         </body>
 
         <!-- Cubes -->
-        <body name="cube1" pos="0.3 0.4 0.6">
+        <body name="cube1" pos="0.6 0.4 0.6">
             <freejoint/>
             <geom name="cube1_geom" type="box" size="0.02 0.02 0.02" material="cube_color" mass="0.05"/>
         </body>
-        <body name="cube2" pos="0.25 0.35 0.6">
+        <body name="cube2" pos="0.55 0.35 0.6">
             <freejoint/>
             <geom name="cube2_geom" type="box" size="0.02 0.02 0.02" material="cube_color" mass="0.05"/>
         </body>
-        <body name="cube3" pos="0.35 0.45 0.6">
+        <body name="cube3" pos="0.65 0.45 0.6">
             <freejoint/>
             <geom name="cube3_geom" type="box" size="0.02 0.02 0.02" material="cube_color" mass="0.05"/>
         </body>
