@@ -109,12 +109,16 @@ def get_dataset_statistics(
         path = local_path
 
     # check if cache file exists and load
+    # print("data_utils.py!!!!!!!!!!!!!!!tf.io.gfile.exists(path)", tf.io.gfile.exists(path))  # True
+    # print("data_utils.py!!!!!!!!!!!!!!!path", path)  # True  # tests/debug_dataset/zeyu_example_dataset/1.0.0/dataset_statistics_044b1d15e3350e20a0244b2d8b23956cdf1e1431908ed5cd1e11f1cb3b2680fa.json
+    # print("data_utils.py!!!!!!!!!!!!!!!force_recompute", force_recompute)  # False
     if tf.io.gfile.exists(path) and not force_recompute:
         logging.info(f"Loading existing dataset statistics from {path}.")
         with tf.io.gfile.GFile(path, "r") as f:
             metadata = json.load(f)
         return metadata
 
+    # print("data_utils.py!!!!!!!!!!!!!!!os.path.exists(local_path)", os.path.exists(local_path))
     if os.path.exists(local_path) and not force_recompute:
         logging.info(f"Loading existing dataset statistics from {local_path}.")
         with open(local_path, "r") as f:
@@ -153,7 +157,11 @@ def get_dataset_statistics(
             proprios.append(traj["proprio"])
         num_transitions += traj["action"].shape[0]
         num_trajectories += 1
+    my_actions = np.array(actions)
+    # print("data_utils.py!!!!!!!!!!!!!!!actions before concatenate", my_actions.shape)  # (40, 399, 10)
     actions = np.concatenate(actions)
+    my_actions = np.array(actions)
+    # print("data_utils.py!!!!!!!!!!!!!!!actions after concatenate", my_actions.shape)  # (15960, 10)
     metadata = {
         "action": {
             "mean": actions.mean(0).tolist(),
@@ -398,12 +406,17 @@ def relabel_actions(traj: Dict[str, Any]) -> Dict[str, Any]:
     trajectory (since we don't have a next state to compute the action.)
     """
     # relabel the first 6 action dims (xyz position, xyz rotation) using the reached proprio
+    # Computes the difference in the first six dimensions of the robot's state between consecutive timesteps.
     movement_actions = (
         traj["observation"]["state"][1:, :6] - traj["observation"]["state"][:-1, :6]
     )
+    # print(f"Shape of movement_actions！!！!！!！!！!！!！!！: {movement_actions.shape}")  # (None, 6)
 
-    # discard the last timestep of the trajectory
+    # discard the last timestep of the trajectory, because no next state is available for computing a delta.
     traj_truncated = tf.nest.map_structure(lambda x: x[:-1], traj)
+    # print(f"Keys in traj_truncated！!！!！!！!！!！!！!！: {traj_truncated.keys()}")  # dict_keys(['action', 'language_instruction', 'discount', 'is_first', 'is_terminal', 'observation', 'reward', 'is_last', 'language_embedding', 'traj_metadata', '_len', '_traj_index', '_frame_index'])
+    # print(f"Shape of traj_truncated['observation']['state']！!！!！!！!！!！!！!！: {traj_truncated['observation']['state'].shape}")  # (None, 7)
+    # print(f"Shape of traj_truncated['action']！!！!！!！!！!！!！!！: {traj_truncated['action'].shape}")  # (None, 7)
 
     # recombine to get full actions
     traj_truncated["action"] = tf.concat(
@@ -411,8 +424,33 @@ def relabel_actions(traj: Dict[str, Any]) -> Dict[str, Any]:
         axis=1,
     )
 
+    # print(f"Shape of traj_truncated['action']！!！!！!！!！!！!！!！: {traj_truncated['action'].shape}")  # (None, 7)
     return traj_truncated
 
+def zeyu_relabel_actions(traj: Dict[str, Any]) -> Dict[str, Any]:
+    """Relabels the actions to use the reached proprio instead. Discards the last timestep of the
+    trajectory (since we don't have a next state to compute the action.)
+    """
+    # Computes the difference in the robot's state between consecutive timesteps. These represent the position and orientation changes (e.g., XYZ position and rotation). 
+    movement_actions = (
+        traj["observation"]["state"][1:, :9] - traj["observation"]["state"][:-1, :9]
+    )
+    # print(f"Shape of movement_actions！!！!！!！!！!！!！!！: {movement_actions.shape}")  # (None, 9)
+
+    # discard the last timestep of the trajectory, because no next state is available for computing a delta.
+    traj_truncated = tf.nest.map_structure(lambda x: x[:-1], traj)
+    # print(f"Keys in traj_truncated！!！!！!！!！!！!！!！: {traj_truncated.keys()}")  # dict_keys(['reward', 'observation', 'action', 'language_embedding', 'language_instruction', 'is_last', 'is_terminal', 'discount', 'is_first', 'traj_metadata', '_len', '_traj_index', '_frame_index'])
+    # print(f"Shape of traj_truncated['observation']['state']！!！!！!！!！!！!！!！: {traj_truncated['observation']['state'].shape}")  # (None, 9)
+    # print(f"Shape of traj_truncated['action']！!！!！!！!！!！!！!！: {traj_truncated['action'].shape}")  # (None, 1)
+
+    # recombine to get full actions
+    traj_truncated["action"] = tf.concat(
+        [movement_actions, traj["action"][:-1, -1:]],
+        axis=1,
+    )
+
+    # print(f"Shape of traj_truncated['action']！!！!！!！!！!！!！!！: {traj_truncated['action'].shape}")  # (None, 10)
+    return traj_truncated
 
 def allocate_threads(n: Optional[int], weights: np.ndarray):
     """Allocates an integer number of threads across datasets based on weights. The final array sums to `n`,

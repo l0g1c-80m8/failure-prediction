@@ -68,6 +68,46 @@ BASE_METRIC_KEYS = {
     # "grip_timestep_early": ("timestep_to_grip", ("is_first_grip",)),
 }
 
+ZEYU_BASE_METRIC_KEYS = {
+    "mse": ("mse", tuple()),  # What is the MSE
+    ####
+    #
+    # XYZ delta metrics
+    #
+    ####
+    # Angle between true and predicted XYZ delta when moving
+    # "xyz_angle": (
+    #     "xyz_angle",
+    #     ("moving",),
+    # ),
+    # Did we predict the XYZ delta within 0.5 radians when moving
+    # "xyz_angle_accuracy": (
+    #     "xyz_angle_accuracy",
+    #     ("moving",),
+    # ),
+    # Did we predict the XYZ delta within 0.5 radians and 50% norm when moving
+    # "xyz_accuracy": (
+    #     "xyz_accuracy",
+    #     ("moving",),
+    # ),
+    ####
+    #
+    # Gripper metrics
+    #
+    ####
+    # What % of timesteps (near the actual gripper changes) is the predicted gripper correct?
+    "gripping_accuracy": ("gripper_correct", ("gripper_changing",)),
+    # Gripper prediction accuracy
+    "gripping_accuracy_full": ("gripper_correct", tuple()),
+    # The metrics below require propio to compute, uncomment if dataloader returns proprio
+    # What is the relative height (in m) that we try to grip at, compared to the data?
+    # "grip_height": ("height_to_grip", ("is_first_grip",)),
+    # "early_gripped": ("early_gripped", ("is_first_grip",)),
+    # What percentage of grips do we attempt early (early = higher than the height gripped at in the data)
+    # "early_gripped_height_aware": ("early_gripped_height_aware", ("is_first_grip",)),
+    # What timestep do we attempt to grip at (relative to the first timestep we should at)
+    # "grip_timestep_early": ("timestep_to_grip", ("is_first_grip",)),
+}
 
 BASE_SUB_CONDITIONS = dict()
 
@@ -154,7 +194,9 @@ class Visualizer:
                 v: names of conditions to mask by
         """
 
-        metric_keys = metric_keys or self.metric_keys or BASE_METRIC_KEYS
+        # metric_keys = metric_keys or self.metric_keys or BASE_METRIC_KEYS
+        # print("visualization_lib.py!!!!!!!!!!!!!!!!!!!!!self.metric_keys", self.metric_keys)  # none
+        metric_keys = metric_keys or self.metric_keys or ZEYU_BASE_METRIC_KEYS
         sub_conditions = sub_conditions or self.sub_conditions or BASE_SUB_CONDITIONS
 
         all_info = {
@@ -164,6 +206,8 @@ class Visualizer:
         }
 
         def masked_mean(quantity_key, *mask_keys):
+            # print("visualization_lib.py!!!!!!!!!!!!!!!!!!!!!quantity_key", quantity_key)  # mse, xyz_angle
+            # print("visualization_lib.py!!!!!!!!!!!!!!!!!!!!!mask_keys", mask_keys)  # (), ('moving',)
             mask = np.broadcast_to(
                 np.product([all_info[k] for k in mask_keys], axis=0),
                 all_info[quantity_key].shape,
@@ -452,7 +496,7 @@ def add_manipulation_metrics(info):
         return {
             **_gripper_info(**kwargs),
             **_mse_info(**kwargs),
-            **_xyz_info(**kwargs),
+            # **_xyz_info(**kwargs),  # zeyu comment
             **_condition_info(**kwargs),
             **(_gripping_early_metrics(**kwargs) if "proprio" in kwargs else {}),
         }

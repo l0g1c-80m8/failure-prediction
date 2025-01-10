@@ -272,6 +272,7 @@ def main(_):
             batch["observation"]["timestep_pad_mask"],
             train=train,
         )
+        # print("fintune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!!Transformer Embeddings:", transformer_embeddings)  # Debug Output
         action_loss, action_metrics = bound_module.heads["action"].loss(
             transformer_embeddings,  # action head knows to pull out the "action" readout_key
             batch["action"],
@@ -279,6 +280,14 @@ def main(_):
             batch["action_pad_mask"],
             train=train,
         )
+        # print("fintune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!!Action Loss:", action_loss)  # Debug Output
+        # print("fintune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!!batch[\"action\"]:", batch["action"])  # Debug Output (float32[64,1,4,7]), where 64 is batch size
+        # Extract the values from the traced action metrics
+        concrete_action_loss = jax.device_get(action_metrics["loss"])
+        concrete_action_mse = jax.device_get(action_metrics["mse"])
+
+        # print("fintune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!!Action Loss (Concrete):", concrete_action_loss)
+        # print("fintune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!!Action MSE (Concrete):", concrete_action_mse)
         return action_loss, action_metrics
 
     # Data parallelism
@@ -377,7 +386,9 @@ def main(_):
             batch = next(train_data_iter)
 
         with timer("train"):
+            # print("finetune.py!!!!!!!!!!!!!!!!!!!!!train_state before", train_state)
             train_state, update_info = train_step(train_state, batch)
+            # print("finetune.py!!!!!!!!!!!!!!!!!!!!!train_state after", train_state)
 
         timer.tock("total")
 
@@ -391,10 +402,12 @@ def main(_):
             logging.info("Evaluating...")
 
             with timer("val"):
+                # print("finetune.py!!!!!!!!!!!!!!!!!!!!!train_state val", train_state)
                 val_metrics = val_callback(train_state, i + 1)
                 wandb_log(val_metrics, step=i)
 
             with timer("visualize"):
+                # print("finetune.py!!!!!!!!!!!!!!!!!!!!!train_state visualize", train_state)
                 viz_metrics = viz_callback(train_state, i + 1)
                 wandb_log(viz_metrics, step=i)
 

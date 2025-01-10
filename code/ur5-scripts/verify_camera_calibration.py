@@ -181,5 +181,8 @@ def move_robot_to_last_picked_point(camera_point):
 
 if __name__ == '__main__':
     rgb, depth, intrinsics, depth_scale = capture_rgb_and_depth_from_realsense()
-    last_picked_point = visualize_point_cloud(rgb, depth, intrinsics, depth_scale)
-    move_robot_to_last_picked_point(last_picked_point)
+    cv2.imshow("rgb", rgb)
+    cv2.waitKey(0)
+
+    # last_picked_point = visualize_point_cloud(rgb, depth, intrinsics, depth_scale)
+    # move_robot_to_last_picked_point(last_picked_point)
