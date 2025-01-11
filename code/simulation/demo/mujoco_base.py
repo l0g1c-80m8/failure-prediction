@@ -30,6 +30,12 @@ class MuJoCoBase():
         self.context = mj.MjrContext(
             self.model, mj.mjtFontScale.mjFONTSCALE_150.value)
 
+        # try:
+        #     self.context = mj.MjrContext(egl_device_id=-1)  # Use EGL context
+        #     print("MuJoCo EGL context initialized successfully.")
+        # except mj.FatalError as e:
+        #     print("MuJoCo FatalError:", e)
+
         # install GLFW mouse and keyboard callbacks
         glfw.set_key_callback(self.window, self.keyboard)
         glfw.set_cursor_pos_callback(self.window, self.mouse_move)

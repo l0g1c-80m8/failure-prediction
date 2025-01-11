@@ -220,6 +220,13 @@ def finetune(cfg: FinetuneConfig) -> None:
         shuffle_buffer_size=cfg.shuffle_buffer_size,
         image_aug=cfg.image_aug,
     )
+    
+    print("Dataset length:", vla_dataset.dataset_length)
+    
+    for i,x in enumerate(vla_dataset.dataset):
+        print(x)
+        if i == 0:
+            break
 
     # [Important] Save Dataset Statistics =>> used to de-normalize actions for inference!
     if distributed_state.is_main_process:
@@ -245,6 +252,9 @@ def finetune(cfg: FinetuneConfig) -> None:
     recent_losses = deque(maxlen=cfg.grad_accumulation_steps)
     recent_action_accuracies = deque(maxlen=cfg.grad_accumulation_steps)
     recent_l1_losses = deque(maxlen=cfg.grad_accumulation_steps)
+    
+    
+
 
     # Train!
     with tqdm.tqdm(total=cfg.max_steps, leave=False) as progress:

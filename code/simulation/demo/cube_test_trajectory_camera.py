@@ -15,9 +15,10 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-N_TRAIN_EPISODES = 2
-N_VAL_EPISODES = 10
-EPISODE_LENGTH = 400  # Number of points in trajectory
+
+N_TRAIN_EPISODES = 1
+N_VAL_EPISODES = 1
+EPISODE_LENGTH = 300  # Number of points in trajectory
 
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_HIGH = 0.2
@@ -210,6 +211,7 @@ class Projectile(MuJoCoBase):
         # print("self.high_threshold_step", self.high_threshold_step)
         # print("self.intervene_step", self.intervene_step)
         # Exponential interpolation for action between intervention and high threshold
+        # print("self.intervene_step = ", self.intervene_step, "\t", "self.high_threshold_step = ", self.high_threshold_step)
         if current_step > self.intervene_step and self.high_threshold_step > self.intervene_step:
             # Normalize the current step between intervene and high threshold steps
             normalized_step = (current_step - self.intervene_step) / (self.high_threshold_step - self.intervene_step)
@@ -217,6 +219,8 @@ class Projectile(MuJoCoBase):
             # Exponential growth from 0 to 1
             action_value = 1 - np.exp(-5 * normalized_step)
             return action_value
+        
+        return 0
 
     def randomize_camera_position(self):
         """
@@ -326,8 +330,8 @@ class Projectile(MuJoCoBase):
             raise ValueError(f"Camera '{camera_name}' not found in model")
         
         # Get image dimensions
-        width = 640  # Set to be divisible by 16
-        height = 640  # Set to be divisible by 16
+        width = 224 #640  # Set to be divisible by 16
+        height = 224 #640  # Set to be divisible by 16
         
         # Initialize image array
         img = np.zeros((height, width, 3), dtype=np.uint8)
@@ -476,7 +480,7 @@ class Projectile(MuJoCoBase):
 
                 self.episode.append({
                 'image': top_camera_frame,
-                'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
+                # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
                 'state': np.asarray(state_padded, dtype=np.float32),  # Save the padded state
                 # 'action': action_value,  # Ensure action is a tensor of shape (1,)
                 'language_instruction': 'dummy instruction',
@@ -488,12 +492,12 @@ class Projectile(MuJoCoBase):
                 print("step_num", step_num, "action_value", action_value)
                 # Ensure action is stored as a (1,) tensor, not as a scalar
                 self.episode[step_num]["action"] = np.asarray([action_value], dtype=np.float32)  # Ensure action is a tensor of shape (1,)
-            # if dataset == "train":
-            #     print("Generating train examples...")
-            #     np.save(f'data/train/episode_{episode_num}.npy', self.episode)
-            # elif dataset == "val":
-            #     print("Generating val examples...")
-            #     np.save(f'data/val/episode_{episode_num}.npy', self.episode)
+            if dataset == "train":
+                print("Generating train examples...")
+                np.save(f'data/train/episode_{episode_num}.npy', self.episode)
+            elif dataset == "val":
+                print("Generating val examples...")
+                np.save(f'data/val/episode_{episode_num}.npy', self.episode)
 
         # Plot after simulation
 
@@ -571,7 +575,7 @@ class Projectile(MuJoCoBase):
 
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene.xml"
-    traj_path = "/home/zeyu/PHD_LAB/Material_handling_2024/zeyu-failure-prediction/code/ur5-scripts/traj.txt"  # Adjust path as needed
+    traj_path = "../ur5-scripts/traj.txt"  # Adjust path as needed
 
     os.makedirs('data/train', exist_ok=True)
     os.makedirs('data/val', exist_ok=True)
