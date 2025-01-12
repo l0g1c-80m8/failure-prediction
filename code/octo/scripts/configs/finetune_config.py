@@ -23,11 +23,11 @@ def get_config(config_string="full,multimodal"):
         "language_key": "language_instruction",
         "action_proprio_normalization_type": "normal",
         # We want to avoid normalizing the gripper
-        "action_normalization_mask": [True, True, True, True, True, True, False],
+        "action_normalization_mask": [False],
         # standardize_fn is dynamically loaded from a file
         # for example: "experiments/kevin/custom_standardization_transforms.py:aloha_dataset_transform"
         "standardize_fn": ModuleSpec.create(
-            "octo.data.oxe.oxe_standardization_transforms:bridge_dataset_transform",
+            "octo.data.oxe.oxe_standardization_transforms:zeyu_dataset_transform",
         ),
         # If the default data loading speed is too slow, try these:
         # "num_parallel_reads": 8,  # for reading from disk / GCS
@@ -87,7 +87,7 @@ def get_config(config_string="full,multimodal"):
             num_val_batches=16,
         ),
         viz_kwargs=dict(
-            eval_batch_size=128,
+            eval_batch_size=64,
             trajs_for_metrics=100,
             trajs_for_viz=8,
             samples_per_state=8,
@@ -108,7 +108,7 @@ def get_config(config_string="full,multimodal"):
 
     traj_transform_kwargs = dict(
         window_size=window_size,
-        action_horizon=4,
+        action_horizon=28, # Length of action sequence to execute/ensemble
         goal_relabeling_strategy=goal_relabeling_strategy,
         task_augment_strategy="delete_task_conditioning",
         task_augment_kwargs=dict(

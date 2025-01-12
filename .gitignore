@@ -169,3 +169,6 @@ MUJOCO_LOG.TXT
 
 *.mp4
 
+
+# ignore vscode files
+.vscode/settings.json
