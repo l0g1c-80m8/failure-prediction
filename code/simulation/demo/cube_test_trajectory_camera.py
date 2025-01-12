@@ -19,9 +19,6 @@ import matplotlib.pyplot as plt
 N_TRAIN_EPISODES = 1
 N_VAL_EPISODES = 1
 EPISODE_LENGTH = 300  # Number of points in trajectory
-N_TRAIN_EPISODES = 20
-N_VAL_EPISODES = 20
-EPISODE_LENGTH = 400  # Number of points in trajectory
 
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_HIGH = 0.12
@@ -525,18 +522,6 @@ class Projectile(MuJoCoBase):
                 'language_instruction': 'dummy instruction',
                     })
             
-            for step_num in range(EPISODE_LENGTH):
-                displacement = self.episode[step_num]["state"][0]
-                action_value = self.calculate_action(displacement, step_num)
-                print("step_num", step_num, "action_value", action_value)
-                # Ensure action is stored as a (1,) tensor, not as a scalar
-                self.episode[step_num]["action"] = np.asarray([action_value], dtype=np.float32)  # Ensure action is a tensor of shape (1,)
-            if dataset == "train":
-                print("Generating train examples...")
-                np.save(f'data/train/episode_{episode_num}.npy', self.episode)
-            elif dataset == "val":
-                print("Generating val examples...")
-                np.save(f'data/val/episode_{episode_num}.npy', self.episode)
             # for step_num in range(EPISODE_LENGTH):
             #     displacement = self.episode[step_num]["state"][0]
             #     action_value = self.calculate_action(displacement, step_num)
@@ -634,7 +619,6 @@ class Projectile(MuJoCoBase):
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene.xml"
     traj_path = "../ur5-scripts/traj.txt"  # Adjust path as needed
-    traj_path = "/home/zeyu/PHD_LAB/zeyu-failure-prediction/code/ur5-scripts/traj.txt"  # Adjust path as needed
 
     os.makedirs('data/train', exist_ok=True)
     os.makedirs('data/val', exist_ok=True)
