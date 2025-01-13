@@ -203,29 +203,6 @@ class Projectile(MuJoCoBase):
 
 
     # Function to calculate action value based on displacement, linear speed, and angular speed
-    def calculate_action(self, displacement, current_step):
-        # Set action to 0 if no human intervention
-        if current_step <= self.intervene_step:
-            return 0
-
-        # Set action to 1 if displacement exceeds the high threshold
-        if displacement >= DISPLACEMENT_THRESHOLD_HIGH:
-            return 1
-
-        # print("current_step > self.intervene_step", current_step > self.intervene_step)
-        # print("self.high_threshold_step", self.high_threshold_step)
-        # print("self.intervene_step", self.intervene_step)
-        # Exponential interpolation for action between intervention and high threshold
-        # print("self.intervene_step = ", self.intervene_step, "\t", "self.high_threshold_step = ", self.high_threshold_step)
-        if current_step > self.intervene_step and self.high_threshold_step > self.intervene_step:
-            # Normalize the current step between intervene and high threshold steps
-            normalized_step = (current_step - self.intervene_step) / (self.high_threshold_step - self.intervene_step)
-            # print("normalized_step", normalized_step)
-            # Exponential growth from 0 to 1
-            action_value = 1 - np.exp(-5 * normalized_step)
-            return action_value
-        
-        return 0
     def calculate_action(self, displacement, linear_speed, angular_speed):
         # Check if all values are in the lower range
         if np.linalg.norm(displacement) < DISPLACEMENT_THRESHOLD_LOW and \

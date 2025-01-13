@@ -167,7 +167,13 @@ cython_debug/
 # ignore MuJoCo log file
 MUJOCO_LOG.TXT
 
+# intermediate and resultant media files during data-collection
 *.mp4
+
+code/simulation/data
+code/simulation/*/*.png
+code/simulation/*/*.npy
+code/simulation/*/*.txt
 
 
 # ignore vscode files
