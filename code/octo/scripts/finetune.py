@@ -281,7 +281,9 @@ def main(_):
             train=train,
         )
         # print("fintune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!!Action Loss:", action_loss)  # Debug Output
-        # print("fintune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!!batch[\"action\"]:", batch["action"])  # Debug Output (float32[64,1,4,7]), where 64 is batch size
+        
+        # Below: Traced<ShapedArray(float32[64,1,28,1])>with<DynamicJaxprTrace(level=1/0)>, where 64 is batch size, 28 is action horizon, 1 is action dimenstion
+        # print("fintune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!!batch[\"action\"]:", batch["action"]) 
         # Extract the values from the traced action metrics
         concrete_action_loss = jax.device_get(action_metrics["loss"])
         concrete_action_mse = jax.device_get(action_metrics["mse"])

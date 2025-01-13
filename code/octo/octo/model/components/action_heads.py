@@ -138,7 +138,9 @@ class ContinuousActionHead(nn.Module, ActionHead):
     readout_key: str
     use_map: bool = False
     action_horizon: int = 1
-    action_dim: int = 7
+    # action_dim: int = 7
+    # ZEYU
+    action_dim: int = 1
     max_action: float = 5.0
     loss_type: str = "mse"
 
@@ -154,6 +156,8 @@ class ContinuousActionHead(nn.Module, ActionHead):
         Returns:
             mean: Predicted actions w/ shape (batch_size, window_size, action_horizon, action_dim)
         """
+        # ZEYU
+        print("action_heads.py!!!!!!!!!!!!!!!!!!!!!! using ContinuousActionHead")
         token_group = transformer_outputs[self.readout_key]
         assert token_group.tokens.ndim == 4, (
             f"Expected token_group.tokens to have shape (batch_size, window_size, num_tokens, embedding_size), "
@@ -241,7 +245,9 @@ class DiscreteActionHead(nn.Module, ActionHead):
     use_map: bool = False
     token_per: str = "action_dim_and_action_horizon"
     action_horizon: int = 1
-    action_dim: int = 7
+    # action_dim: int = 7
+    # ZEYU
+    action_dim: int = 1
     vocab_size: int = 256
     normalization_type: str = "uniform"
 
@@ -276,6 +282,8 @@ class DiscreteActionHead(nn.Module, ActionHead):
         Returns:
             logits: array w/ shape (batch_size, window_size, action_horizon, action_dim, vocab_size)
         """
+        # ZEYU
+        print("action_heads.py!!!!!!!!!!!!!!!!!!!!!! using DiscreteActionHead")
         token_group = transformer_outputs[self.readout_key]
         assert token_group.tokens.ndim == 4, (
             f"Expected token_group.tokens to have shape (batch_size, window_size, num_tokens, embedding_size), "
@@ -368,18 +376,24 @@ class DiscreteActionHead(nn.Module, ActionHead):
 
 
 class MSEActionHead(ContinuousActionHead):
+    # ZEYU
+    print("action_heads.py!!!!!!!!!!!!!!!!!!!!!! using MSEActionHead")
     max_action: float = 5.0
     loss_type: str = "mse"
     use_map: bool = True
 
 
 class L1ActionHead(ContinuousActionHead):
+    # ZEYU
+    print("action_heads.py!!!!!!!!!!!!!!!!!!!!!! using L1ActionHead")
     max_action: float = 5.0
     loss_type: str = "l1"
     use_map: bool = True
 
 
 class TokenPerDimActionHead(DiscreteActionHead):
+    # ZEYU
+    print("action_heads.py!!!!!!!!!!!!!!!!!!!!!! using TokenPerDimActionHead")
     token_per: str = "action_dim_and_action_horizon"
 
 
@@ -398,7 +412,9 @@ class DiffusionActionHead(nn.Module):
     readout_key: str
     use_map: bool = False
     action_horizon: int = 1
-    action_dim: int = 7
+    # action_dim: int = 7
+    # ZEYU
+    action_dim: int = 1
     max_action: float = 5.0
     loss_type: str = "mse"
 
@@ -414,6 +430,8 @@ class DiffusionActionHead(nn.Module):
     def setup(self):
         if self.use_map:
             self.map_head = MAPHead()
+        # ZEYU
+        print("action_heads.py!!!!!!!!!!!!!!!!!!!!!self.action_dim in setup()", self.action_dim)
 
         # create the diffusion model (score network)
         self.diffusion_model = create_diffusion_model(
@@ -438,6 +456,8 @@ class DiffusionActionHead(nn.Module):
         train: bool = True,
     ) -> jax.Array:
         """Performs a single forward pass through the diffusion model."""
+        # ZEYU
+        print("action_heads.py!!!!!!!!!!!!!!!!!!!!!! calling DiffusionActionHead")
         token_group = transformer_outputs[self.readout_key]
         assert token_group.tokens.ndim == 4, (
             f"Expected token_group.tokens to have shape (batch_size, window_size, num_tokens, embedding_size), "
@@ -484,6 +504,8 @@ class DiffusionActionHead(nn.Module):
             loss: float
             metrics: dict
         """
+        # ZEYU
+        print("action_heads.py!!!!!!!!!!!!!!!!!!!!!! calculating loss DiffusionActionHead")
         batch_size, window_size = timestep_pad_mask.shape
 
         # fold action_dim and action_horizon into one dimension
@@ -536,6 +558,8 @@ class DiffusionActionHead(nn.Module):
         **kwargs,
     ) -> jax.Array:
         """Convenience methods for predicting actions for the final timestep in the window."""
+        #   ZEYU
+        print("action_heads.py!!!!!!!!!!!!!!!!!!!!!! calling predict_action() DiffusionActionHead")
         if embodiment_action_dim is None:
             logging.warning(
                 "embodiment_action_dim is highly recommended for diffusion action head"
@@ -599,13 +623,19 @@ class DiffusionActionHead(nn.Module):
             (noise, rng),
             jnp.arange(self.diffusion_steps - 1, -1, -1),
         )
-
+        
+        # ZEYU
+        print("action_heads.py!!!!!!!!!!!!!!!!!!!!!self.action_dim", self.action_dim)  # 7
         actions = rearrange(
             actions_flat,
             "... (h a) -> ... h a",
             h=self.action_horizon,
             a=self.action_dim,
         )
+        # Print final action values
+        # ZEYU
+        print(f"Final predicted actions!!!!!!!!!!!!!!!!!!!!!: {actions[..., -1, :, :]}") # Traced<ShapedArray(float32[8,64,4,7])>with<DynamicJaxprTrace(level=1/0)>
+    
         # only get the last timestep in the window
         return actions[..., -1, :, :]
 
@@ -654,6 +684,8 @@ class UNetDDPMActionHead(nn.Module):
         train: bool = True,
     ) -> jax.Array:
         """Performs a single forward pass through the diffusion model."""
+        # ZEYU
+        print("action_heads.py!!!!!!!!!!!!!!!!!!!!!! using UNetDDPMActionHead")
         token_group = transformer_outputs[self.readout_key]
         assert token_group.tokens.ndim == 4, (
             f"Expected token_group.tokens to have shape (batch_size, window_size, num_tokens, embedding_size), "
