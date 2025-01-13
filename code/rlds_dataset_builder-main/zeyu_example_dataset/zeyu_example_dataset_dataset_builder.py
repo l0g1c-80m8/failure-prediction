@@ -26,17 +26,17 @@ class ZeyuExampleDataset(tfds.core.GeneratorBasedBuilder):
                 'steps': tfds.features.Dataset({
                     'observation': tfds.features.FeaturesDict({
                         'image': tfds.features.Image(
-                            shape=(640, 640, 3),
+                            shape=(224, 224, 3),
                             dtype=np.uint8,
                             encoding_format='png',
                             doc='Main camera RGB observation.',
                         ),
-                        'wrist_image': tfds.features.Image(
-                            shape=(64, 64, 3),
-                            dtype=np.uint8,
-                            encoding_format='png',
-                            doc='Wrist camera RGB observation.',
-                        ),
+                        # 'wrist_image': tfds.features.Image(
+                        #     shape=(64, 64, 3),
+                        #     dtype=np.uint8,
+                        #     encoding_format='png',
+                        #     doc='Wrist camera RGB observation.',
+                        # ),
                         'state': tfds.features.Tensor(
                             shape=(9,),
                             dtype=np.float32,
@@ -123,7 +123,7 @@ class ZeyuExampleDataset(tfds.core.GeneratorBasedBuilder):
                 episode.append({
                     'observation': {
                         'image': step['image'],
-                        'wrist_image': step['wrist_image'],
+                        # 'wrist_image': step['wrist_image'],
                         'state': step['state'],
                     },
                     'action': step['action'],

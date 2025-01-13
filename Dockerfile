@@ -33,6 +33,12 @@ RUN apt-get update && apt-get install -y \
     htop \
     && rm -rf /var/lib/apt/lists/*
 
+RUN apt update && apt install -y \
+    libgl1-mesa-glx libegl1 libgles2-mesa libosmesa6 libosmesa6-dev \
+    mesa-utils python3 python3-pip
+
+ENV MUJOCO_GL=egl
+
 # Install cuda dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     cuda-compiler-12-1 \

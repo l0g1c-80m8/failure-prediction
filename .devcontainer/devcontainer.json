@@ -11,7 +11,8 @@
       }
     },
     // enable graphics forwarding
-    "initializeCommand": "xhost +local:root",
+    //"initializeCommand": "xhost +local:root",
+    "initializeCommand": "[ ! -z \"${DISPLAY}\" ] && xhost +local:root || echo \"DISPLAY not set\"",
     "runArgs": [
       "--name=mujoco-dev-container",
       "--network=host",
