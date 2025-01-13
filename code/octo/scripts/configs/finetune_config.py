@@ -18,7 +18,7 @@ def get_config(config_string="full,multimodal"):
     FINETUNING_KWARGS = {
         "name": "zeyu_example_dataset",
         "data_dir": "./tests/debug_dataset",
-        "image_obs_keys": {"primary": "image", "wrist": None},
+        "image_obs_keys": {"primary": None, "wrist": None},
         "proprio_obs_key": "proprio",
         "language_key": "language_instruction",
         "action_proprio_normalization_type": "normal",
@@ -57,7 +57,7 @@ def get_config(config_string="full,multimodal"):
         shuffle_buffer_size=10000,
         num_steps=max_steps,
         log_interval=100,
-        eval_interval=5000,
+        eval_interval=5,
         save_interval=5000,
         save_dir=placeholder(str),
         seed=42,

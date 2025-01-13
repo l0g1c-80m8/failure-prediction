@@ -198,6 +198,7 @@ class OctoModel:
         Returns:
             actions: (*sample_shape, batch_size, action_horizon, action_dim)
         """
+        print("octo_model.py!!!!!!!!!!!!!!!!!!!! calling sample_action() OctoModel")
         if timestep_pad_mask is None:
             timestep_pad_mask = observations["timestep_pad_mask"]
 
@@ -207,6 +208,8 @@ class OctoModel:
         action_head: ActionHead = self.module.bind({"params": self.params}).heads[
             "action"
         ]
+        # print("octo_model.py!!!!!!!!!!!!!!!!!!!!!action_head.action_dim", action_head.action_dim)  # 7
+        # print("octo_model.py!!!!!!!!!!!!!!!!!!!!!len(unnormalization_statistics[\"mean\"]", len(unnormalization_statistics["mean"]))  # None
         action = action_head.predict_action(
             transformer_outputs,
             train=train,
