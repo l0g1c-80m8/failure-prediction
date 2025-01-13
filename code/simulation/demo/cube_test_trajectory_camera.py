@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 
 N_TRAIN_EPISODES = 1
 N_VAL_EPISODES = 1
-EPISODE_LENGTH = 300  # Number of points in trajectory
+EPISODE_LENGTH = 10  # Number of points in trajectory
 
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_HIGH = 0.12
