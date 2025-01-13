@@ -42,7 +42,6 @@ flags.DEFINE_bool(
     "Whether pre-trained transformer weights should be frozen.",
 )
 
-# ZEYU
 flags.DEFINE_bool("debug", False, "Debug config (no wandb logging)")
 
 def main(_):
@@ -54,7 +53,6 @@ def main(_):
     # prevent tensorflow from using GPU memory since it's only used for data loading
     tf.config.set_visible_devices([], "GPU")
 
-    # ZEYU
     # setup wandb for logging
     wandb.init(name="finetune_aloha", project="octo", mode="disabled" if FLAGS.debug else None)
 
@@ -69,9 +67,9 @@ def main(_):
     logging.info("Loading finetuning dataset...")
     dataset = make_single_dataset(
         dataset_kwargs=dict(
-            name="aloha_sim_cube_scripted_dataset",
+            name="zeyu_example_dataset",
             data_dir=FLAGS.data_dir,
-            image_obs_keys={"primary": "top"},
+            image_obs_keys={"primary": None},
             proprio_obs_key="state",
             language_key="language_instruction",
         ),
@@ -120,7 +118,7 @@ def main(_):
     config["model"]["heads"]["action"] = ModuleSpec.create(
         L1ActionHead,
         action_horizon=50,
-        action_dim=14,
+        action_dim=1,
         readout_key="readout_action",
     )
 
