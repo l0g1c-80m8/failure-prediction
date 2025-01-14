@@ -118,9 +118,10 @@
                   <geom material="linkgray" mesh="wrist3" class="visual"/>
                   <geom class="eef_collision" pos="0 0.08 0" quat="1 1 0 0" size="0.04 0.02"/>
                   <site name="attachment_site" pos="0 0.1 0" quat="-1 1 0 0"/>
-                  <body name="fixed_box" pos="0 0.25 0">
+                  <body name="fixed_box" pos="0 0.25 0" quat="0 0 0 1">
+                    <joint name="box_rotation" type="hinge" axis="0 1 0" limited="true" range="-0.1 0.1"/>
                     <geom name="panel" type="box" size="0.075 0.15 0.01" rgba="0.8 0.2 0.2 1"/> <!-- Box dimensions and color -->
-                    <inertial mass="0.5" pos="0 0 0" quat="0 0 0 1" diaginertia="0.001 0.001 0.001"/>
+                    <inertial mass="0.5" pos="0 0 0" diaginertia="0.001 0.001 0.001"/>
                   </body>
                 </body>
               </body>
@@ -149,10 +150,11 @@
     <general class="size1" name="wrist_1" joint="wrist_1_joint"/>
     <general class="size1" name="wrist_2" joint="wrist_2_joint"/>
     <general class="size1" name="wrist_3" joint="wrist_3_joint"/>
+    <motor joint="box_rotation" name="box_rotation_motor" gear="1"/>
   </actuator>
 
   <keyframe>
-    <key name="home" qpos="1.3500753657730578 -1.865456836594901 -2.0400916711745514 -2.3380169136860096 -0.26860617161064493 3.0982337160377313 0 0 0 1 0 0 0" 
-          ctrl="1.3500753657730578 -1.865456836594901 -2.0400916711745514 -2.3380169136860096 -0.26860617161064493 3.0982337160377313"/>
+    <key name="home" qpos="1.3500753657730578 -1.865456836594901 -2.0400916711745514 -2.3380169136860096 -0.26860617161064493 3.0982337160377313 0 0 0 1 0 0 0 0" 
+          ctrl="1.3500753657730578 -1.865456836594901 -2.0400916711745514 -2.3380169136860096 -0.26860617161064493 3.0982337160377313 0"/>
   </keyframe>
 </mujoco>
