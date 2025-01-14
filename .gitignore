@@ -12,7 +12,7 @@ build/
 develop-eggs/
 dist/
 downloads/
-datasets/
+dataset_pool/
 ignore_scripts/
 openvla_runs/
 eggs/
