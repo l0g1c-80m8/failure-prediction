@@ -9,21 +9,21 @@ import imageio
 import random
 
 import tqdm
-from scipy.interpolate import CubicSpline
+# from scipy.interpolate import CubicSpline
 import ast
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-N_TRAIN_EPISODES = 10
+N_TRAIN_EPISODES = 1
 N_VAL_EPISODES = 1
-EPISODE_LENGTH = 200  # Number of points in trajectory
+EPISODE_LENGTH = 450  # Number of points in trajectory
 
 # Thresholds for action calculation
-DISPLACEMENT_THRESHOLD_HIGH = 0.12
-DISPLACEMENT_THRESHOLD_LOW = 0.05
-LINEAR_SPEED_THRESHOLD_HIGH = 1.0
+DISPLACEMENT_THRESHOLD_HIGH = 0.01
+DISPLACEMENT_THRESHOLD_LOW = 0
+LINEAR_SPEED_THRESHOLD_HIGH = 0.5
 LINEAR_SPEED_THRESHOLD_LOW = 0.05
 ANGULAR_SPEED_THRESHOLD_HIGH = 0.8
 ANGULAR_SPEED_THRESHOLD_LOW = 0.1
@@ -34,7 +34,7 @@ class Projectile(MuJoCoBase):
         super().__init__(xml_path)
         self.init_angular_speed = 1.0  # Angular speed in radians per second
         self.initial_delay = initial_delay  # Delay before starting movement
-        self.speed_scale = random.uniform(0.5, 2.0)  # New parameter to control joint speed
+        self.speed_scale = random.uniform(1.5, 2.0)  # New parameter to control joint speed
         self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
         self.start_time = None  # To track the start time
         self.positions = []  # To store the position data
@@ -83,7 +83,7 @@ class Projectile(MuJoCoBase):
         self.target_angle = random.uniform(-0.03, 0.03)   # Small random angle between -0.3 and 0.3 rad (about ±17 degrees)
         self.reverse_on_target = random.choice([True, False])  # Randomly decide to stop or reverse
         self.reached_target = False  # Track if we've reached target
-        print(f"New rotation parameters - Speed: {self.rotation_speed:.2f} rad/s, Target angle: {self.target_angle:.2f} rad, Reverse: {self.reverse_on_target}")
+        # print(f"New rotation parameters - Speed: {self.rotation_speed:.2f} rad/s, Target angle: {self.target_angle:.2f} rad, Reverse: {self.reverse_on_target}")
 
         self.angular_speed = self.init_angular_speed
         # self.human_intervene = False  # New attribute to track cube drop
@@ -102,8 +102,12 @@ class Projectile(MuJoCoBase):
         self.current_target = None
         self.next_target = None
         self.transition_start_time = None
-        self.speed_scale = random.uniform(0.5, 2.0)  # New parameter to control joint speed
+        self.speed_scale = random.uniform(1.5, 2.5)  # New parameter to control joint speed
         self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
+
+        self.emergency_stop = False  # Flag to trigger the emergency stop
+        self.emergency_stop_pos_first_set = False  # Flag to first set the emergency stop pose
+        self.current_qpos = None
 
         cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
         fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
@@ -111,8 +115,24 @@ class Projectile(MuJoCoBase):
 
         mj.set_mjcb_control(self.controller)
 
+    def activate_emergency_stop(self):
+        self.emergency_stop = True
+        # self.emergency_stop_first_set = True
+
+        self.current_qpos = []
+        for joint_idx in range(self.model.nu):
+            self.current_qpos.append(self.data.qpos[self.model.jnt_qposadr[joint_idx]])
+        self.emergency_stop_pos_first_set = True
+        print("Emergency stop triggered. Robot will hold position.")
 
     def controller(self, model, data):
+        if self.emergency_stop:
+            data.ctrl = self.current_qpos
+            # print("Emergency Stop Activated! Robot is holding position.")
+                
+            return
+
+
         if self.start_time is None:
             self.start_time = data.time
             self.current_step = 0
@@ -158,17 +178,7 @@ class Projectile(MuJoCoBase):
         data.ctrl[6] = box_rotation
         if int(elapsed_time * 10) % 10 == 0:  # Print every 0.1 seconds
             print(f"Time: {elapsed_time:.2f}, Current angle: {current_angle:.2f}, Target: {self.target_angle:.2f}, Speed: {self.rotation_speed:.2f}, Reverse: {self.reverse_on_target}")
-            # print("!!!!!!!!!!!!!self.data.xquat[fixed_box_id]", data.qpos[model.jnt_qposadr[joint_id]], desired_pos)
-            # data.qpos[model.jnt_qposadr[joint_id]] = desired_pos
-            # print("!!!!!!!!!!!!!self.data.xquat[fixed_box_id]", data.qpos[model.jnt_qposadr[joint_id]])
-        # Modify the body's quaternion in the model (relative to parent)
-        # model.body_quat[fixed_box_id] = np.array([0, rotation_value, 0, 1])
-        
-        # Forward kinematics to update poses
-        # mj.mj_forward(model, data)
 
-        # Print current quaternion for debugging
-        # print(f"Current quaternion: {data.xquat[fixed_box_id]}")
 
         # Handle pausing at key poses
         if self.is_pausing:
@@ -233,12 +243,15 @@ class Projectile(MuJoCoBase):
         fixed_box_pos = self.data.xpos[fixed_box_body_id]
 
         # Calculate the relative displacement
-        relative_displacement = np.linalg.norm(cube_pos - fixed_box_pos)
+        # relative_displacement = np.linalg.norm(cube_pos - fixed_box_pos)
+        # print("!!!!!!!!!!!!!cube_pos", cube_pos[0], cube_pos[1], cube_pos[2])
+        # print("!!!!!!!!!!!!!fixed_box_pos", fixed_box_pos[0], fixed_box_pos[1], fixed_box_pos[2])
+        relative_displacement_z = fixed_box_pos[2] - cube_pos[2]
 
         # Optionally print or log these values
         fixed_box_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
         # print("!!!!!!!!!!!!!self.data.xquat[fixed_box_id]", self.data.xquat[fixed_box_id])
-        print(f"Time: {self.data.time:.2f}s | Linear Speed: {linear_speed:.2f} m/s | Angular Speed: {angular_speed:.2f} rad/s | Relative Displacement: {relative_displacement:.2f} m")
+        # print(f"Time: {self.data.time:.2f}s | Linear Speed: {linear_speed:.2f} m/s | Angular Speed: {angular_speed:.2f} rad/s | Relative Displacement: {relative_displacement:.2f} m")
         
         # # Calculate the action based on the thresholds and interpolation logic
         # action_value = self.calculate_action(relative_displacement, linear_speed, angular_speed)
@@ -246,8 +259,13 @@ class Projectile(MuJoCoBase):
         # # Ensure action is stored as a (1,) tensor, not as a scalar
         # action_value = np.asarray([action_value], dtype=np.float32)
 
+        # Just for debugging!!!!!!!!!!!!!!!!!!!!!
+        linear_speed = 0
+        angular_speed = 0
+
+
         # Combine displacement, linear speed, and angular speed into a state array
-        state = np.hstack([relative_displacement, [linear_speed, angular_speed]])
+        state = np.hstack([relative_displacement_z, [linear_speed, angular_speed]])
         # Pad state to 9 values (for compatibility)
         state_padded = np.pad(state, (0, 9 - len(state)), 'constant')
 
@@ -257,20 +275,27 @@ class Projectile(MuJoCoBase):
     # Function to calculate action value based on displacement, linear speed, and angular speed
     def calculate_action(self, displacement, linear_speed, angular_speed):
         # Check if all values are in the lower range
-        if np.linalg.norm(displacement) < DISPLACEMENT_THRESHOLD_LOW and \
+        print("DISPLACEMENT_THRESHOLD_LOW:", DISPLACEMENT_THRESHOLD_LOW, "displacement:", displacement, "DISPLACEMENT_THRESHOLD_HIGH", DISPLACEMENT_THRESHOLD_HIGH)
+        print("LINEAR_SPEED_THRESHOLD_LOW:", LINEAR_SPEED_THRESHOLD_LOW, "linear_speed:", linear_speed, "LINEAR_SPEED_THRESHOLD_HIGH", LINEAR_SPEED_THRESHOLD_HIGH)
+        print("ANGULAR_SPEED_THRESHOLD_LOW:", ANGULAR_SPEED_THRESHOLD_LOW, "angular_speed:", abs(angular_speed), "ANGULAR_SPEED_THRESHOLD_HIGH", ANGULAR_SPEED_THRESHOLD_HIGH)
+
+
+        if displacement < DISPLACEMENT_THRESHOLD_LOW and \
         linear_speed < LINEAR_SPEED_THRESHOLD_LOW and \
         abs(angular_speed) < ANGULAR_SPEED_THRESHOLD_LOW:
+            print("Safe")
             return 0  # Set action to 0
 
         # Check if any value exceeds the higher thresholds
-        if np.linalg.norm(displacement) > DISPLACEMENT_THRESHOLD_HIGH or \
+        if displacement > DISPLACEMENT_THRESHOLD_HIGH or \
         linear_speed > LINEAR_SPEED_THRESHOLD_HIGH or \
         abs(angular_speed) > ANGULAR_SPEED_THRESHOLD_HIGH:
+            print("Failure")
             return 1  # Set action to 1
 
         # If the values fall between thresholds, interpolate a reasonable action
         # Normalize between 0 and 1 based on distance from the lower to upper threshold
-        displacement_factor = (np.linalg.norm(displacement) - DISPLACEMENT_THRESHOLD_LOW) / \
+        displacement_factor = (displacement - DISPLACEMENT_THRESHOLD_LOW) / \
                             (DISPLACEMENT_THRESHOLD_HIGH - DISPLACEMENT_THRESHOLD_LOW)
         linear_speed_factor = (linear_speed - LINEAR_SPEED_THRESHOLD_LOW) / \
                             (LINEAR_SPEED_THRESHOLD_HIGH - LINEAR_SPEED_THRESHOLD_LOW)
@@ -279,6 +304,7 @@ class Projectile(MuJoCoBase):
 
         # Combine the factors with an average, assuming equal importance
         action_value = (displacement_factor + linear_speed_factor + angular_speed_factor) / 3.0
+        print("Risk")
         return action_value
 
     def randomize_camera_position(self):
@@ -453,18 +479,6 @@ class Projectile(MuJoCoBase):
         for joint_idx, position in enumerate(start_pose):
             self.data.qpos[joint_idx] = position  # Directly set the joint positions
 
-        # Get the fixed_box body ID
-        # fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
-        
-        # # Calculate rotation value based on time
-        # # elapsed_time = self.data.time - self.start_time
-        # rotation_value = random.uniform(0.5, -0.5)  # This will increase over time
-        
-        # # Modify the body's quaternion in the model (relative to parent)
-        # print("!!!!!!!!!!!!!self.data.xquat[fixed_box_body_id]", self.data.xquat[fixed_box_body_id], rotation_value)
-        # self.model.body_quat[fixed_box_body_id] = np.array([0, rotation_value, 0, 1])
-        # print("!!!!!!!!!!!!!self.data.xquat[fixed_box_body_id]", self.data.xquat[fixed_box_body_id])
-
         mj.mj_forward(self.model, self.data)  # Forward dynamics to update the simulation state
 
         cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
@@ -495,19 +509,12 @@ class Projectile(MuJoCoBase):
             for joint_idx, position in enumerate(start_pose):
                 self.data.qpos[joint_idx] = position
 
-            # # Calculate rotation value based on time
-            # rotation_value = random.uniform(0.5, -0.5)  # This will increase over time
-            
-            # # Modify the body's quaternion in the model (relative to parent)
-            # print("!!!!!!!!!!!!!self.data.xquat[fixed_box_body_id]", self.data.xquat[fixed_box_body_id], rotation_value)
-            # self.model.body_quat[fixed_box_body_id] = np.array([0, rotation_value, 0, 1])
-            # print("!!!!!!!!!!!!!self.data.xquat[fixed_box_body_id]", self.data.xquat[fixed_box_body_id])
-
             mj.mj_forward(self.model, self.data)
             
             self.reset()  # Reset simulation
 
             for step_num in range(EPISODE_LENGTH):
+
                 simstart = self.data.time
 
                 while (self.data.time - simstart < 1.0/60.0):
@@ -543,48 +550,55 @@ class Projectile(MuJoCoBase):
                 # process pending GUI events, call GLFW callbacks
                 glfw.poll_events()
 
+                # skip the first 50 steps because the cube is falling from the sky
+                if step_num >= 50:
+                    state_padded = self.data_collection(cube_body_id, fixed_box_body_id)
+                    displacements.append(state_padded[0])  # Displacement
+                    linear_velocities.append(state_padded[1])  # Linear velocity
+                    angular_velocities.append(state_padded[2])  # Angular velocity
+                    displacement = state_padded[0]
+                    linear_speed = state_padded[1]
+                    angular_speed = state_padded[2]
 
-                state_padded = self.data_collection(cube_body_id, fixed_box_body_id)
-                displacements.append(state_padded[0])  # Displacement
-                linear_velocities.append(state_padded[1])  # Linear velocity
-                angular_velocities.append(state_padded[2])  # Angular velocity
-                displacement = state_padded[0]
-                linear_speed = state_padded[1]
-                angular_speed = state_padded[2]
+                    if displacement >= DISPLACEMENT_THRESHOLD_HIGH:
+                        if not self.is_high_threshold_step_set:
+                            self.high_threshold_step = step_num  # Mark the step for interpolation endpoint
+                            self.is_high_threshold_step_set = True
 
-                # if self.human_intervene and not self.is_intervene_step_set:
-                #     self.intervene_step = step_num
-                #     self.is_intervene_step_set = True
-                #     print("intervene_step", self.intervene_step)
+                    action_value = self.calculate_action(displacement, linear_speed, angular_speed)
+                    action_values.append(action_value) # Action value
 
-                if displacement >= DISPLACEMENT_THRESHOLD_HIGH:
-                    if not self.is_high_threshold_step_set:
-                        self.high_threshold_step = step_num  # Mark the step for interpolation endpoint
-                        self.is_high_threshold_step_set = True
+                    # print("action_value!!!!!!!!!!!!displacement", displacement, action_value)
 
-                action_value = self.calculate_action(displacement, linear_speed, angular_speed)
-                action_values.append(action_value) # Action value
+                    if action_value == 1.0 and not self.emergency_stop:
+                        self.activate_emergency_stop()
 
-                self.episode.append({
-                'image': top_camera_frame,
-                # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
-                'state': np.asarray(state_padded, dtype=np.float32),  # Save the padded state
-                'action': np.asarray([action_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
-                'language_instruction': 'dummy instruction',
-                    })
-            
-            # for step_num in range(EPISODE_LENGTH):
-            #     displacement = self.episode[step_num]["state"][0]
-            #     action_value = self.calculate_action(displacement, step_num)
-            #     print("step_num", step_num, "action_value", action_value)
-            #     # Ensure action is stored as a (1,) tensor, not as a scalar
-            #     self.episode[step_num]["action"] = np.asarray([action_value], dtype=np.float32)  # Ensure action is a tensor of shape (1,)
-            # if dataset == "train":
-            #     print("Generating train examples...")
-            #     np.save(f'data/train/episode_{episode_num}.npy', self.episode)
-            # elif dataset == "val":
-            #     print("Generating val examples...")
-            #     np.save(f'data/val/episode_{episode_num}.npy', self.episode)
+                        # Run the simulation step
+                        # if not self.emergency_stop:
+                        #     mj.mj_step(self.model, self.data)
+                        # else:
+                        #     break  # Exit loop if emergency stop is activated
+
+                    self.episode.append({
+                    'image': top_camera_frame,
+                    # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
+                    'state': np.asarray(state_padded, dtype=np.float32),  # Save the padded state
+                    'action': np.asarray([action_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
+                    'language_instruction': 'dummy instruction',
+                        })
+                
+                # for step_num in range(EPISODE_LENGTH):
+                #     displacement = self.episode[step_num]["state"][0]
+                #     action_value = self.calculate_action(displacement, step_num)
+                #     print("step_num", step_num, "action_value", action_value)
+                #     # Ensure action is stored as a (1,) tensor, not as a scalar
+                #     self.episode[step_num]["action"] = np.asarray([action_value], dtype=np.float32)  # Ensure action is a tensor of shape (1,)
+                # if dataset == "train":
+                #     print("Generating train examples...")
+                #     np.save(f'data/train/episode_{episode_num}.npy', self.episode)
+                # elif dataset == "val":
+                #     print("Generating val examples...")
+                #     np.save(f'data/val/episode_{episode_num}.npy', self.episode)
 
         # Plot after simulation
 
