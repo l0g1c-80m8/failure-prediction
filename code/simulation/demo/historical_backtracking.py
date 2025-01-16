@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 
 N_TRAIN_EPISODES = 1
 N_VAL_EPISODES = 1
-EPISODE_LENGTH = 450  # Number of points in trajectory
+EPISODE_LENGTH = 350  # Number of points in trajectory
 
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_HIGH = 0.01
@@ -28,6 +28,15 @@ LINEAR_SPEED_THRESHOLD_LOW = 0.05
 ANGULAR_SPEED_THRESHOLD_HIGH = 0.8
 ANGULAR_SPEED_THRESHOLD_LOW = 0.1
 
+RANDOM_EPISODE_TMP = 109 # random.randint(0, EPISODE_LENGTH)
+
+# Define different interpolation methods
+def linear_interpolation():
+    return np.linspace(0, 1, num_points)
+
+def sin_interpolation(first_failure_time_step, failure_time_step_trim):
+    x = np.linspace(0, 1, first_failure_time_step - failure_time_step_trim + 1)
+    return np.sin(x)
 
 class Projectile(MuJoCoBase):
     def __init__(self, xml_path, traj_file, initial_delay=3.0):
@@ -67,7 +76,9 @@ class Projectile(MuJoCoBase):
             print(f"Loaded trajectory: {trajectory}")
             return trajectory
 
-    def reset(self):
+    def reset(self, seed):
+        random.seed(seed)
+
 
         # Set camera configuration
         self.cam.azimuth = -250 # random.uniform(-225, -315)
@@ -94,15 +105,12 @@ class Projectile(MuJoCoBase):
 
         # Initialize start time
         self.start_time = None
-        # Clear position data
-        self.positions = []
-        self.episode = []  # Reset episode data for each new episode
 
         self.current_step = 0
         self.current_target = None
         self.next_target = None
         self.transition_start_time = None
-        self.speed_scale = random.uniform(1.5, 2.5)  # New parameter to control joint speed
+        self.speed_scale = random.uniform(2.5, 3)  # New parameter to control joint speed
         self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
 
         self.emergency_stop = False  # Flag to trigger the emergency stop
@@ -176,8 +184,8 @@ class Projectile(MuJoCoBase):
         
         # Set the box rotation control
         data.ctrl[6] = box_rotation
-        if int(elapsed_time * 10) % 10 == 0:  # Print every 0.1 seconds
-            print(f"Time: {elapsed_time:.2f}, Current angle: {current_angle:.2f}, Target: {self.target_angle:.2f}, Speed: {self.rotation_speed:.2f}, Reverse: {self.reverse_on_target}")
+        # if int(elapsed_time * 10) % 10 == 0:  # Print every 0.1 seconds
+        #     print(f"Time: {elapsed_time:.2f}, Current angle: {current_angle:.2f}, Target: {self.target_angle:.2f}, Speed: {self.rotation_speed:.2f}, Reverse: {self.reverse_on_target}")
 
 
         # Handle pausing at key poses
@@ -275,22 +283,22 @@ class Projectile(MuJoCoBase):
     # Function to calculate action value based on displacement, linear speed, and angular speed
     def calculate_action(self, displacement, linear_speed, angular_speed):
         # Check if all values are in the lower range
-        print("DISPLACEMENT_THRESHOLD_LOW:", DISPLACEMENT_THRESHOLD_LOW, "displacement:", displacement, "DISPLACEMENT_THRESHOLD_HIGH", DISPLACEMENT_THRESHOLD_HIGH)
-        print("LINEAR_SPEED_THRESHOLD_LOW:", LINEAR_SPEED_THRESHOLD_LOW, "linear_speed:", linear_speed, "LINEAR_SPEED_THRESHOLD_HIGH", LINEAR_SPEED_THRESHOLD_HIGH)
-        print("ANGULAR_SPEED_THRESHOLD_LOW:", ANGULAR_SPEED_THRESHOLD_LOW, "angular_speed:", abs(angular_speed), "ANGULAR_SPEED_THRESHOLD_HIGH", ANGULAR_SPEED_THRESHOLD_HIGH)
+        # print("DISPLACEMENT_THRESHOLD_LOW:", DISPLACEMENT_THRESHOLD_LOW, "displacement:", displacement, "DISPLACEMENT_THRESHOLD_HIGH", DISPLACEMENT_THRESHOLD_HIGH)
+        # print("LINEAR_SPEED_THRESHOLD_LOW:", LINEAR_SPEED_THRESHOLD_LOW, "linear_speed:", linear_speed, "LINEAR_SPEED_THRESHOLD_HIGH", LINEAR_SPEED_THRESHOLD_HIGH)
+        # print("ANGULAR_SPEED_THRESHOLD_LOW:", ANGULAR_SPEED_THRESHOLD_LOW, "angular_speed:", abs(angular_speed), "ANGULAR_SPEED_THRESHOLD_HIGH", ANGULAR_SPEED_THRESHOLD_HIGH)
 
 
         if displacement < DISPLACEMENT_THRESHOLD_LOW and \
         linear_speed < LINEAR_SPEED_THRESHOLD_LOW and \
         abs(angular_speed) < ANGULAR_SPEED_THRESHOLD_LOW:
-            print("Safe")
+            # print("Safe")
             return 0  # Set action to 0
 
         # Check if any value exceeds the higher thresholds
         if displacement > DISPLACEMENT_THRESHOLD_HIGH or \
         linear_speed > LINEAR_SPEED_THRESHOLD_HIGH or \
         abs(angular_speed) > ANGULAR_SPEED_THRESHOLD_HIGH:
-            print("Failure")
+            # print("Failure")
             return 1  # Set action to 1
 
         # If the values fall between thresholds, interpolate a reasonable action
@@ -304,7 +312,7 @@ class Projectile(MuJoCoBase):
 
         # Combine the factors with an average, assuming equal importance
         action_value = (displacement_factor + linear_speed_factor + angular_speed_factor) / 3.0
-        print("Risk")
+        # print("Risk")
         return action_value
 
     def randomize_camera_position(self):
@@ -476,15 +484,22 @@ class Projectile(MuJoCoBase):
         # Transition to the 'start' joint pose from traj.txt
         start_pose = self.trajectory[0]  # 'start' joint pose from traj.txt
         print(f"Moving to the 'start' pose: {start_pose}")
-        for joint_idx, position in enumerate(start_pose):
-            self.data.qpos[joint_idx] = position  # Directly set the joint positions
+        # for joint_idx, position in enumerate(start_pose):
+        #     self.data.qpos[joint_idx] = position  # Directly set the joint positions
 
-        mj.mj_forward(self.model, self.data)  # Forward dynamics to update the simulation state
+        # mj.mj_forward(self.model, self.data)  # Forward dynamics to update the simulation state
 
         cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
         fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
         # self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [0.4, 0.45, 0.6]
 
+        # Initialize lists to store metrics
+        linear_velocities = []
+        angular_velocities = []
+        displacements = []
+        action_values = []
+        self.positions = []
+        self.episode = []  # Reset episode data for each new episode
 
         # while not glfw.window_should_close(self.window):
         if dataset == "train":
@@ -492,113 +507,166 @@ class Projectile(MuJoCoBase):
         elif dataset == "val":
             N_EPISODES = N_VAL_EPISODES
 
-        # Initialize lists to store metrics
-        linear_velocities = []
-        angular_velocities = []
-        displacements = []
-        action_values = []
-
-
         for episode_num in range(N_EPISODES):
-
-            # Load the 'home' keyframe for initial position
-            keyframe_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_KEY, 'home')
-            if keyframe_id >= 0:
-                mj.mj_resetDataKeyframe(self.model, self.data, keyframe_id)
-            # Reset to start pose again at the beginning of each episode
-            for joint_idx, position in enumerate(start_pose):
-                self.data.qpos[joint_idx] = position
-
-            mj.mj_forward(self.model, self.data)
             
-            self.reset()  # Reset simulation
+            random_seed_tmp = random.randint(0, EPISODE_LENGTH)
+            print("random_seed_tmp", random_seed_tmp)
+            failure_time_step = -1
+            first_failure_time_step = -1
+            # Clear position data
+            episode_filled_tag = False
 
-            for step_num in range(EPISODE_LENGTH):
+            for overal_step_num in range(EPISODE_LENGTH):
 
-                simstart = self.data.time
+                # Load the 'home' keyframe for initial position
+                keyframe_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_KEY, 'home')
+                if keyframe_id >= 0:
+                    mj.mj_resetDataKeyframe(self.model, self.data, keyframe_id)
+                # Reset to start pose again at the beginning of each episode
+                for joint_idx, position in enumerate(start_pose):
+                    self.data.qpos[joint_idx] = position
 
-                while (self.data.time - simstart < 1.0/60.0):
-                    # Step simulation environment
-                    mj.mj_step(self.model, self.data)
-
-                    # Record the cube's position
-                    cube_pos = self.data.qpos[mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')]
-                    self.positions.append(cube_pos.copy())
-
-                # get framebuffer viewport
-                viewport_width, viewport_height = glfw.get_framebuffer_size(self.window)
-                viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
-
-                # Update scene and render
-                mj.mjv_updateScene(self.model, self.data, self.opt, None, self.cam,
-                                mj.mjtCatBit.mjCAT_ALL.value, self.scene)
-                mj.mjr_render(viewport, self.scene, self.context)
-
-                # Capture the current frame
-                framebuffer = np.zeros((viewport_height, viewport_width, 3), dtype=np.uint8)
-                mj.mjr_readPixels(framebuffer, None, viewport, self.context)
-                framebuffer = framebuffer[::-1, :, :]  # Reverse the order of rows
-                writer.append_data(framebuffer)
-
-                # Get top camera frame
-                top_camera_frame = self.get_camera_image('top_camera')
-                top_camera_writer.append_data(top_camera_frame)
-
-                # swap OpenGL buffers (blocking call due to v-sync)
-                glfw.swap_buffers(self.window)
-
-                # process pending GUI events, call GLFW callbacks
-                glfw.poll_events()
-
-                # skip the first 50 steps because the cube is falling from the sky
-                if step_num >= 50:
-                    state_padded = self.data_collection(cube_body_id, fixed_box_body_id)
-                    displacements.append(state_padded[0])  # Displacement
-                    linear_velocities.append(state_padded[1])  # Linear velocity
-                    angular_velocities.append(state_padded[2])  # Angular velocity
-                    displacement = state_padded[0]
-                    linear_speed = state_padded[1]
-                    angular_speed = state_padded[2]
-
-                    if displacement >= DISPLACEMENT_THRESHOLD_HIGH:
-                        if not self.is_high_threshold_step_set:
-                            self.high_threshold_step = step_num  # Mark the step for interpolation endpoint
-                            self.is_high_threshold_step_set = True
-
-                    action_value = self.calculate_action(displacement, linear_speed, angular_speed)
-                    action_values.append(action_value) # Action value
-
-                    # print("action_value!!!!!!!!!!!!displacement", displacement, action_value)
-
-                    if action_value == 1.0 and not self.emergency_stop:
-                        self.activate_emergency_stop()
-
-                        # Run the simulation step
-                        # if not self.emergency_stop:
-                        #     mj.mj_step(self.model, self.data)
-                        # else:
-                        #     break  # Exit loop if emergency stop is activated
-
-                    self.episode.append({
-                    'image': top_camera_frame,
-                    # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
-                    'state': np.asarray(state_padded, dtype=np.float32),  # Save the padded state
-                    'action': np.asarray([action_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
-                    'language_instruction': 'dummy instruction',
-                        })
+                mj.mj_forward(self.model, self.data)
                 
-                # for step_num in range(EPISODE_LENGTH):
-                #     displacement = self.episode[step_num]["state"][0]
-                #     action_value = self.calculate_action(displacement, step_num)
-                #     print("step_num", step_num, "action_value", action_value)
-                #     # Ensure action is stored as a (1,) tensor, not as a scalar
-                #     self.episode[step_num]["action"] = np.asarray([action_value], dtype=np.float32)  # Ensure action is a tensor of shape (1,)
-                # if dataset == "train":
-                #     print("Generating train examples...")
-                #     np.save(f'data/train/episode_{episode_num}.npy', self.episode)
-                # elif dataset == "val":
-                #     print("Generating val examples...")
-                #     np.save(f'data/val/episode_{episode_num}.npy', self.episode)
+                # random_seed_tmp = RANDOM_EPISODE_TMP
+                # if overal_step_num > 0:
+                #     random_seed_tmp = random.randint(0, EPISODE_LENGTH)
+                self.reset(RANDOM_EPISODE_TMP if episode_num == 0 else random_seed_tmp)  # Reset simulation
+
+                episode_failed_tag = False
+                backtracking_steps = 5
+
+                for step_num in range(EPISODE_LENGTH):
+
+                    simstart = self.data.time
+
+                    while (self.data.time - simstart < 1.0/60.0):
+                        # Step simulation environment
+                        mj.mj_step(self.model, self.data)
+
+                        # Record the cube's position
+                        cube_pos = self.data.qpos[mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')]
+                        self.positions.append(cube_pos.copy())
+
+                    # get framebuffer viewport
+                    viewport_width, viewport_height = glfw.get_framebuffer_size(self.window)
+                    viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
+
+                    # Update scene and render
+                    mj.mjv_updateScene(self.model, self.data, self.opt, None, self.cam,
+                                    mj.mjtCatBit.mjCAT_ALL.value, self.scene)
+                    mj.mjr_render(viewport, self.scene, self.context)
+
+                    # Capture the current frame
+                    framebuffer = np.zeros((viewport_height, viewport_width, 3), dtype=np.uint8)
+                    mj.mjr_readPixels(framebuffer, None, viewport, self.context)
+                    framebuffer = framebuffer[::-1, :, :]  # Reverse the order of rows
+                    writer.append_data(framebuffer)
+
+                    # Get top camera frame
+                    top_camera_frame = self.get_camera_image('top_camera')
+                    top_camera_writer.append_data(top_camera_frame)
+
+                    # swap OpenGL buffers (blocking call due to v-sync)
+                    glfw.swap_buffers(self.window)
+
+                    # process pending GUI events, call GLFW callbacks
+                    glfw.poll_events()
+
+                    # skip the first 50 steps because the cube is falling from the sky
+                    if step_num >= 50:
+
+                        state_padded = self.data_collection(cube_body_id, fixed_box_body_id)
+                        displacement = state_padded[0]
+                        linear_speed = state_padded[1]
+                        angular_speed = state_padded[2]
+
+                        if displacement >= DISPLACEMENT_THRESHOLD_HIGH:
+                            if not self.is_high_threshold_step_set:
+                                self.high_threshold_step = step_num  # Mark the step for interpolation endpoint
+                                self.is_high_threshold_step_set = True
+
+                        action_value = self.calculate_action(displacement, linear_speed, angular_speed)
+
+                        # print("action_value!!!!!!!!!!!!displacement", displacement, action_value)
+
+                        # Historical backtracking for 60 time steps
+                        # print("episode_filled_tag!!!!!!", episode_filled_tag)
+                        if episode_filled_tag:
+                            if step_num < (failure_time_step - backtracking_steps):
+                                continue
+                            elif step_num == (failure_time_step - backtracking_steps):
+                                self.activate_emergency_stop()
+                            elif action_value == 1.0: # still failed enven e-stop in advance
+                                episode_failed_tag = True
+                                continue
+
+                        # Once if action_value == 1 for the first time, it will always == 1.
+                        # If failed, apply e-stop
+                        # print("failure_time_step!!!!!!", failure_time_step)
+                        if action_value == 1.0 and not self.emergency_stop:
+                            # print("!!!!!!!!self.emergency_stop", self.emergency_stop)
+                            self.activate_emergency_stop()
+                            episode_failed_tag = True
+                            failure_time_step = step_num
+                            # 50 is for avoid counting in the initial falling of the cube
+                            first_failure_time_step = step_num - 50
+
+                        if not episode_filled_tag:
+                            self.episode.append({
+                            'image': top_camera_frame,
+                            # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
+                            'state': np.asarray(state_padded, dtype=np.float32),  # Save the padded state
+                            'action': np.asarray([action_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
+                            'language_instruction': 'dummy instruction',
+                                })
+                            # For plot     
+                            displacements.append(state_padded[0])  # Displacement
+                            linear_velocities.append(state_padded[1])  # Linear velocity
+                            angular_velocities.append(state_padded[2])  # Angular velocity
+                            action_values.append(action_value) # Action value
+                episode_filled_tag = True
+                print("len(self.episode)", len(self.episode), "episode_filled_tag", episode_filled_tag, "episode_failed_tag", episode_failed_tag, "failure_time_step", failure_time_step)
+
+                failure_time_step -= backtracking_steps
+                # 50 is for avoid counting in the initial falling of the cube
+                failure_time_step_trim = failure_time_step - 50
+                print("first_failure_time_step", first_failure_time_step)
+                print("failure_time_step_trim", failure_time_step_trim)
+                if episode_failed_tag:
+                    self.episode[failure_time_step_trim]['action'] = np.asarray([1], dtype=np.float32)
+                    action_values[failure_time_step_trim] = 1
+                    for idx in range(failure_time_step_trim, first_failure_time_step):
+                        # print("idx", idx)
+                        self.episode[idx]['action'] = np.asarray([1], dtype=np.float32)
+                        action_values[idx] = 1   
+                    # TODO
+                    # displacements.append(state_padded[0])  # Displacement
+                    # linear_velocities.append(state_padded[1])  # Linear velocity
+                    # angular_velocities.append(state_padded[2])  # Angular velocity
+                elif episode_filled_tag: # if not failed, the time step to apply e-stop is safe, backtracking over
+                    self.episode[failure_time_step_trim]['action'] = np.asarray([0], dtype=np.float32)
+                    action_values[failure_time_step_trim] = 0
+                    # TODO
+                    # displacements.append(state_padded[0])  # Displacement
+                    # linear_velocities.append(state_padded[1])  # Linear velocity
+                    # angular_velocities.append(state_padded[2])  # Angular velocity
+
+                    # Interpolate values from 0 to 1 for latest failure_time_step to first_failure_time_step
+                    # interpolated_values = sin_interpolation(first_failure_time_step, failure_time_step_trim)
+
+                    # Update the "action" key for the dictionaries between i and k
+                    # for idx, value in enumerate(interpolated_values, start=failure_time_step_trim):
+                    #     self.episode[idx]["action"] = value
+                    #     action_values[idx] = value
+                    break
+                
+                    # if dataset == "train":
+                    #     print("Generating train examples...")
+                    #     np.save(f'data/train/episode_{episode_num}.npy', self.episode)
+                    # elif dataset == "val":
+                    #     print("Generating val examples...")
+                    #     np.save(f'data/val/episode_{episode_num}.npy', self.episode)
 
         # Plot after simulation
 
@@ -671,16 +739,6 @@ class Projectile(MuJoCoBase):
         # plt.show()
         plt.savefig('./demo/cube_trajectory.png')
 
-# def main():
-#     xml_path = "./model/universal_robots_ur5e/test_scene.xml"
-
-#     os.makedirs('data/train', exist_ok=True)
-#     os.makedirs('data/val', exist_ok=True)
-
-#     sim = Projectile(xml_path, initial_delay=0.5)  # Set the delay to 3 seconds
-#     sim.reset()
-#     sim.simulate(sys.argv[1])
-
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene.xml"
     traj_path = "../ur5-scripts/traj.txt"  # Adjust path as needed
@@ -689,7 +747,7 @@ def main():
     os.makedirs('data/val', exist_ok=True)
 
     sim = Projectile(xml_path, traj_path, initial_delay=0.5)
-    sim.reset()
+    sim.reset(RANDOM_EPISODE_TMP)
     sim.simulate(sys.argv[1])
 
 
