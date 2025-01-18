@@ -138,9 +138,9 @@ class ContinuousActionHead(nn.Module, ActionHead):
     readout_key: str
     use_map: bool = False
     action_horizon: int = 1
-    # action_dim: int = 7
+    action_dim: int = 7
     # ZEYU
-    action_dim: int = 1
+    # action_dim: int = 1
     max_action: float = 5.0
     loss_type: str = "mse"
 
@@ -245,9 +245,9 @@ class DiscreteActionHead(nn.Module, ActionHead):
     use_map: bool = False
     token_per: str = "action_dim_and_action_horizon"
     action_horizon: int = 1
-    # action_dim: int = 7
+    action_dim: int = 7
     # ZEYU
-    action_dim: int = 1
+    # action_dim: int = 1
     vocab_size: int = 256
     normalization_type: str = "uniform"
 
@@ -412,9 +412,9 @@ class DiffusionActionHead(nn.Module):
     readout_key: str
     use_map: bool = False
     action_horizon: int = 1
-    # action_dim: int = 7
+    action_dim: int = 7
     # ZEYU
-    action_dim: int = 1
+    # action_dim: int = 1
     max_action: float = 5.0
     loss_type: str = "mse"
 

@@ -14,7 +14,6 @@ flax==0.7.5
 ml_collections==0.1.1
 tqdm==4.66.5
 absl-py==2.1.0
-jaxlib==0.4.20
 scipy==1.9.3
 wandb==0.17.5
 einops==0.8.0
