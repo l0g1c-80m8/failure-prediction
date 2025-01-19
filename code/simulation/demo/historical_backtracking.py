@@ -16,8 +16,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-N_TRAIN_EPISODES = 1
-N_VAL_EPISODES = 1
+N_TRAIN_EPISODES = 5
+N_VAL_EPISODES = 10
 EPISODE_LENGTH = 350  # Number of points in trajectory
 
 # Thresholds for action calculation
@@ -28,7 +28,7 @@ LINEAR_SPEED_THRESHOLD_LOW = 0.05
 ANGULAR_SPEED_THRESHOLD_HIGH = 0.8
 ANGULAR_SPEED_THRESHOLD_LOW = 0.1
 
-RANDOM_EPISODE_TMP = 109 # random.randint(0, EPISODE_LENGTH)
+RANDOM_EPISODE_TMP = random.randint(0, EPISODE_LENGTH) # 67 #  109
 
 # Define different interpolation methods
 def linear_interpolation():
@@ -242,9 +242,14 @@ class Projectile(MuJoCoBase):
         # Calculate linear and angular speeds of `free_cube`
         cube_lin_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3]
         cube_ang_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]+3:self.model.body_jntadr[cube_body_id]+6]
+
+
+        # Calculate linear and angular speeds of `fixed_box`
+        fixed_box_lin_vel = self.data.qvel[self.model.body_jntadr[fixed_box_body_id]:self.model.body_jntadr[fixed_box_body_id]+3]
+        # fixed_box_linear_speed = np.linalg.norm(fixed_box_lin_vel)
         
-        linear_speed = np.linalg.norm(cube_lin_vel)
-        angular_speed = np.linalg.norm(cube_ang_vel)
+        # cube_linear_speed = np.linalg.norm(cube_lin_vel)
+        # cube_angular_speed = np.linalg.norm(cube_ang_vel)
 
         # Get positions of `free_cube` and `fixed_box`
         cube_pos = self.data.xpos[cube_body_id]
@@ -254,30 +259,32 @@ class Projectile(MuJoCoBase):
         # relative_displacement = np.linalg.norm(cube_pos - fixed_box_pos)
         # print("!!!!!!!!!!!!!cube_pos", cube_pos[0], cube_pos[1], cube_pos[2])
         # print("!!!!!!!!!!!!!fixed_box_pos", fixed_box_pos[0], fixed_box_pos[1], fixed_box_pos[2])
-        relative_displacement_z = fixed_box_pos[2] - cube_pos[2]
+        # relative_displacement_z = fixed_box_pos[2] - cube_pos[2]
+        relative_displacement = fixed_box_pos - cube_pos
 
         # Optionally print or log these values
         fixed_box_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
         # print("!!!!!!!!!!!!!self.data.xquat[fixed_box_id]", self.data.xquat[fixed_box_id])
-        # print(f"Time: {self.data.time:.2f}s | Linear Speed: {linear_speed:.2f} m/s | Angular Speed: {angular_speed:.2f} rad/s | Relative Displacement: {relative_displacement:.2f} m")
+        # print(f"Time: {self.data.time:.2f}s | Linear Speed: {cube_linear_speed:.2f} m/s | Angular Speed: {cube_angular_speed:.2f} rad/s | Relative Displacement: {relative_displacement:.2f} m")
         
         # # Calculate the action based on the thresholds and interpolation logic
-        # action_value = self.calculate_action(relative_displacement, linear_speed, angular_speed)
+        # action_value = self.calculate_action(relative_displacement, cube_linear_speed, cube_angular_speed)
 
         # # Ensure action is stored as a (1,) tensor, not as a scalar
         # action_value = np.asarray([action_value], dtype=np.float32)
 
         # Just for debugging!!!!!!!!!!!!!!!!!!!!!
-        linear_speed = 0
-        angular_speed = 0
+        # cube_linear_speed = 0
+        # cube_angular_speed = 0
 
 
+        # print("!!!!!!!!!!!!!relative_displacement", relative_displacement, cube_lin_vel, cube_ang_vel)
         # Combine displacement, linear speed, and angular speed into a state array
-        state = np.hstack([relative_displacement_z, [linear_speed, angular_speed]])
+        state = np.hstack([relative_displacement, cube_lin_vel, cube_ang_vel])
         # Pad state to 9 values (for compatibility)
-        state_padded = np.pad(state, (0, 9 - len(state)), 'constant')
+        # state_padded = np.pad(state, (0, 9 - len(state)), 'constant')
 
-        return state_padded
+        return state, fixed_box_lin_vel
 
 
     # Function to calculate action value based on displacement, linear speed, and angular speed
@@ -288,32 +295,37 @@ class Projectile(MuJoCoBase):
         # print("ANGULAR_SPEED_THRESHOLD_LOW:", ANGULAR_SPEED_THRESHOLD_LOW, "angular_speed:", abs(angular_speed), "ANGULAR_SPEED_THRESHOLD_HIGH", ANGULAR_SPEED_THRESHOLD_HIGH)
 
 
-        if displacement < DISPLACEMENT_THRESHOLD_LOW and \
-        linear_speed < LINEAR_SPEED_THRESHOLD_LOW and \
-        abs(angular_speed) < ANGULAR_SPEED_THRESHOLD_LOW:
+        # if displacement < DISPLACEMENT_THRESHOLD_LOW and \
+        # linear_speed < LINEAR_SPEED_THRESHOLD_LOW and \
+        # abs(angular_speed) < ANGULAR_SPEED_THRESHOLD_LOW:
+        if displacement[2] < DISPLACEMENT_THRESHOLD_LOW:
             # print("Safe")
             return 0  # Set action to 0
 
         # Check if any value exceeds the higher thresholds
-        if displacement > DISPLACEMENT_THRESHOLD_HIGH or \
-        linear_speed > LINEAR_SPEED_THRESHOLD_HIGH or \
-        abs(angular_speed) > ANGULAR_SPEED_THRESHOLD_HIGH:
+        # if displacement > DISPLACEMENT_THRESHOLD_HIGH or \
+        # linear_speed > LINEAR_SPEED_THRESHOLD_HIGH or \
+        # abs(angular_speed) > ANGULAR_SPEED_THRESHOLD_HIGH:
+        if displacement[2] > DISPLACEMENT_THRESHOLD_HIGH:
             # print("Failure")
             return 1  # Set action to 1
 
         # If the values fall between thresholds, interpolate a reasonable action
         # Normalize between 0 and 1 based on distance from the lower to upper threshold
-        displacement_factor = (displacement - DISPLACEMENT_THRESHOLD_LOW) / \
-                            (DISPLACEMENT_THRESHOLD_HIGH - DISPLACEMENT_THRESHOLD_LOW)
-        linear_speed_factor = (linear_speed - LINEAR_SPEED_THRESHOLD_LOW) / \
-                            (LINEAR_SPEED_THRESHOLD_HIGH - LINEAR_SPEED_THRESHOLD_LOW)
-        angular_speed_factor = (abs(angular_speed) - ANGULAR_SPEED_THRESHOLD_LOW) / \
-                            (ANGULAR_SPEED_THRESHOLD_HIGH - ANGULAR_SPEED_THRESHOLD_LOW)
+        # displacement_factor = (displacement - DISPLACEMENT_THRESHOLD_LOW) / \
+        #                     (DISPLACEMENT_THRESHOLD_HIGH - DISPLACEMENT_THRESHOLD_LOW)
+        # linear_speed_factor = (linear_speed - LINEAR_SPEED_THRESHOLD_LOW) / \
+        #                     (LINEAR_SPEED_THRESHOLD_HIGH - LINEAR_SPEED_THRESHOLD_LOW)
+        # angular_speed_factor = (abs(angular_speed) - ANGULAR_SPEED_THRESHOLD_LOW) / \
+        #                     (ANGULAR_SPEED_THRESHOLD_HIGH - ANGULAR_SPEED_THRESHOLD_LOW)
 
         # Combine the factors with an average, assuming equal importance
-        action_value = (displacement_factor + linear_speed_factor + angular_speed_factor) / 3.0
+        # action_value = (displacement_factor + linear_speed_factor + angular_speed_factor) / 3.0
         # print("Risk")
-        return action_value
+        # return action_value
+        
+        # Just for debugging
+        return 0.5
 
     def randomize_camera_position(self):
         """
@@ -470,6 +482,43 @@ class Projectile(MuJoCoBase):
         
         return img
 
+
+    def validate_episode(self, episode):
+        required_keys = ['image', 'state', 'action', 'language_instruction']
+        
+        for i, item in enumerate(episode):
+            # Check if all required keys are present
+            for key in required_keys:
+                if key not in item:
+                    print(f"Episode {i} is missing key: {key}")
+                    return False
+                
+                # Check if the value is not None or empty
+                value = item[key]
+                if value is None:
+                    print(f"Episode {i} has None value for key: {key}")
+                    return False
+                
+                # Additional checks for specific keys
+                if key == 'image' and not isinstance(value, (np.ndarray, list)):
+                    print(f"Episode {i} has invalid type for 'image': {type(value)}")
+                    return False
+                
+                if key == 'state' and (not isinstance(value, np.ndarray) or value.size == 0):
+                    print(f"Episode {i} has invalid or empty 'state': {value}")
+                    return False
+                
+                if key == 'action' and (not isinstance(value, np.ndarray) or value.shape != (1,)):
+                    print(f"Episode {i} has invalid 'action': {value}")
+                    return False
+                
+                if key == 'language_instruction' and not isinstance(value, str):
+                    print(f"Episode {i} has invalid 'language_instruction': {value}")
+                    return False
+
+        print("All episodes are valid.")
+        return True
+
     def simulate(self, dataset="train"):
         video_dir = './demo'
         video_filename = os.path.join(video_dir, 'simulation_video.mp4')
@@ -498,6 +547,7 @@ class Projectile(MuJoCoBase):
         angular_velocities = []
         displacements = []
         action_values = []
+        fixed_box_velocities = []
         self.positions = []
         self.episode = []  # Reset episode data for each new episode
 
@@ -576,12 +626,12 @@ class Projectile(MuJoCoBase):
                     # skip the first 50 steps because the cube is falling from the sky
                     if step_num >= 50:
 
-                        state_padded = self.data_collection(cube_body_id, fixed_box_body_id)
-                        displacement = state_padded[0]
-                        linear_speed = state_padded[1]
-                        angular_speed = state_padded[2]
+                        state, fixed_box_linear_speed = self.data_collection(cube_body_id, fixed_box_body_id)
+                        displacement = [state[0], state[1], state[2]]
+                        linear_speed = [state[3], state[4], state[5]]
+                        angular_speed = [state[6], state[7], state[8]]
 
-                        if displacement >= DISPLACEMENT_THRESHOLD_HIGH:
+                        if displacement[2] >= DISPLACEMENT_THRESHOLD_HIGH:
                             if not self.is_high_threshold_step_set:
                                 self.high_threshold_step = step_num  # Mark the step for interpolation endpoint
                                 self.is_high_threshold_step_set = True
@@ -616,15 +666,16 @@ class Projectile(MuJoCoBase):
                             self.episode.append({
                             'image': top_camera_frame,
                             # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
-                            'state': np.asarray(state_padded, dtype=np.float32),  # Save the padded state
+                            'state': np.asarray(state, dtype=np.float32),  # Save the padded state
                             'action': np.asarray([action_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
                             'language_instruction': 'dummy instruction',
                                 })
                             # For plot     
-                            displacements.append(state_padded[0])  # Displacement
-                            linear_velocities.append(state_padded[1])  # Linear velocity
-                            angular_velocities.append(state_padded[2])  # Angular velocity
+                            displacements.append([state[0], state[1], state[2]])  # Displacement
+                            linear_velocities.append([state[3], state[4], state[5]])  # Linear velocity
+                            angular_velocities.append([state[6], state[7], state[8]])  # Angular velocity
                             action_values.append(action_value) # Action value
+                            fixed_box_velocities.append(fixed_box_linear_speed)
                 episode_filled_tag = True
                 print("len(self.episode)", len(self.episode), "episode_filled_tag", episode_filled_tag, "episode_failed_tag", episode_failed_tag, "failure_time_step", failure_time_step)
 
@@ -636,21 +687,21 @@ class Projectile(MuJoCoBase):
                 if episode_failed_tag:
                     self.episode[failure_time_step_trim]['action'] = np.asarray([1], dtype=np.float32)
                     action_values[failure_time_step_trim] = 1
-                    for idx in range(failure_time_step_trim, first_failure_time_step):
-                        # print("idx", idx)
-                        self.episode[idx]['action'] = np.asarray([1], dtype=np.float32)
-                        action_values[idx] = 1   
+                    # for idx in range(failure_time_step_trim, first_failure_time_step):
+                    #     # print("idx", idx)
+                    #     self.episode[idx]['action'] = np.asarray([1], dtype=np.float32)
+                    #     action_values[idx] = 1   
                     # TODO
-                    # displacements.append(state_padded[0])  # Displacement
-                    # linear_velocities.append(state_padded[1])  # Linear velocity
-                    # angular_velocities.append(state_padded[2])  # Angular velocity
+                    # displacements.append(state[0])  # Displacement
+                    # linear_velocities.append(state[3])  # Linear velocity
+                    # angular_velocities.append(state[6])  # Angular velocity
                 elif episode_filled_tag: # if not failed, the time step to apply e-stop is safe, backtracking over
                     self.episode[failure_time_step_trim]['action'] = np.asarray([0], dtype=np.float32)
                     action_values[failure_time_step_trim] = 0
                     # TODO
-                    # displacements.append(state_padded[0])  # Displacement
-                    # linear_velocities.append(state_padded[1])  # Linear velocity
-                    # angular_velocities.append(state_padded[2])  # Angular velocity
+                    # displacements.append(state[0])  # Displacement
+                    # linear_velocities.append(state[3])  # Linear velocity
+                    # angular_velocities.append(state[6])  # Angular velocity
 
                     # Interpolate values from 0 to 1 for latest failure_time_step to first_failure_time_step
                     # interpolated_values = sin_interpolation(first_failure_time_step, failure_time_step_trim)
@@ -660,13 +711,14 @@ class Projectile(MuJoCoBase):
                     #     self.episode[idx]["action"] = value
                     #     action_values[idx] = value
                     break
-                
-                    # if dataset == "train":
-                    #     print("Generating train examples...")
-                    #     np.save(f'data/train/episode_{episode_num}.npy', self.episode)
-                    # elif dataset == "val":
-                    #     print("Generating val examples...")
-                    #     np.save(f'data/val/episode_{episode_num}.npy', self.episode)
+            
+            self.validate_episode(self.episode)
+            # if dataset == "train":
+            #     print("Generating train examples...")
+            #     np.save(f'data/train/episode_{episode_num}.npy', self.episode)
+            # elif dataset == "val":
+            #     print("Generating val examples...")
+            #     np.save(f'data/val/episode_{episode_num}.npy', self.episode)
 
         # Plot after simulation
 
@@ -675,7 +727,7 @@ class Projectile(MuJoCoBase):
         top_camera_writer.close()
         glfw.terminate()
         self.save_trajectory()
-        self.plot_metrics(linear_velocities, angular_velocities, displacements, action_values)
+        self.plot_metrics(linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities)
 
 
     def save_trajectory(self):
@@ -698,40 +750,125 @@ class Projectile(MuJoCoBase):
             # plt.savefig('cube_trajectory.png')
             # plt.show()
 
-    def plot_metrics(self, linear_velocities, angular_velocities, displacements, action_values):
+    def plot_metrics(self, linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities):
         """
         Plot linear velocity, angular velocity, and displacement over time.
         """
         time_steps = range(len(linear_velocities))
         # print("range", range(len(linear_velocities)), range(len(angular_velocities)), range(len(displacements)), range(len(action_values)))  # 800
 
-        plt.figure(figsize=(16, 8))
+        # Convert to NumPy array
+        linear_velocities = np.array(linear_velocities)
+        angular_velocities = np.array(angular_velocities)
+        displacements = np.array(displacements)
+        fixed_box_velocities = np.array(fixed_box_velocities)
 
-        plt.subplot(4, 1, 1)
-        plt.plot(time_steps, linear_velocities, label='Linear Velocity')
+
+        pic_number = 13
+        pic_idx = 0
+        plt.figure(figsize=(pic_number*4, pic_number*4))
+
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, linear_velocities[:, 0], label='Linear Velocity X')
         plt.xlabel('Time Step')
-        plt.ylabel('Linear Velocity (m/s)')
+        plt.ylabel('Linear Velocity X (m/s)')
         plt.legend()
         plt.grid()
 
-        plt.subplot(4, 1, 2)
-        plt.plot(time_steps, angular_velocities, label='Angular Velocity', color='orange')
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, linear_velocities[:, 1], label='Linear Velocity Y')
         plt.xlabel('Time Step')
-        plt.ylabel('Angular Velocity (rad/s)')
+        plt.ylabel('Linear Velocity Y (m/s)')
         plt.legend()
         plt.grid()
 
-        plt.subplot(4, 1, 3)
-        plt.plot(time_steps, displacements, label='Displacement', color='green')
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, linear_velocities[:, 2], label='Linear Velocity Z')
         plt.xlabel('Time Step')
-        plt.ylabel('Displacement (m)')
+        plt.ylabel('Linear Velocity Z (m/s)')
         plt.legend()
         plt.grid()
 
-        plt.subplot(4, 1, 4)
-        plt.plot(time_steps, action_values, label='Action_values', color='red')
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, angular_velocities[:, 0], label='Angular Velocity Theta', color='orange')
         plt.xlabel('Time Step')
-        plt.ylabel('Action_values')
+        plt.ylabel('Angular Velocity Theta (rad/s)')
+        plt.legend()
+        plt.grid()
+
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, angular_velocities[:, 1], label='Angular Velocity Phi', color='orange')
+        plt.xlabel('Time Step')
+        plt.ylabel('Angular Velocity Phi (rad/s)')
+        plt.legend()
+        plt.grid()
+
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, angular_velocities[:, 2], label='Angular Velocity Psi', color='orange')
+        plt.xlabel('Time Step')
+        plt.ylabel('Angular Velocity Psi (rad/s)')
+        plt.legend()
+        plt.grid()
+
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, displacements[:, 0], label='Displacement X', color='green')
+        plt.xlabel('Time Step')
+        plt.ylabel('Displacement X (m)')
+        plt.legend()
+        plt.grid()
+
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, displacements[:, 1], label='Displacement Y', color='green')
+        plt.xlabel('Time Step')
+        plt.ylabel('Displacement Y (m)')
+        plt.legend()
+        plt.grid()
+
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, displacements[:, 2], label='Displacement Z', color='green')
+        plt.xlabel('Time Step')
+        plt.ylabel('Displacement Z (m)')
+        plt.legend()
+        plt.grid()
+
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, fixed_box_velocities[:, 0], label='Fixed_box_values X', color='blue')
+        plt.xlabel('Time Step')
+        plt.ylabel('Fixed_box_values X (m/s)')
+        plt.legend()
+        plt.grid()
+
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, fixed_box_velocities[:, 1], label='Fixed_box_values Y', color='blue')
+        plt.xlabel('Time Step')
+        plt.ylabel('Fixed_box_values Y (m/s)')
+        plt.legend()
+        plt.grid()
+
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, fixed_box_velocities[:, 2], label='Fixed_box_values Z', color='blue')
+        plt.xlabel('Time Step')
+        plt.ylabel('Fixed_box_values Z (m/s)')
+        plt.legend()
+        plt.grid()
+
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, action_values, label='Risk value', color='red')
+        plt.xlabel('Time Step')
+        plt.ylabel('Risk value')
         plt.legend()
         plt.grid()
 
