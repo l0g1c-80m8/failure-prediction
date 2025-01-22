@@ -12,6 +12,7 @@ build/
 develop-eggs/
 dist/
 downloads/
+wandb/
 dataset_pool/
 ignore_scripts/
 openvla_runs/
@@ -174,7 +175,7 @@ code/simulation/data
 code/simulation/*/*.png
 code/simulation/*/*.npy
 code/simulation/*/*.txt
-
+**/*.tfrecord-*-of-*
 
 # ignore vscode files
 .vscode/settings.json

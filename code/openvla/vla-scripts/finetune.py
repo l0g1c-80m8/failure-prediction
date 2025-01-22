@@ -222,6 +222,8 @@ def finetune(cfg: FinetuneConfig) -> None:
     )
     
     print("Dataset length:", vla_dataset.dataset_length)
+    print(vla_dataset.dataset.element_spec)  # Check the structure of the dataset
+
     
     for i,x in enumerate(vla_dataset.dataset):
         print(x)
