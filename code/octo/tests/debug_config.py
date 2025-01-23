@@ -21,6 +21,7 @@ def update_config(config: ConfigDict, **kwargs):
 
 
 def get_config():
+    # print("debug_config.py!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
     base_config = get_base_config("dummy")
     del base_config["dataset_kwargs"]["oxe_kwargs"]
     config = update_config(

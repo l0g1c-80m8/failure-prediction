@@ -29,7 +29,8 @@ def get_config(config_string=None):
     action_dim = FieldReference(7)
     # ZEYU
     # action_dim = FieldReference(1)
-    print("octo_pretrain_config.py!!!!!!!!!!!!!!!!!!!!!action_dim", action_dim)
+    # Not executed while running finetune.py
+    # print("octo_pretrain_config.py!!!!!!!!!!!!!!!!!!!!!action_dim", action_dim)
 
     config["model"]["observation_tokenizers"] = {
         "primary": ModuleSpec.create(

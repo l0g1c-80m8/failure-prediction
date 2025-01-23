@@ -356,7 +356,7 @@ def check_config_diff(new_conf: Config, old_conf: Config, silent: bool = False):
         old_conf.to_dict() if isinstance(old_conf, ConfigDict) else old_conf
     )
 
-    # check for missing / new keys
+    # Check for Missing and Extra Keys
     if set(new_conf_flat.keys()) != set(old_conf_flat.keys()) and not silent:
         logging.info(
             "New config contains extra items: %s",
@@ -367,12 +367,29 @@ def check_config_diff(new_conf: Config, old_conf: Config, silent: bool = False):
             set(old_conf_flat.keys()) - set(new_conf_flat.keys()),
         )
 
-    # print differing key values
-    mismatched_keys = {
-        k: (new_conf_flat[k], old_conf_flat[k])
-        for k in new_conf_flat
-        if k in old_conf_flat and new_conf_flat[k] != old_conf_flat[k]
-    }
+    # Check for Value Mismatches
+    # mismatched_keys = {
+    #     k: (new_conf_flat[k], old_conf_flat[k])
+    #     for k in new_conf_flat
+    #     if k in old_conf_flat and new_conf_flat[k] != old_conf_flat[k]
+    # }
+    # Zeyu
+    mismatched_keys = {}
+
+    for k in new_conf_flat:
+        # print("train_utils.py!!!!!!!!!!!!!!!!k", k)
+        # print("train_utils.py!!!!!!!!!!!!!!!!new_conf_flat[k]", new_conf_flat[k])
+        # print("train_utils.py!!!!!!!!!!!!!!!!old_conf_flat[k]", old_conf_flat[k])
+        if k in old_conf_flat and new_conf_flat[k] != old_conf_flat[k]:
+            # Log the difference between the keys
+            # logging.info(f"Key '{k}' has different values:")
+            # logging.info(f"    New value: {new_conf_flat[k]}")
+            # logging.info(f"    Old value: {old_conf_flat[k]}")
+
+            # Add to mismatched keys dictionary
+            mismatched_keys[k] = (new_conf_flat[k], old_conf_flat[k])
+    # print("train_util.py!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!mismatched_keys", mismatched_keys) # {}
+
     if mismatched_keys and not silent:
         logging.info(
             "New config contains keys with new values: %s",
@@ -391,6 +408,7 @@ def merge_params(target_params: Params, pretrained_params: Params) -> Params:
         if k in flat_pretrained_params
         and flat_target_params[k].shape == flat_pretrained_params[k].shape
     ]
+    # Skips keys with shape mismatches
     missing_keys = [k for k in flat_target_params if k not in flat_pretrained_params]
     shape_mismatch_keys = [
         k
@@ -398,6 +416,8 @@ def merge_params(target_params: Params, pretrained_params: Params) -> Params:
         if k in flat_pretrained_params
         and flat_target_params[k].shape != flat_pretrained_params[k].shape
     ]
+    print("train_utils.py!!!!!!!!!!!!!!!!!!!!missing_keys", missing_keys) # missing_keys []
+    print("train_utils.py!!!!!!!!!!!!!!!!!!!!shape_mismatch_keys", shape_mismatch_keys) # shape_mismatch_keys []
 
     for key in keys_to_update:
         logging.debug(f"Param copied from pre-trained: {'.'.join(key)}")
