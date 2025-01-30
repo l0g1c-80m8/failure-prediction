@@ -16,8 +16,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-N_TRAIN_EPISODES = 5
-N_VAL_EPISODES = 10
+N_TRAIN_EPISODES = 1
+N_VAL_EPISODES = 1
 EPISODE_LENGTH = 350  # Number of points in trajectory
 
 # Thresholds for action calculation
@@ -28,11 +28,11 @@ LINEAR_SPEED_THRESHOLD_LOW = 0.05
 ANGULAR_SPEED_THRESHOLD_HIGH = 0.8
 ANGULAR_SPEED_THRESHOLD_LOW = 0.1
 
-RANDOM_EPISODE_TMP = random.randint(0, EPISODE_LENGTH) # 67 #  109
+RANDOM_EPISODE_TMP = [86, 86] #random.randint(0, EPISODE_LENGTH) # 67 86 #  109
 
 # Define different interpolation methods
-def linear_interpolation():
-    return np.linspace(0, 1, num_points)
+def linear_interpolation(first_failure_time_step, failure_time_step_trim):
+    return np.linspace(0, 1, first_failure_time_step - failure_time_step_trim + 1)
 
 def sin_interpolation(first_failure_time_step, failure_time_step_trim):
     x = np.linspace(0, 1, first_failure_time_step - failure_time_step_trim + 1)
@@ -300,7 +300,7 @@ class Projectile(MuJoCoBase):
         # abs(angular_speed) < ANGULAR_SPEED_THRESHOLD_LOW:
         if displacement[2] < DISPLACEMENT_THRESHOLD_LOW:
             # print("Safe")
-            return 0  # Set action to 0
+            return 0.0  # Set action to 0
 
         # Check if any value exceeds the higher thresholds
         # if displacement > DISPLACEMENT_THRESHOLD_HIGH or \
@@ -308,7 +308,7 @@ class Projectile(MuJoCoBase):
         # abs(angular_speed) > ANGULAR_SPEED_THRESHOLD_HIGH:
         if displacement[2] > DISPLACEMENT_THRESHOLD_HIGH:
             # print("Failure")
-            return 1  # Set action to 1
+            return 1.0  # Set action to 1
 
         # If the values fall between thresholds, interpolate a reasonable action
         # Normalize between 0 and 1 based on distance from the lower to upper threshold
@@ -508,6 +508,10 @@ class Projectile(MuJoCoBase):
                     print(f"Episode {i} has invalid or empty 'state': {value}")
                     return False
                 
+                # if i == 124:
+                # if key == 'action':
+                #     print("isinstance(value, np.ndarray)", isinstance(value, np.ndarray))
+                #     print("value.shape", value.shape)
                 if key == 'action' and (not isinstance(value, np.ndarray) or value.shape != (1,)):
                     print(f"Episode {i} has invalid 'action': {value}")
                     return False
@@ -563,6 +567,7 @@ class Projectile(MuJoCoBase):
             print("random_seed_tmp", random_seed_tmp)
             failure_time_step = -1
             first_failure_time_step = -1
+            cube_drop_time = 50
             # Clear position data
             episode_filled_tag = False
 
@@ -581,7 +586,10 @@ class Projectile(MuJoCoBase):
                 # random_seed_tmp = RANDOM_EPISODE_TMP
                 # if overal_step_num > 0:
                 #     random_seed_tmp = random.randint(0, EPISODE_LENGTH)
-                self.reset(RANDOM_EPISODE_TMP if episode_num == 0 else random_seed_tmp)  # Reset simulation
+
+                # self.reset(RANDOM_EPISODE_TMP if episode_num == 0 else random_seed_tmp)  # Reset simulation
+                # DEBUG
+                self.reset(RANDOM_EPISODE_TMP[1])
 
                 episode_failed_tag = False
                 backtracking_steps = 5
@@ -623,8 +631,9 @@ class Projectile(MuJoCoBase):
                     # process pending GUI events, call GLFW callbacks
                     glfw.poll_events()
 
-                    # skip the first 50 steps because the cube is falling from the sky
-                    if step_num >= 50:
+                    # skip the first cube_drop_time steps because the cube is falling from the sky
+                    if step_num >= cube_drop_time:
+                        # print("step_num", step_num)
 
                         state, fixed_box_linear_speed = self.data_collection(cube_body_id, fixed_box_body_id)
                         displacement = [state[0], state[1], state[2]]
@@ -638,9 +647,8 @@ class Projectile(MuJoCoBase):
 
                         action_value = self.calculate_action(displacement, linear_speed, angular_speed)
 
-                        # print("action_value!!!!!!!!!!!!displacement", displacement, action_value)
 
-                        # Historical backtracking for 60 time steps
+                        # Historical backtracking for backtracking_steps time steps
                         # print("episode_filled_tag!!!!!!", episode_filled_tag)
                         if episode_filled_tag:
                             if step_num < (failure_time_step - backtracking_steps):
@@ -659,8 +667,8 @@ class Projectile(MuJoCoBase):
                             self.activate_emergency_stop()
                             episode_failed_tag = True
                             failure_time_step = step_num
-                            # 50 is for avoid counting in the initial falling of the cube
-                            first_failure_time_step = step_num - 50
+                            # cube_drop_time is for avoid counting in the initial falling of the cube
+                            first_failure_time_step = step_num - cube_drop_time + episode_num * (EPISODE_LENGTH - cube_drop_time)
 
                         if not episode_filled_tag:
                             self.episode.append({
@@ -671,6 +679,7 @@ class Projectile(MuJoCoBase):
                             'language_instruction': 'dummy instruction',
                                 })
                             # For plot     
+                            print("action_value!!!!!!!!!!!!step_num - cube_drop_time", step_num - cube_drop_time + episode_num * (EPISODE_LENGTH - cube_drop_time), action_value)
                             displacements.append([state[0], state[1], state[2]])  # Displacement
                             linear_velocities.append([state[3], state[4], state[5]])  # Linear velocity
                             angular_velocities.append([state[6], state[7], state[8]])  # Angular velocity
@@ -680,36 +689,32 @@ class Projectile(MuJoCoBase):
                 print("len(self.episode)", len(self.episode), "episode_filled_tag", episode_filled_tag, "episode_failed_tag", episode_failed_tag, "failure_time_step", failure_time_step)
 
                 failure_time_step -= backtracking_steps
-                # 50 is for avoid counting in the initial falling of the cube
-                failure_time_step_trim = failure_time_step - 50
+                # cube_drop_time is for avoid counting in the initial falling of the cube
+                failure_time_step_trim = failure_time_step - cube_drop_time  + episode_num * (EPISODE_LENGTH - cube_drop_time)
+                # print("episode_num", episode_num)
+                # print("N_EPISODES", N_EPISODES)
                 print("first_failure_time_step", first_failure_time_step)
                 print("failure_time_step_trim", failure_time_step_trim)
+                print("self.episode[failure_time_step_trim-1]['action']", self.episode[failure_time_step_trim-1]['action'])
+                print("self.episode[failure_time_step_trim]['action']", self.episode[failure_time_step_trim]['action'])
                 if episode_failed_tag:
-                    self.episode[failure_time_step_trim]['action'] = np.asarray([1], dtype=np.float32)
+                    self.episode[failure_time_step_trim]['action'] = np.asarray([1.0], dtype=np.float32)
                     action_values[failure_time_step_trim] = 1
-                    # for idx in range(failure_time_step_trim, first_failure_time_step):
-                    #     # print("idx", idx)
-                    #     self.episode[idx]['action'] = np.asarray([1], dtype=np.float32)
-                    #     action_values[idx] = 1   
-                    # TODO
-                    # displacements.append(state[0])  # Displacement
-                    # linear_velocities.append(state[3])  # Linear velocity
-                    # angular_velocities.append(state[6])  # Angular velocity
+                    for idx in range(failure_time_step_trim, first_failure_time_step):
+                        # print("idx", idx)
+                        self.episode[idx]['action'] = np.asarray([1.0], dtype=np.float32)
+                        action_values[idx] = 1  
                 elif episode_filled_tag: # if not failed, the time step to apply e-stop is safe, backtracking over
-                    self.episode[failure_time_step_trim]['action'] = np.asarray([0], dtype=np.float32)
+                    self.episode[failure_time_step_trim]['action'] = np.asarray([0.0], dtype=np.float32)
                     action_values[failure_time_step_trim] = 0
-                    # TODO
-                    # displacements.append(state[0])  # Displacement
-                    # linear_velocities.append(state[3])  # Linear velocity
-                    # angular_velocities.append(state[6])  # Angular velocity
 
                     # Interpolate values from 0 to 1 for latest failure_time_step to first_failure_time_step
-                    # interpolated_values = sin_interpolation(first_failure_time_step, failure_time_step_trim)
-
+                    interpolated_values = linear_interpolation(first_failure_time_step, failure_time_step_trim)
                     # Update the "action" key for the dictionaries between i and k
-                    # for idx, value in enumerate(interpolated_values, start=failure_time_step_trim):
-                    #     self.episode[idx]["action"] = value
-                    #     action_values[idx] = value
+                    for idx, value in enumerate(interpolated_values, start=failure_time_step_trim):
+                        # print("value", value)
+                        self.episode[idx]["action"] = np.asarray([value], dtype=np.float32)
+                        action_values[idx] = value
                     break
             
             self.validate_episode(self.episode)
@@ -883,8 +888,8 @@ def main():
     os.makedirs('data/train', exist_ok=True)
     os.makedirs('data/val', exist_ok=True)
 
-    sim = Projectile(xml_path, traj_path, initial_delay=0.5)
-    sim.reset(RANDOM_EPISODE_TMP)
+    sim = Projectile(xml_path, traj_path, initial_delay=2)
+    sim.reset(RANDOM_EPISODE_TMP[0])
     sim.simulate(sys.argv[1])
 
 
