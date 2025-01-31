@@ -16,8 +16,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-N_TRAIN_EPISODES = 1
-N_VAL_EPISODES = 1
+N_TRAIN_EPISODES = 20
+N_VAL_EPISODES = 20
 EPISODE_LENGTH = 350  # Number of points in trajectory
 
 # Thresholds for action calculation
@@ -28,7 +28,7 @@ LINEAR_SPEED_THRESHOLD_LOW = 0.05
 ANGULAR_SPEED_THRESHOLD_HIGH = 0.8
 ANGULAR_SPEED_THRESHOLD_LOW = 0.1
 
-RANDOM_EPISODE_TMP = [86, 86] #random.randint(0, EPISODE_LENGTH) # 67 86 #  109
+RANDOM_EPISODE_TMP = random.randint(0, EPISODE_LENGTH) # 67 86 #  109
 
 # Define different interpolation methods
 def linear_interpolation(first_failure_time_step, failure_time_step_trim):
@@ -587,9 +587,9 @@ class Projectile(MuJoCoBase):
                 # if overal_step_num > 0:
                 #     random_seed_tmp = random.randint(0, EPISODE_LENGTH)
 
-                # self.reset(RANDOM_EPISODE_TMP if episode_num == 0 else random_seed_tmp)  # Reset simulation
+                self.reset(RANDOM_EPISODE_TMP if episode_num == 0 else random_seed_tmp)  # Reset simulation
                 # DEBUG
-                self.reset(RANDOM_EPISODE_TMP[1])
+                # self.reset(RANDOM_EPISODE_TMP[1])
 
                 episode_failed_tag = False
                 backtracking_steps = 5
@@ -704,7 +704,7 @@ class Projectile(MuJoCoBase):
                         # print("idx", idx)
                         self.episode[idx]['action'] = np.asarray([1.0], dtype=np.float32)
                         action_values[idx] = 1  
-                elif episode_filled_tag: # if not failed, the time step to apply e-stop is safe, backtracking over
+                elif episode_filled_tag and first_failure_time_step != -1: # if not failed, the time step to apply e-stop is safe, backtracking over
                     self.episode[failure_time_step_trim]['action'] = np.asarray([0.0], dtype=np.float32)
                     action_values[failure_time_step_trim] = 0
 
@@ -718,12 +718,12 @@ class Projectile(MuJoCoBase):
                     break
             
             self.validate_episode(self.episode)
-            # if dataset == "train":
-            #     print("Generating train examples...")
-            #     np.save(f'data/train/episode_{episode_num}.npy', self.episode)
-            # elif dataset == "val":
-            #     print("Generating val examples...")
-            #     np.save(f'data/val/episode_{episode_num}.npy', self.episode)
+            if dataset == "train":
+                print("Generating train examples...")
+                np.save(f'demo/data/train/episode_{episode_num}.npy', self.episode)
+            elif dataset == "val":
+                print("Generating val examples...")
+                np.save(f'demo/data/val/episode_{episode_num}.npy', self.episode)
 
         # Plot after simulation
 
@@ -731,7 +731,7 @@ class Projectile(MuJoCoBase):
         writer.close()
         top_camera_writer.close()
         glfw.terminate()
-        self.save_trajectory()
+        # self.save_trajectory()
         self.plot_metrics(linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities)
 
 
@@ -885,11 +885,11 @@ def main():
     xml_path = "./model/universal_robots_ur5e/test_scene.xml"
     traj_path = "../ur5-scripts/traj.txt"  # Adjust path as needed
 
-    os.makedirs('data/train', exist_ok=True)
-    os.makedirs('data/val', exist_ok=True)
+    os.makedirs('demo/data/train', exist_ok=True)
+    os.makedirs('demo/data/val', exist_ok=True)
 
     sim = Projectile(xml_path, traj_path, initial_delay=2)
-    sim.reset(RANDOM_EPISODE_TMP[0])
+    sim.reset(RANDOM_EPISODE_TMP)
     sim.simulate(sys.argv[1])
 
 
