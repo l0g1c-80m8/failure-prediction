@@ -89,7 +89,8 @@ def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size
     
     return train_loader, val_loader
 
-def train_model(model, train_loader, val_loader, model_name, num_epochs=50, learning_rate=0.001):
+def train_model(model, train_loader, val_loader, model_name, num_epochs=50, 
+              warmup_epochs=10, initial_lr=0.01, min_lr=1e-6):
     """Train the model and validate periodically with progress tracking and logging."""
     # Initialize wandb
     wandb.init(
@@ -98,7 +99,9 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50, lear
         config={
             "architecture": model_name,
             "epochs": num_epochs,
-            "learning_rate": learning_rate,
+            "warmup_epochs": warmup_epochs,
+            "initial_lr": initial_lr,
+            "min_lr": min_lr,
             "batch_size": train_loader.batch_size,
             "window_size": train_loader.dataset.window_size,
             "stride": train_loader.dataset.stride
@@ -107,17 +110,33 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50, lear
     
     criterion = nn.MSELoss()
     optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
-    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer,
-        T_0=100,  # Adjust this for different warm restart periods
-        T_mult=2,  # Adjust this to change how the period grows
-        eta_min=1e-6  # Minimum learning rate
-    )
+    # scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
+    #     optimizer,
+    #     T_0=100,  # Adjust this for different warm restart periods
+    #     T_mult=2,  # Adjust this to change how the period grows
+    #     eta_min=1e-6  # Minimum learning rate
+    # )
+    # Compute total steps for warmup and decay
+    n_steps_per_epoch = len(train_loader)
+    n_warmup_steps = warmup_epochs * n_steps_per_epoch
+    n_total_steps = num_epochs * n_steps_per_epoch
+    
+    def get_lr(step):
+        if step < n_warmup_steps:
+            # Linear warmup
+            return min_lr + (initial_lr - min_lr) * (step / n_warmup_steps)
+        else:
+            # Cosine decay
+            decay_steps = n_total_steps - n_warmup_steps
+            decay_step = step - n_warmup_steps
+            cosine_decay = 0.5 * (1 + np.cos(np.pi * decay_step / decay_steps))
+            return min_lr + (initial_lr - min_lr) * cosine_decay
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     
     best_val_loss = float('inf')
+    global_step = 0
     
     # Create progress bar for epochs
     epoch_pbar = tqdm(range(num_epochs), desc="Training Progress")
@@ -134,14 +153,21 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50, lear
             states = batch['states'].to(device)
             actions = batch['action'].to(device)
             
+            # Update learning rate
+            current_lr = get_lr(global_step)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = current_lr
+
             optimizer.zero_grad()
             outputs = model(states)
             loss = criterion(outputs, actions)
             
             loss.backward()
             optimizer.step()
+            # scheduler.step()  # Step the scheduler after each optimization step
             
             train_loss += loss.item()
+            global_step += 1
             
             # Update training progress bar
             train_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
@@ -186,7 +212,8 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50, lear
         # Update epoch progress bar
         epoch_pbar.set_postfix({
             'train_loss': f'{avg_train_loss:.4f}',
-            'val_loss': f'{avg_val_loss:.4f}'
+            'val_loss': f'{avg_val_loss:.4f}',
+            'lr': f'{current_lr:.6f}'
         })
     
     wandb.finish()
@@ -241,7 +268,10 @@ if __name__ == "__main__":
     for name, model in models.items():
         print(f"\nTraining {name}")
         # Train the model
-        train_model(model, train_loader, val_loader, name, num_epochs=1000)
+        train_model(model, train_loader, val_loader, name, num_epochs=1000,
+                    warmup_epochs=10,
+                    initial_lr=0.01,
+                    min_lr=1e-6)
         
         # Evaluate on validation set
         val_mse = evaluate_model(model, val_loader, name)
