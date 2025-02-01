@@ -16,9 +16,9 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-N_TRAIN_EPISODES = 20
-N_VAL_EPISODES = 20
-EPISODE_LENGTH = 350  # Number of points in trajectory
+N_TRAIN_EPISODES = 1
+N_VAL_EPISODES = 1
+EPISODE_LENGTH = 60  # Number of points in trajectory
 
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_HIGH = 0.01
@@ -245,7 +245,8 @@ class Projectile(MuJoCoBase):
 
 
         # Calculate linear and angular speeds of `fixed_box`
-        fixed_box_lin_vel = self.data.qvel[self.model.body_jntadr[fixed_box_body_id]:self.model.body_jntadr[fixed_box_body_id]+3]
+        fixed_box_lin_vel = self.data.cvel[fixed_box_body_id].reshape((6,))[:3]
+        print("fixed_box_lin_vel!!!!!!!!!!!!!!!!!!!!!!", fixed_box_lin_vel)
         # fixed_box_linear_speed = np.linalg.norm(fixed_box_lin_vel)
         
         # cube_linear_speed = np.linalg.norm(cube_lin_vel)
@@ -546,12 +547,6 @@ class Projectile(MuJoCoBase):
         fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
         # self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [0.4, 0.45, 0.6]
 
-        # Initialize lists to store metrics
-        linear_velocities = []
-        angular_velocities = []
-        displacements = []
-        action_values = []
-        fixed_box_velocities = []
         self.positions = []
         self.episode = []  # Reset episode data for each new episode
 
@@ -571,7 +566,17 @@ class Projectile(MuJoCoBase):
             # Clear position data
             episode_filled_tag = False
 
+            # Initialize lists to store metrics
+            linear_velocities = []
+            angular_velocities = []
+            displacements = []
+            action_values = []
+            fixed_box_velocities = []
+
             for overal_step_num in range(EPISODE_LENGTH):
+
+                episode_failed_tag = False
+                backtracking_steps = 5
 
                 # Load the 'home' keyframe for initial position
                 keyframe_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_KEY, 'home')
@@ -590,9 +595,6 @@ class Projectile(MuJoCoBase):
                 self.reset(RANDOM_EPISODE_TMP if episode_num == 0 else random_seed_tmp)  # Reset simulation
                 # DEBUG
                 # self.reset(RANDOM_EPISODE_TMP[1])
-
-                episode_failed_tag = False
-                backtracking_steps = 5
 
                 for step_num in range(EPISODE_LENGTH):
 
@@ -668,7 +670,7 @@ class Projectile(MuJoCoBase):
                             episode_failed_tag = True
                             failure_time_step = step_num
                             # cube_drop_time is for avoid counting in the initial falling of the cube
-                            first_failure_time_step = step_num - cube_drop_time + episode_num * (EPISODE_LENGTH - cube_drop_time)
+                            first_failure_time_step = step_num - cube_drop_time # + episode_num * (EPISODE_LENGTH - cube_drop_time)
 
                         if not episode_filled_tag:
                             self.episode.append({
@@ -679,7 +681,7 @@ class Projectile(MuJoCoBase):
                             'language_instruction': 'dummy instruction',
                                 })
                             # For plot     
-                            print("action_value!!!!!!!!!!!!step_num - cube_drop_time", step_num - cube_drop_time + episode_num * (EPISODE_LENGTH - cube_drop_time), action_value)
+                            print("action_value!!!!!!!!!!!!step_num - cube_drop_time", step_num - cube_drop_time, action_value) # + episode_num * (EPISODE_LENGTH - cube_drop_time), action_value)
                             displacements.append([state[0], state[1], state[2]])  # Displacement
                             linear_velocities.append([state[3], state[4], state[5]])  # Linear velocity
                             angular_velocities.append([state[6], state[7], state[8]])  # Angular velocity
@@ -688,23 +690,23 @@ class Projectile(MuJoCoBase):
                 episode_filled_tag = True
                 print("len(self.episode)", len(self.episode), "episode_filled_tag", episode_filled_tag, "episode_failed_tag", episode_failed_tag, "failure_time_step", failure_time_step)
 
-                failure_time_step -= backtracking_steps
-                # cube_drop_time is for avoid counting in the initial falling of the cube
-                failure_time_step_trim = failure_time_step - cube_drop_time  + episode_num * (EPISODE_LENGTH - cube_drop_time)
-                # print("episode_num", episode_num)
-                # print("N_EPISODES", N_EPISODES)
-                print("first_failure_time_step", first_failure_time_step)
-                print("failure_time_step_trim", failure_time_step_trim)
-                print("self.episode[failure_time_step_trim-1]['action']", self.episode[failure_time_step_trim-1]['action'])
-                print("self.episode[failure_time_step_trim]['action']", self.episode[failure_time_step_trim]['action'])
                 if episode_failed_tag:
+                    failure_time_step -= backtracking_steps
+                    # cube_drop_time is for avoid counting in the initial falling of the cube
+                    failure_time_step_trim = failure_time_step - cube_drop_time #  + episode_num * (EPISODE_LENGTH - cube_drop_time)
+                    # print("episode_num", episode_num)
+                    # print("N_EPISODES", N_EPISODES)
+                    print("first_failure_time_step", first_failure_time_step)
+                    print("failure_time_step_trim", failure_time_step_trim)
+                    print("self.episode[failure_time_step_trim-1]['action']", self.episode[failure_time_step_trim-1]['action'])
+                    print("self.episode[failure_time_step_trim]['action']", self.episode[failure_time_step_trim]['action'])
                     self.episode[failure_time_step_trim]['action'] = np.asarray([1.0], dtype=np.float32)
                     action_values[failure_time_step_trim] = 1
                     for idx in range(failure_time_step_trim, first_failure_time_step):
                         # print("idx", idx)
                         self.episode[idx]['action'] = np.asarray([1.0], dtype=np.float32)
                         action_values[idx] = 1  
-                elif episode_filled_tag and first_failure_time_step != -1: # if not failed, the time step to apply e-stop is safe, backtracking over
+                elif episode_filled_tag and first_failure_time_step != -1: # if not failed after backtracking, the time step to apply e-stop is safe, backtracking over
                     self.episode[failure_time_step_trim]['action'] = np.asarray([0.0], dtype=np.float32)
                     action_values[failure_time_step_trim] = 0
 
@@ -716,6 +718,8 @@ class Projectile(MuJoCoBase):
                         self.episode[idx]["action"] = np.asarray([value], dtype=np.float32)
                         action_values[idx] = value
                     break
+                elif episode_filled_tag and first_failure_time_step == -1:
+                    break
             
             self.validate_episode(self.episode)
             if dataset == "train":
@@ -725,14 +729,14 @@ class Projectile(MuJoCoBase):
                 print("Generating val examples...")
                 np.save(f'demo/data/val/episode_{episode_num}.npy', self.episode)
 
-        # Plot after simulation
+            # Plot after simulation
+            self.plot_metrics(linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities, episode_num)
 
 
         writer.close()
         top_camera_writer.close()
         glfw.terminate()
         # self.save_trajectory()
-        self.plot_metrics(linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities)
 
 
     def save_trajectory(self):
@@ -755,12 +759,12 @@ class Projectile(MuJoCoBase):
             # plt.savefig('cube_trajectory.png')
             # plt.show()
 
-    def plot_metrics(self, linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities):
+    def plot_metrics(self, linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities, episode_num):
         """
         Plot linear velocity, angular velocity, and displacement over time.
         """
         time_steps = range(len(linear_velocities))
-        # print("range", range(len(linear_velocities)), range(len(angular_velocities)), range(len(displacements)), range(len(action_values)))  # 800
+        print("range", range(len(linear_velocities)), range(len(angular_velocities)), range(len(displacements)), range(len(action_values)))  # 800
 
         # Convert to NumPy array
         linear_velocities = np.array(linear_velocities)
@@ -879,7 +883,7 @@ class Projectile(MuJoCoBase):
 
         plt.tight_layout()
         # plt.show()
-        plt.savefig('./demo/cube_trajectory.png')
+        plt.savefig('./demo/cube_trajectory_{}.png'.format(episode_num))
 
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene.xml"
