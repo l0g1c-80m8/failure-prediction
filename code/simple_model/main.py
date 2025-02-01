@@ -89,6 +89,25 @@ def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size
     
     return train_loader, val_loader
 
+def compute_metrics(outputs, targets):
+    """Compute MSE and normalized MSE metrics."""
+    mse = nn.MSELoss()(outputs, targets).item()
+    
+    # Compute normalized MSE (scale-invariant accuracy metric)
+    # Normalized by the variance of the target values
+    target_var = torch.var(targets).item()
+    nmse = mse / (target_var + 1e-8)  # Add small epsilon to avoid division by zero
+    
+    # Convert MSE to "accuracy" metric (1 - normalized error)
+    # Clip to [0, 1] range for interpretability
+    accuracy = max(0.0, min(1.0, 1.0 - nmse))
+    
+    return {
+        'mse': mse,
+        'nmse': nmse,
+        'accuracy': accuracy
+    }
+
 def train_model(model, train_loader, val_loader, model_name, num_epochs=50, 
               warmup_epochs=10, initial_lr=0.01, min_lr=1e-6):
     """Train the model and validate periodically with progress tracking and logging."""
@@ -135,7 +154,7 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     
-    best_val_loss = float('inf')
+    best_val_accuracy = 0.0
     global_step = 0
     
     # Create progress bar for epochs
@@ -144,7 +163,12 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
     for epoch in epoch_pbar:
         # Training phase
         model.train()
-        train_loss = 0
+        train_metrics = {
+            'loss': 0.0,
+            'mse': 0.0,
+            'nmse': 0.0,
+            'accuracy': 0.0
+        }
         
         # Create progress bar for training batches
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]", leave=False)
@@ -166,17 +190,36 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
             optimizer.step()
             # scheduler.step()  # Step the scheduler after each optimization step
             
-            train_loss += loss.item()
+            # Compute batch metrics
+            batch_metrics = compute_metrics(outputs, actions)
+            
+            # Update running metrics
+            train_metrics['loss'] += loss.item()
+            train_metrics['mse'] += batch_metrics['mse']
+            train_metrics['nmse'] += batch_metrics['nmse']
+            train_metrics['accuracy'] += batch_metrics['accuracy']
+            
             global_step += 1
             
             # Update training progress bar
-            train_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
+            train_pbar.set_postfix({
+                'loss': f"{loss.item():.4f}",
+                'acc': f"{batch_metrics['accuracy']:.4f}",
+                'lr': f"{current_lr:.6f}"
+            })
         
-        avg_train_loss = train_loss / len(train_loader)
+        # Compute average training metrics
+        for key in train_metrics:
+            train_metrics[key] /= len(train_loader)
         
         # Validation phase
         model.eval()
-        val_loss = 0
+        val_metrics = {
+            'loss': 0.0,
+            'mse': 0.0,
+            'nmse': 0.0,
+            'accuracy': 0.0
+        }
         
         # Create progress bar for validation batches
         val_pbar = tqdm(val_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Val]", leave=False)
@@ -188,32 +231,50 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
                 
                 outputs = model(states)
                 loss = criterion(outputs, actions)
-                val_loss += loss.item()
                 
-                # Update validation progress bar
-                val_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
+                # Compute batch metrics
+                batch_metrics = compute_metrics(outputs, actions)
+                
+                # Update running metrics
+                val_metrics['loss'] += loss.item()
+                val_metrics['mse'] += batch_metrics['mse']
+                val_metrics['nmse'] += batch_metrics['nmse']
+                val_metrics['accuracy'] += batch_metrics['accuracy']
+                
+                val_pbar.set_postfix({
+                    'loss': f"{loss.item():.4f}",
+                    'acc': f"{batch_metrics['accuracy']:.4f}"
+                })
         
-        avg_val_loss = val_loss / len(val_loader)
+        # Compute average validation metrics
+        for key in val_metrics:
+            val_metrics[key] /= len(val_loader)
         
         # Log metrics to wandb
         wandb.log({
             'epoch': epoch + 1,
-            'train_loss': avg_train_loss,
-            'val_loss': avg_val_loss,
-            'learning_rate': optimizer.param_groups[0]['lr']
+            'learning_rate': current_lr,
+            'train_loss': train_metrics['loss'],
+            'train_mse': train_metrics['mse'],
+            'train_nmse': train_metrics['nmse'],
+            'train_accuracy': train_metrics['accuracy'],
+            'val_loss': val_metrics['loss'],
+            'val_mse': val_metrics['mse'],
+            'val_nmse': val_metrics['nmse'],
+            'val_accuracy': val_metrics['accuracy']
         })
         
-        # Save best model
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
+        # Save best model based on validation accuracy
+        if val_metrics['accuracy'] > best_val_accuracy:
+            best_val_accuracy = val_metrics['accuracy']
             torch.save(model.state_dict(), f'best_model_{model_name}.pth')
             wandb.save(f'best_model_{model_name}.pth')
         
         # Update epoch progress bar
         epoch_pbar.set_postfix({
-            'train_loss': f'{avg_train_loss:.4f}',
-            'val_loss': f'{avg_val_loss:.4f}',
-            'lr': f'{current_lr:.6f}'
+            'train_acc': f"{train_metrics['accuracy']:.4f}",
+            'val_acc': f"{val_metrics['accuracy']:.4f}",
+            'lr': f"{current_lr:.6f}"
         })
     
     wandb.finish()
