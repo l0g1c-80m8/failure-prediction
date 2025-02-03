@@ -170,14 +170,14 @@
             <freejoint/>
             <geom name="cube1_geom" type="box" size="0.02 0.02 0.02" material="cube_color" mass="0.05"/>
         </body>
-        <body name="cube2" pos="0.55 0.35 0.6">
+        <!-- <body name="cube2" pos="0.55 0.35 0.6">
             <freejoint/>
             <geom name="cube2_geom" type="box" size="0.02 0.02 0.02" material="cube_color" mass="0.05"/>
-        </body>
-        <body name="cube3" pos="0.65 0.45 0.6">
+        </body> -->
+        <!-- <body name="cube3" pos="0.65 0.45 0.6">
             <freejoint/>
             <geom name="cube3_geom" type="box" size="0.02 0.02 0.02" material="cube_color" mass="0.05"/>
-        </body>
+        </body> -->
     </worldbody>
 
     <!-- Actuators -->
