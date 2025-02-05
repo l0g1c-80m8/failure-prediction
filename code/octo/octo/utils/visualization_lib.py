@@ -68,6 +68,7 @@ BASE_METRIC_KEYS = {
     # "grip_timestep_early": ("timestep_to_grip", ("is_first_grip",)),
 }
 
+# ZEYU
 ZEYU_BASE_METRIC_KEYS = {
     "mse": ("mse", tuple()),  # What is the MSE
     ####
@@ -194,9 +195,10 @@ class Visualizer:
                 v: names of conditions to mask by
         """
 
-        # metric_keys = metric_keys or self.metric_keys or BASE_METRIC_KEYS
+        metric_keys = metric_keys or self.metric_keys or BASE_METRIC_KEYS
         # print("visualization_lib.py!!!!!!!!!!!!!!!!!!!!!self.metric_keys", self.metric_keys)  # none
-        metric_keys = metric_keys or self.metric_keys or ZEYU_BASE_METRIC_KEYS
+        # ZEYU
+        # metric_keys = metric_keys or self.metric_keys or ZEYU_BASE_METRIC_KEYS
         sub_conditions = sub_conditions or self.sub_conditions or BASE_SUB_CONDITIONS
 
         all_info = {
@@ -496,7 +498,7 @@ def add_manipulation_metrics(info):
         return {
             **_gripper_info(**kwargs),
             **_mse_info(**kwargs),
-            # **_xyz_info(**kwargs),  # zeyu comment
+            **_xyz_info(**kwargs),  # ZEYU comment
             **_condition_info(**kwargs),
             **(_gripping_early_metrics(**kwargs) if "proprio" in kwargs else {}),
         }

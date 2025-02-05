@@ -26,10 +26,11 @@ def update_config(config, **kwargs):
 def get_config(config_string=None):
     config = get_base_config(config_string)
 
-    # action_dim = FieldReference(7)
+    action_dim = FieldReference(7)
     # ZEYU
-    action_dim = FieldReference(1)
-    print("octo_pretrain_config.py!!!!!!!!!!!!!!!!!!!!!action_dim", action_dim)
+    # action_dim = FieldReference(1)
+    # Not executed while running finetune.py
+    # print("octo_pretrain_config.py!!!!!!!!!!!!!!!!!!!!!action_dim", action_dim)
 
     config["model"]["observation_tokenizers"] = {
         "primary": ModuleSpec.create(

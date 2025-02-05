@@ -39,5 +39,10 @@ The scripts control the UR5s using the [python-urx](https://github.com/SintefMan
 sudo docker run -it --device /dev/tty1 --device /dev/input --privileged -v /etc/localtime:/etc/localtime:ro -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=$DISPLAY --shm-size 8g --device /dev/tty1 --device /dev/input --device-cgroup-rule="c 81:* rmw" -e GDK_SCALE -e GDK_DPI_SCALE --network host  --ipc=host  -v /home/:/home --name {container_name} {image_id}
 ```
 
+**`zeyu_get_set_robot_replay.py`**
+- Replay a pick-and-place trajectory
+
+**`get_set_joint_angle.py`**
+- Control robot with keyboard
 
 
