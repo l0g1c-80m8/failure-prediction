@@ -8,6 +8,7 @@ import os
 from tqdm import tqdm
 import wandb
 from datetime import datetime
+import matplotlib.pyplot as plt
 
 from resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
 
@@ -31,14 +32,19 @@ class RobotTrajectoryDataset(Dataset):
             for start_idx in range(0, n_frames - window_size + 1, stride):
                 end_idx = start_idx + window_size
                 self.window_indices.append((file_idx, start_idx, end_idx))
+        
+        # Pre-load all episodes into memory
+        self.episodes = {}
+        for file_idx, episode_file in enumerate(self.episode_files):
+            episode_path = os.path.join(data_dir, episode_file)
+            self.episodes[file_idx] = np.load(episode_path, allow_pickle=True)
 
     def __len__(self):
         return len(self.window_indices)
 
     def __getitem__(self, idx):
         file_idx, start_idx, end_idx = self.window_indices[idx]
-        episode_path = os.path.join(self.data_dir, self.episode_files[file_idx])
-        episode_data = np.load(episode_path, allow_pickle=True)
+        episode_data = self.episodes[file_idx]  # Get from memory instead of disk
         
         # Extract window data
         window_data = episode_data[start_idx:end_idx]
@@ -47,11 +53,12 @@ class RobotTrajectoryDataset(Dataset):
         states = np.stack([frame['state'] for frame in window_data])
         
         # Get the action for the last timestep
-        action = window_data[-1]['action']
+        # Convert to numpy array first, then to tensor
+        action = np.array(window_data[-1]['action'], dtype=np.float32)
         
         return {
             'states': torch.FloatTensor(states).transpose(0, 1),  # Transform to (9 x window_size) for 1D convolution
-            'action': torch.FloatTensor([action])  # Single scalar target
+            'action': torch.FloatTensor(action)  # Convert numpy array to tensor
         }
 
 def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size=32, num_workers=4):
@@ -93,19 +100,8 @@ def compute_metrics(outputs, targets):
     """Compute MSE and normalized MSE metrics."""
     mse = nn.MSELoss()(outputs, targets).item()
     
-    # Compute normalized MSE (scale-invariant accuracy metric)
-    # Normalized by the variance of the target values
-    target_var = torch.var(targets).item()
-    nmse = mse / (target_var + 1e-8)  # Add small epsilon to avoid division by zero
-    
-    # Convert MSE to "accuracy" metric (1 - normalized error)
-    # Clip to [0, 1] range for interpretability
-    accuracy = max(0.0, min(1.0, 1.0 - nmse))
-    
     return {
-        'mse': mse,
-        'nmse': nmse,
-        'accuracy': accuracy
+        'mse': mse
     }
 
 def train_model(model, train_loader, val_loader, model_name, num_epochs=50, 
@@ -129,12 +125,7 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
     
     criterion = nn.MSELoss()
     optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
-    # scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
-    #     optimizer,
-    #     T_0=100,  # Adjust this for different warm restart periods
-    #     T_mult=2,  # Adjust this to change how the period grows
-    #     eta_min=1e-6  # Minimum learning rate
-    # )
+    
     # Compute total steps for warmup and decay
     n_steps_per_epoch = len(train_loader)
     n_warmup_steps = warmup_epochs * n_steps_per_epoch
@@ -154,7 +145,7 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     
-    best_val_accuracy = 0.0
+    best_val_mse = float('inf')
     global_step = 0
     
     # Create progress bar for epochs
@@ -165,9 +156,7 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
         model.train()
         train_metrics = {
             'loss': 0.0,
-            'mse': 0.0,
-            'nmse': 0.0,
-            'accuracy': 0.0
+            'mse': 0.0
         }
         
         # Create progress bar for training batches
@@ -196,15 +185,12 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
             # Update running metrics
             train_metrics['loss'] += loss.item()
             train_metrics['mse'] += batch_metrics['mse']
-            train_metrics['nmse'] += batch_metrics['nmse']
-            train_metrics['accuracy'] += batch_metrics['accuracy']
             
             global_step += 1
             
             # Update training progress bar
             train_pbar.set_postfix({
                 'loss': f"{loss.item():.4f}",
-                'acc': f"{batch_metrics['accuracy']:.4f}",
                 'lr': f"{current_lr:.6f}"
             })
         
@@ -216,11 +202,9 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
         model.eval()
         val_metrics = {
             'loss': 0.0,
-            'mse': 0.0,
-            'nmse': 0.0,
-            'accuracy': 0.0
+            'mse': 0.0
         }
-        
+
         # Create progress bar for validation batches
         val_pbar = tqdm(val_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Val]", leave=False)
         
@@ -231,21 +215,18 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
                 
                 outputs = model(states)
                 loss = criterion(outputs, actions)
-                
+
                 # Compute batch metrics
                 batch_metrics = compute_metrics(outputs, actions)
                 
                 # Update running metrics
                 val_metrics['loss'] += loss.item()
                 val_metrics['mse'] += batch_metrics['mse']
-                val_metrics['nmse'] += batch_metrics['nmse']
-                val_metrics['accuracy'] += batch_metrics['accuracy']
                 
                 val_pbar.set_postfix({
-                    'loss': f"{loss.item():.4f}",
-                    'acc': f"{batch_metrics['accuracy']:.4f}"
+                    'loss': f"{loss.item():.4f}"
                 })
-        
+
         # Compute average validation metrics
         for key in val_metrics:
             val_metrics[key] /= len(val_loader)
@@ -256,24 +237,18 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
             'learning_rate': current_lr,
             'train_loss': train_metrics['loss'],
             'train_mse': train_metrics['mse'],
-            'train_nmse': train_metrics['nmse'],
-            'train_accuracy': train_metrics['accuracy'],
             'val_loss': val_metrics['loss'],
-            'val_mse': val_metrics['mse'],
-            'val_nmse': val_metrics['nmse'],
-            'val_accuracy': val_metrics['accuracy']
+            'val_mse': val_metrics['mse']
         })
         
-        # Save best model based on validation accuracy
-        if val_metrics['accuracy'] > best_val_accuracy:
-            best_val_accuracy = val_metrics['accuracy']
+        # Save best model based on validation mse
+        if val_metrics['mse'] < best_val_mse:
+            best_val_mse = val_metrics['mse']
             torch.save(model.state_dict(), f'best_model_{model_name}.pth')
             wandb.save(f'best_model_{model_name}.pth')
-        
+
         # Update epoch progress bar
         epoch_pbar.set_postfix({
-            'train_acc': f"{train_metrics['accuracy']:.4f}",
-            'val_acc': f"{val_metrics['accuracy']:.4f}",
             'lr': f"{current_lr:.6f}"
         })
     
@@ -311,9 +286,10 @@ if __name__ == "__main__":
     train_loader, val_loader = create_data_loaders(
         train_dir='data/train',
         val_dir='data/val',
-        window_size=2,
-        stride=5,
-        batch_size=32
+        window_size=10,
+        stride=1,
+        batch_size=1024,
+        num_workers=8
     )
     
     # Example of using different ResNet architectures
