@@ -1,5 +1,5 @@
 <mujoco model="ur5e scene">
-  <include file="ur5e_with_gripper_cube.xml"/>
+  <include file="ur5e_with_gripper_cube_tilt.xml"/>
 
   <statistic center="0.3 0 0.4" extent="0.8"/>
 
@@ -11,13 +11,40 @@
 
   <asset>
     <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
-    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+    <!-- Define multiple floor textures -->
+    <texture type="2d" name="groundplane1" builtin="gradient" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
       markrgb="0.8 0.8 0.8" width="300" height="300"/>
-    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <texture type="2d" name="groundplane2" builtin="gradient" mark="cross" rgb1="0.4 0.2 0.3" rgb2="0.3 0.1 0.2"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane3" builtin="gradient" mark="random" rgb1="0.3 0.4 0.2" rgb2="0.2 0.3 0.1"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane4" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane5" builtin="checker" mark="cross" rgb1="0.4 0.2 0.3" rgb2="0.3 0.1 0.2"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane6" builtin="checker" mark="random" rgb1="0.3 0.4 0.2" rgb2="0.2 0.3 0.1"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane7" builtin="flat" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane8" builtin="flat" mark="cross" rgb1="0.4 0.2 0.3" rgb2="0.3 0.1 0.2"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane9" builtin="flat" mark="random" rgb1="0.3 0.4 0.2" rgb2="0.2 0.3 0.1"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    
+    <!-- Define materials for each texture -->
+    <material name="groundplane1" texture="groundplane1" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane2" texture="groundplane2" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane3" texture="groundplane3" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane4" texture="groundplane4" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane5" texture="groundplane5" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane6" texture="groundplane6" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane7" texture="groundplane7" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane8" texture="groundplane8" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane9" texture="groundplane9" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
   </asset>
 
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
-    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
+    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane1"/>
   </worldbody>
 </mujoco>

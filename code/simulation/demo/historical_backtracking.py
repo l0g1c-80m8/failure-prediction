@@ -23,10 +23,6 @@ EPISODE_LENGTH = 300  # Number of points in trajectory
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_HIGH = 0.01
 DISPLACEMENT_THRESHOLD_LOW = 0
-LINEAR_SPEED_THRESHOLD_HIGH = 0.5
-LINEAR_SPEED_THRESHOLD_LOW = 0.05
-ANGULAR_SPEED_THRESHOLD_HIGH = 0.8
-ANGULAR_SPEED_THRESHOLD_LOW = 0.1
 
 RANDOM_EPISODE_TMP = random.randint(0, EPISODE_LENGTH) # 67 86 #  109
 
@@ -117,11 +113,89 @@ class Projectile(MuJoCoBase):
         self.emergency_stop_pos_first_set = False  # Flag to first set the emergency stop pose
         self.current_qpos = None
 
+        # Add floor randomization
+        self.randomize_floor()
+        # Randomize fixed_box and free_cube
+        self.randomize_object_colors()
+
         cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
         fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
         self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [random.uniform(0.35, 0.42), random.uniform(-0.5, -0.35), random.uniform(0.2, 0.35)]
 
         mj.set_mjcb_control(self.controller)
+
+    def randomize_floor(self):
+        """Randomize the floor appearance by changing materials and colors."""
+        # Get floor geom ID
+        floor_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, "floor")
+        
+        # Randomly select floor material
+        materials = ["groundplane1", "groundplane2", "groundplane3", "groundplane4", "groundplane5", "groundplane6", "groundplane7", "groundplane8", "groundplane9"]
+        selected_material = random.choice(materials)
+        material_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_MATERIAL, selected_material)
+        
+        # Apply selected material to floor
+        self.model.geom_matid[floor_id] = material_id
+        
+        # Randomly adjust floor parameters
+        # Random scale for texture repeat
+        texture_scale = random.uniform(3, 7)
+        self.model.mat_texrepeat[material_id] = [texture_scale, texture_scale]
+        
+        # Random reflectance
+        self.model.mat_reflectance[material_id] = random.uniform(0.1, 0.3)
+        
+        # Optional: Add some random noise to the floor color
+        rgb_noise = np.random.uniform(-0.1, 0.1, 3)
+        self.model.mat_rgba[material_id][:3] += rgb_noise
+        self.model.mat_rgba[material_id][:3] = np.clip(self.model.mat_rgba[material_id][:3], 0, 1)
+
+    def generate_random_color(self, base_color=None, variation=0.2):
+        """
+        Generate a random color, optionally based on a base color with variation.
+        
+        Args:
+            base_color (list/array, optional): Base RGB color to vary from. If None, generates completely random color.
+            variation (float): Maximum color variation for each channel (if base_color provided).
+        
+        Returns:
+            list: RGBA color values [r, g, b, 1.0]
+        """
+        if base_color is None:
+            # Generate completely random color
+            color = [
+                random.uniform(0.2, 0.8),  # R
+                random.uniform(0.2, 0.8),  # G
+                random.uniform(0.2, 0.8),  # B
+                1.0  # A
+            ]
+        else:
+            # Vary from base color
+            color = [
+                np.clip(base_color[0] + random.uniform(-variation, variation), 0.0, 1.0),
+                np.clip(base_color[1] + random.uniform(-variation, variation), 0.0, 1.0),
+                np.clip(base_color[2] + random.uniform(-variation, variation), 0.0, 1.0),
+                1.0
+            ]
+        return color
+
+    def randomize_object_colors(self):
+        """Randomize colors for fixed box and free cube"""
+        # Get geom IDs
+        fixed_box_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, "panel")
+        free_cube_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, "sliding_cube")
+        
+        # Original colors (if you want to vary from these)
+        original_box_color = [0.8, 0.2, 0.2]  # Original red color
+        original_cube_color = [0.2, 0.8, 0.2]  # Original green color
+        
+        # Generate new colors
+        box_color = self.generate_random_color(base_color=original_box_color)
+        cube_color = self.generate_random_color(base_color=original_cube_color)
+        
+        # Set new colors
+        self.model.geom_rgba[fixed_box_geom_id] = box_color
+        self.model.geom_rgba[free_cube_geom_id] = cube_color
 
     def activate_emergency_stop(self):
         self.emergency_stop = True
@@ -721,13 +795,15 @@ class Projectile(MuJoCoBase):
                 elif episode_filled_tag and first_failure_time_step == -1:
                     break
             
+            # Validate the completeness
             self.validate_episode(self.episode)
-            if dataset == "train":
-                print("Generating train examples...")
-                np.save(f'demo/data/train/episode_{episode_num}.npy', self.episode)
-            elif dataset == "val":
-                print("Generating val examples...")
-                np.save(f'demo/data/val/episode_{episode_num}.npy', self.episode)
+
+            # if dataset == "train":
+            #     print("Generating train examples...")
+            #     np.save(f'demo/data/train/episode_{episode_num}.npy', self.episode)
+            # elif dataset == "val":
+            #     print("Generating val examples...")
+            #     np.save(f'demo/data/val/episode_{episode_num}.npy', self.episode)
 
             # Plot after simulation
             self.plot_metrics(linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities, episode_num)
