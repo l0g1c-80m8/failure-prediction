@@ -151,35 +151,6 @@ class Projectile(MuJoCoBase):
         self.model.mat_rgba[material_id][:3] += rgb_noise
         self.model.mat_rgba[material_id][:3] = np.clip(self.model.mat_rgba[material_id][:3], 0, 1)
 
-    def generate_random_color(self, base_color=None, variation=0.2):
-        """
-        Generate a random color, optionally based on a base color with variation.
-        
-        Args:
-            base_color (list/array, optional): Base RGB color to vary from. If None, generates completely random color.
-            variation (float): Maximum color variation for each channel (if base_color provided).
-        
-        Returns:
-            list: RGBA color values [r, g, b, 1.0]
-        """
-        if base_color is None:
-            # Generate completely random color
-            color = [
-                random.uniform(0.2, 0.8),  # R
-                random.uniform(0.2, 0.8),  # G
-                random.uniform(0.2, 0.8),  # B
-                1.0  # A
-            ]
-        else:
-            # Vary from base color
-            color = [
-                np.clip(base_color[0] + random.uniform(-variation, variation), 0.0, 1.0),
-                np.clip(base_color[1] + random.uniform(-variation, variation), 0.0, 1.0),
-                np.clip(base_color[2] + random.uniform(-variation, variation), 0.0, 1.0),
-                1.0
-            ]
-        return color
-
 
     def randomize_free_cube(self):
         """Randomize the free cube's size, mass, friction, and other physical properties."""
@@ -189,7 +160,7 @@ class Projectile(MuJoCoBase):
         
         # Randomize cube size (within reasonable bounds)
         base_size = 0.015  # Original size
-        size_variation = random.uniform(0.8, 1.2)  # ±20% variation
+        size_variation = random.uniform(0.8, 3.0)  # n% variation
         new_size = base_size * size_variation
         self.model.geom_size[cube_geom_id] = [new_size, new_size, new_size]
         
@@ -219,7 +190,7 @@ class Projectile(MuJoCoBase):
         z_pos = random.uniform(0.2, 0.35)
         self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [x_pos, y_pos, z_pos]
         
-        # Randomize initial orientation
+        # Randomize initial orientation (uncomment when needed)
         # quat = [random.uniform(-1, 1) for _ in range(4)]
         # quat = quat / np.linalg.norm(quat)  # Normalize quaternion
         # self.data.qpos[self.model.body_jntadr[cube_body_id]+3:self.model.body_jntadr[cube_body_id]+7] = quat
@@ -230,13 +201,9 @@ class Projectile(MuJoCoBase):
         fixed_box_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, "panel")
         free_cube_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, "sliding_cube")
         
-        # Original colors (if you want to vary from these)
-        original_box_color = [0.8, 0.2, 0.2]  # Original red color
-        original_cube_color = [0.2, 0.8, 0.2]  # Original green color
-        
         # Generate new colors
-        box_color = self.generate_random_color(base_color=original_box_color)
-        cube_color = self.generate_random_color(base_color=original_cube_color)
+        box_color = [random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), 1.0]
+        cube_color = np.array([1.0, 1.0, 1.0, 2.0]) - box_color  # [random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), 1.0]
         
         # Set new colors
         self.model.geom_rgba[fixed_box_geom_id] = box_color
@@ -357,54 +324,81 @@ class Projectile(MuJoCoBase):
 
 
     def data_collection(self, cube_body_id, fixed_box_body_id):
-
-        # Calculate linear and angular speeds of `free_cube`
-        cube_lin_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3]
-        cube_ang_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]+3:self.model.body_jntadr[cube_body_id]+6]
-
-
-        # Calculate linear and angular speeds of `fixed_box`
-        fixed_box_lin_vel = self.data.cvel[fixed_box_body_id].reshape((6,))[:3]
-        print("fixed_box_lin_vel!!!!!!!!!!!!!!!!!!!!!!", fixed_box_lin_vel)
-        # fixed_box_linear_speed = np.linalg.norm(fixed_box_lin_vel)
+        """
+        Collect transformation data between adjacent timesteps for both objects.
+        Returns positions, rotations, and relative transforms between timesteps.
+        """
+        # Get current positions and orientations
+        cube_pos = self.data.xpos[cube_body_id].copy()  # 3D position
+        cube_quat = self.data.xquat[cube_body_id].copy()  # Quaternion orientation
+        fixed_box_pos = self.data.xpos[fixed_box_body_id].copy()
+        fixed_box_quat = self.data.xquat[fixed_box_body_id].copy()
         
-        # cube_linear_speed = np.linalg.norm(cube_lin_vel)
-        # cube_angular_speed = np.linalg.norm(cube_ang_vel)
-
-        # Get positions of `free_cube` and `fixed_box`
-        cube_pos = self.data.xpos[cube_body_id]
-        fixed_box_pos = self.data.xpos[fixed_box_body_id]
-
-        # Calculate the relative displacement
-        # relative_displacement = np.linalg.norm(cube_pos - fixed_box_pos)
-        # print("!!!!!!!!!!!!!cube_pos", cube_pos[0], cube_pos[1], cube_pos[2])
-        # print("!!!!!!!!!!!!!fixed_box_pos", fixed_box_pos[0], fixed_box_pos[1], fixed_box_pos[2])
-        # relative_displacement_z = fixed_box_pos[2] - cube_pos[2]
-        relative_displacement = fixed_box_pos - cube_pos
-
-        # Optionally print or log these values
-        fixed_box_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
-        # print("!!!!!!!!!!!!!self.data.xquat[fixed_box_id]", self.data.xquat[fixed_box_id])
-        # print(f"Time: {self.data.time:.2f}s | Linear Speed: {cube_linear_speed:.2f} m/s | Angular Speed: {cube_angular_speed:.2f} rad/s | Relative Displacement: {relative_displacement:.2f} m")
+        # Store velocities
+        cube_lin_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3].copy()
+        cube_ang_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]+3:self.model.body_jntadr[cube_body_id]+6].copy()
+        fixed_box_lin_vel = self.data.cvel[fixed_box_body_id].reshape((6,))[:3].copy()
         
-        # # Calculate the action based on the thresholds and interpolation logic
-        # action_value = self.calculate_action(relative_displacement, cube_linear_speed, cube_angular_speed)
-
-        # # Ensure action is stored as a (1,) tensor, not as a scalar
-        # action_value = np.asarray([action_value], dtype=np.float32)
-
-        # Just for debugging!!!!!!!!!!!!!!!!!!!!!
-        # cube_linear_speed = 0
-        # cube_angular_speed = 0
-
-
-        # print("!!!!!!!!!!!!!relative_displacement", relative_displacement, cube_lin_vel, cube_ang_vel)
-        # Combine displacement, linear speed, and angular speed into a state array
-        state = np.hstack([relative_displacement, cube_lin_vel, cube_ang_vel])
-        # Pad state to 9 values (for compatibility)
-        # state_padded = np.pad(state, (0, 9 - len(state)), 'constant')
-
-        return state, fixed_box_lin_vel
+        # Convert quaternions to rotation matrices (3x3)
+        def quat_to_mat(quat):
+            w, x, y, z = quat
+            return np.array([
+                [1 - 2*y*y - 2*z*z, 2*x*y - 2*w*z, 2*x*z + 2*w*y],
+                [2*x*y + 2*w*z, 1 - 2*x*x - 2*z*z, 2*y*z - 2*w*x],
+                [2*x*z - 2*w*y, 2*y*z + 2*w*x, 1 - 2*x*x - 2*y*y]
+            ])
+        
+        cube_rot = quat_to_mat(cube_quat)
+        fixed_box_rot = quat_to_mat(fixed_box_quat)
+        
+        # If this is not the first frame, calculate transforms between frames
+        if hasattr(self, 'prev_cube_pos'):
+            # Calculate translation vectors (movement since last frame)
+            cube_translation = cube_pos - self.prev_cube_pos
+            fixed_box_translation = fixed_box_pos - self.prev_fixed_box_pos
+            
+            # Calculate rotation matrices between frames
+            # R2 = dR * R1 -> dR = R2 * R1^T
+            cube_rot_delta = cube_rot @ self.prev_cube_rot.T
+            fixed_box_rot_delta = fixed_box_rot @ self.prev_fixed_box_rot.T
+            
+            # Calculate relative transform between cube and fixed box
+            relative_pos = fixed_box_pos - cube_pos
+            relative_rot = fixed_box_rot @ cube_rot.T
+            
+            transform_data = {
+                'cube_translation': cube_translation,
+                'cube_rotation_delta': cube_rot_delta,
+                'fixed_box_translation': fixed_box_translation,
+                'fixed_box_rotation_delta': fixed_box_rot_delta,
+                'relative_position': relative_pos,
+                'relative_rotation': relative_rot
+            }
+        else:
+            # For first frame, set deltas to identity/zero
+            transform_data = {
+                'cube_translation': np.zeros(3),
+                'cube_rotation_delta': np.eye(3),
+                'fixed_box_translation': np.zeros(3),
+                'fixed_box_rotation_delta': np.eye(3),
+                'relative_position': fixed_box_pos - cube_pos,
+                'relative_rotation': fixed_box_rot @ cube_rot.T
+            }
+        
+        # Store current transforms for next frame
+        self.prev_cube_pos = cube_pos
+        self.prev_cube_rot = cube_rot
+        self.prev_fixed_box_pos = fixed_box_pos
+        self.prev_fixed_box_rot = fixed_box_rot
+        
+        # Combine state information (keeping existing format)
+        state = np.hstack([
+            transform_data['relative_position'],  # 3 values
+            cube_lin_vel,                        # 3 values
+            cube_ang_vel                         # 3 values
+        ])
+        
+        return state, fixed_box_lin_vel, transform_data
 
 
     # Function to calculate action value based on displacement, linear speed, and angular speed
@@ -756,7 +750,7 @@ class Projectile(MuJoCoBase):
                     if step_num >= cube_drop_time:
                         # print("step_num", step_num)
 
-                        state, fixed_box_linear_speed = self.data_collection(cube_body_id, fixed_box_body_id)
+                        state, fixed_box_linear_speed, transforms = self.data_collection(cube_body_id, fixed_box_body_id)
                         displacement = [state[0], state[1], state[2]]
                         linear_speed = [state[3], state[4], state[5]]
                         angular_speed = [state[6], state[7], state[8]]
