@@ -118,9 +118,10 @@ class Projectile(MuJoCoBase):
         # Randomize fixed_box and free_cube
         self.randomize_object_colors()
 
-        cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
-        fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
-        self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [random.uniform(0.35, 0.42), random.uniform(-0.5, -0.35), random.uniform(0.2, 0.35)]
+        # cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
+        # fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
+        # self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [random.uniform(0.35, 0.42), random.uniform(-0.5, -0.35), random.uniform(0.2, 0.35)]
+        self.randomize_free_cube()
 
         mj.set_mjcb_control(self.controller)
 
@@ -178,6 +179,50 @@ class Projectile(MuJoCoBase):
                 1.0
             ]
         return color
+
+
+    def randomize_free_cube(self):
+        """Randomize the free cube's size, mass, friction, and other physical properties."""
+        # Get cube body and geom IDs
+        cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
+        cube_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, 'sliding_cube')
+        
+        # Randomize cube size (within reasonable bounds)
+        base_size = 0.015  # Original size
+        size_variation = random.uniform(0.8, 1.2)  # ±20% variation
+        new_size = base_size * size_variation
+        self.model.geom_size[cube_geom_id] = [new_size, new_size, new_size]
+        
+        # Randomize mass (scaled with size)
+        base_mass = 1.0  # Original mass
+        mass_variation = random.uniform(0.8, 1.2)  # ±20% variation
+        new_mass = base_mass * size_variation * mass_variation  # Scale mass with size
+        self.model.body_mass[cube_body_id] = new_mass
+        
+        # Adjust inertia based on new mass and size
+        new_inertia = (new_mass * new_size**2) / 6  # Simple box inertia approximation
+        self.model.body_inertia[cube_body_id] = [new_inertia, new_inertia, new_inertia]
+        
+        # Randomize friction properties
+        friction_variation = random.uniform(0.15, 0.25)  # Base friction is 0.2
+        # Find the contact pair involving the sliding cube
+        for i in range(self.model.npair):
+            if (self.model.pair_geom1[i] == cube_geom_id or 
+                self.model.pair_geom2[i] == cube_geom_id):
+                self.model.pair_friction[i, 0] = friction_variation  # Sliding friction
+                self.model.pair_friction[i, 1] = friction_variation * 2.5  # Rolling friction
+                self.model.pair_friction[i, 2] = friction_variation * 0.005  # Torsional friction
+        
+        # Randomize initial position (within reasonable bounds)
+        x_pos = random.uniform(0.35, 0.42)
+        y_pos = random.uniform(-0.5, -0.35)
+        z_pos = random.uniform(0.2, 0.35)
+        self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [x_pos, y_pos, z_pos]
+        
+        # Randomize initial orientation
+        # quat = [random.uniform(-1, 1) for _ in range(4)]
+        # quat = quat / np.linalg.norm(quat)  # Normalize quaternion
+        # self.data.qpos[self.model.body_jntadr[cube_body_id]+3:self.model.body_jntadr[cube_body_id]+7] = quat
 
     def randomize_object_colors(self):
         """Randomize colors for fixed box and free cube"""
