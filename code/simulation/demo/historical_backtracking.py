@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 
 N_TRAIN_EPISODES = 20
 N_VAL_EPISODES = 10
-EPISODE_LENGTH = 300  # Number of points in trajectory
+EPISODE_LENGTH = 3000  # Number of points in trajectory
 
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_HIGH = 0.01
@@ -33,6 +33,50 @@ def linear_interpolation(first_failure_time_step, failure_time_step_trim):
 def sin_interpolation(first_failure_time_step, failure_time_step_trim):
     x = np.linspace(0, 1, first_failure_time_step - failure_time_step_trim + 1)
     return np.sin(x)
+
+
+class PositionVisualizer:
+    def __init__(self, model, data, scene):
+        self.model = model
+        self.data = data
+        self.scene = scene
+        self.max_points = 1000  # Maximum number of points to show in trail
+        self.cube_positions = []
+        self.fixed_box_positions = []
+        
+    def add_positions(self, cube_pos, fixed_box_pos):
+        """Add new positions to the visualization trails"""
+        self.cube_positions.append(cube_pos)
+        self.fixed_box_positions.append(fixed_box_pos)
+        
+        # Keep only the last {max_points} positions
+        if len(self.cube_positions) > self.max_points:
+            self.cube_positions.pop(0)
+            self.fixed_box_positions.pop(0)
+    
+    def draw_positions(self):
+        """Draw position markers and trails in the scene"""
+        # Add markers for position trails
+        for i, (cube_pos, fixed_box_pos) in enumerate(zip(self.cube_positions, self.fixed_box_positions)):
+            # Calculate alpha (transparency) based on age of point
+            alpha = 0.3 * (i / len(self.cube_positions))
+            
+            # Add cube trail point
+            self.scene.ngeom += 1
+            g = self.scene.geoms[self.scene.ngeom-1]
+            g.type = mj.mjtGeom.mjGEOM_SPHERE
+            g.size[:] = [0.01, 0, 0]  # Small sphere
+            g.pos[:] = cube_pos
+            g.rgba = [1, 0, 0, alpha]  # Red with varying transparency
+            
+            # Add fixed box trail point
+            self.scene.ngeom += 1
+            g = self.scene.geoms[self.scene.ngeom-1]
+            g.type = mj.mjtGeom.mjGEOM_SPHERE
+            g.size[:] = [0.1, 0, 0]  # Small sphere
+            g.pos[:] = fixed_box_pos
+            g.rgba = [0, 0, 1, alpha]  # Blue with varying transparency
+
 
 class Projectile(MuJoCoBase):
     def __init__(self, xml_path, traj_file, initial_delay=3.0):
@@ -56,6 +100,7 @@ class Projectile(MuJoCoBase):
         self.current_target = None
         self.next_target = None
         self.transition_start_time = None
+        self.position_visualizer = None  # Will be initialized after scene creation
 
     def load_trajectory(self):
         with open(self.traj_file, "r") as file:
@@ -122,6 +167,8 @@ class Projectile(MuJoCoBase):
         # fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
         # self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [random.uniform(0.35, 0.42), random.uniform(-0.5, -0.35), random.uniform(0.2, 0.35)]
         self.randomize_free_cube()
+
+        self.position_visualizer = PositionVisualizer(self.model, self.data, self.scene)
 
         mj.set_mjcb_control(self.controller)
 
@@ -333,6 +380,11 @@ class Projectile(MuJoCoBase):
         cube_quat = self.data.xquat[cube_body_id].copy()  # Quaternion orientation
         fixed_box_pos = self.data.xpos[fixed_box_body_id].copy()
         fixed_box_quat = self.data.xquat[fixed_box_body_id].copy()
+
+
+        # Add positions to visualizer
+        if self.position_visualizer:
+            self.position_visualizer.add_positions(cube_pos, fixed_box_pos)
         
         # Store velocities
         cube_lin_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3].copy()
@@ -728,6 +780,11 @@ class Projectile(MuJoCoBase):
                     # Update scene and render
                     mj.mjv_updateScene(self.model, self.data, self.opt, None, self.cam,
                                     mj.mjtCatBit.mjCAT_ALL.value, self.scene)
+
+                    # Draw position trails
+                    if self.position_visualizer:
+                        self.position_visualizer.draw_positions()
+
                     mj.mjr_render(viewport, self.scene, self.context)
 
                     # Capture the current frame
