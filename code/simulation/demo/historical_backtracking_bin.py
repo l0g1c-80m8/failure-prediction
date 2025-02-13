@@ -16,9 +16,9 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-N_TRAIN_EPISODES = 20
+N_TRAIN_EPISODES = 1
 N_VAL_EPISODES = 10
-EPISODE_LENGTH = 300  # Number of points in trajectory
+EPISODE_LENGTH = 1200  # Number of points in trajectory
 
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_HIGH = 0.01
@@ -37,8 +37,9 @@ def sin_interpolation(first_failure_time_step, failure_time_step_trim):
 class Projectile(MuJoCoBase):
     def __init__(self, xml_path, traj_file, initial_delay=3.0):
         super().__init__(xml_path)
+        # self.init_angular_speed = 1.0  # Angular speed in radians per second
         self.initial_delay = initial_delay  # Delay before starting movement
-        self.speed_scale = random.uniform(1.5, 2.0)  # New parameter to control joint speed
+        self.speed_scale = random.uniform(0.5, 1.0)  # New parameter to control joint speed
         self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
         self.start_time = None  # To track the start time
         self.positions = []  # To store the position data
@@ -115,7 +116,7 @@ class Projectile(MuJoCoBase):
 
 
         # Set camera configuration
-        self.cam.azimuth = -250 # random.uniform(-225, -315)
+        self.cam.azimuth = 300 # -250 random.uniform(-225, -315)
         self.cam.distance = 2.5 # random.uniform(2, 3)
         self.cam.elevation = -40 # random.uniform(-50, -30)
         # print("self.cam", self.cam.azimuth, self.cam.distance, self.cam.elevation)
@@ -130,6 +131,7 @@ class Projectile(MuJoCoBase):
         self.reached_target = False  # Track if we've reached target
         # print(f"New rotation parameters - Speed: {self.rotation_speed:.2f} rad/s, Target angle: {self.target_angle:.2f} rad, Reverse: {self.reverse_on_target}")
 
+        # self.angular_speed = self.init_angular_speed
         # self.human_intervene = False  # New attribute to track cube drop
         # self.intervene_step = 0  # Step when human intervention occurs
         # self.is_intervene_step_set = False
@@ -143,7 +145,7 @@ class Projectile(MuJoCoBase):
         self.current_target = None
         self.next_target = None
         self.transition_start_time = None
-        self.speed_scale = random.uniform(2.5, 3)  # New parameter to control joint speed
+        self.speed_scale = random.uniform(0.5, 1.0)  # New parameter to control joint speed
         self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
 
         self.emergency_stop = False  # Flag to trigger the emergency stop
@@ -201,14 +203,14 @@ class Projectile(MuJoCoBase):
         
         # Randomize cube size (within reasonable bounds)
         base_size = 0.015  # Original size
-        size_variation = random.uniform(0.8, 3.0)  # n% variation
+        size_variation = random.uniform(0.8, 3)  # n% variation
         new_size = base_size * size_variation
         self.model.geom_size[cube_geom_id] = [new_size, new_size, new_size]
         
         # Randomize mass (scaled with size)
-        base_mass = 1.0  # Original mass
+        base_mass = 0.5  # Original mass
         mass_variation = random.uniform(0.8, 1.2)  # ±20% variation
-        new_mass = base_mass * size_variation * mass_variation  # Scale mass with size
+        new_mass = base_mass * mass_variation  # base_mass * size_variation * mass_variation  # Scale mass with size
         self.model.body_mass[cube_body_id] = new_mass
         
         # Adjust inertia based on new mass and size
@@ -216,7 +218,7 @@ class Projectile(MuJoCoBase):
         self.model.body_inertia[cube_body_id] = [new_inertia, new_inertia, new_inertia]
         
         # Randomize friction properties
-        friction_variation = random.uniform(0.15, 0.25)  # Base friction is 0.2
+        friction_variation = random.uniform(0.25, 0.35)  # Base friction is 0.2
         # Find the contact pair involving the sliding cube
         for i in range(self.model.npair):
             if (self.model.pair_geom1[i] == cube_geom_id or 
@@ -226,9 +228,9 @@ class Projectile(MuJoCoBase):
                 self.model.pair_friction[i, 2] = friction_variation * 0.005  # Torsional friction
         
         # Randomize initial position (within reasonable bounds)
-        x_pos = random.uniform(0.35, 0.42)
-        y_pos = random.uniform(-0.5, -0.35)
-        z_pos = random.uniform(0.2, 0.35)
+        x_pos = random.uniform(0.35, 0.35) # random.uniform(0.35, 0.42)
+        y_pos = random.uniform(0.65, 0.65) # random.uniform(-0.5, -0.35)
+        z_pos = random.uniform(0.3, 0.4)
         self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [x_pos, y_pos, z_pos]
         
         # Randomize initial orientation (uncomment when needed)
@@ -1056,7 +1058,7 @@ class Projectile(MuJoCoBase):
 
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene.xml"
-    traj_path = "../ur5-scripts/traj.txt"  # Adjust path as needed
+    traj_path = "../ur5-scripts/traj_20250209.txt"  # Adjust path as needed
 
     os.makedirs('demo/data/train', exist_ok=True)
     os.makedirs('demo/data/val', exist_ok=True)
