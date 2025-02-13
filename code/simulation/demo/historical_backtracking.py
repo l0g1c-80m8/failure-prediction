@@ -34,50 +34,6 @@ def sin_interpolation(first_failure_time_step, failure_time_step_trim):
     x = np.linspace(0, 1, first_failure_time_step - failure_time_step_trim + 1)
     return np.sin(x)
 
-
-class PositionVisualizer:
-    def __init__(self, model, data, scene):
-        self.model = model
-        self.data = data
-        self.scene = scene
-        self.max_points = 1000  # Maximum number of points to show in trail
-        self.cube_positions = []
-        self.fixed_box_positions = []
-        
-    def add_positions(self, cube_pos, fixed_box_pos):
-        """Add new positions to the visualization trails"""
-        self.cube_positions.append(cube_pos)
-        self.fixed_box_positions.append(fixed_box_pos)
-        
-        # Keep only the last {max_points} positions
-        if len(self.cube_positions) > self.max_points:
-            self.cube_positions.pop(0)
-            self.fixed_box_positions.pop(0)
-    
-    def draw_positions(self):
-        """Draw position markers and trails in the scene"""
-        # Add markers for position trails
-        for i, (cube_pos, fixed_box_pos) in enumerate(zip(self.cube_positions, self.fixed_box_positions)):
-            # Calculate alpha (transparency) based on age of point
-            alpha = 0.3 * (i / len(self.cube_positions))
-            
-            # Add cube trail point
-            self.scene.ngeom += 1
-            g = self.scene.geoms[self.scene.ngeom-1]
-            g.type = mj.mjtGeom.mjGEOM_SPHERE
-            g.size[:] = [0.01, 0, 0]  # Small sphere
-            g.pos[:] = cube_pos
-            g.rgba = [1, 0, 0, alpha]  # Red with varying transparency
-            
-            # Add fixed box trail point
-            self.scene.ngeom += 1
-            g = self.scene.geoms[self.scene.ngeom-1]
-            g.type = mj.mjtGeom.mjGEOM_SPHERE
-            g.size[:] = [0.1, 0, 0]  # Small sphere
-            g.pos[:] = fixed_box_pos
-            g.rgba = [0, 0, 1, alpha]  # Blue with varying transparency
-
-
 class Projectile(MuJoCoBase):
     def __init__(self, xml_path, traj_file, initial_delay=3.0):
         super().__init__(xml_path)
@@ -100,7 +56,44 @@ class Projectile(MuJoCoBase):
         self.current_target = None
         self.next_target = None
         self.transition_start_time = None
-        self.position_visualizer = None  # Will be initialized after scene creation
+
+        # Add visualization markers# Marker appearance settings
+        self.marker_size = 0.005  # Increased size - adjust this value as needed
+        self.marker_positions = []  # Store positions and colors
+        self.max_markers = 100  # Maximum number of position markers to show
+        
+        # Initialize marker colors
+        self.cube_marker_color = [1, 0, 0, 0.8]  # Red for cube
+        self.box_marker_color = [0, 1, 0, 0.8]   # Green for fixed box
+
+    def add_position_markers(self, cube_pos, box_pos):
+        """Add markers for both cube and fixed box positions"""
+        # Add new positions and colors
+        self.marker_positions.append((cube_pos, self.cube_marker_color))
+        self.marker_positions.append((box_pos, self.box_marker_color))
+        
+        # Keep only the most recent markers
+        while len(self.marker_positions) > self.max_markers * 2:  # *2 because we add two markers at a time
+            self.marker_positions.pop(0)
+
+    def add_markers_to_scene(self):
+        """Add all stored markers to the scene"""
+        if not self.marker_positions:
+            return
+            
+        for pos, color in self.marker_positions:
+            self.scene.ngeom += 1
+            g = self.scene.geoms[self.scene.ngeom - 1]
+            
+            # Set geometry properties
+            g.type = mj.mjtGeom.mjGEOM_SPHERE
+            g.size[:] = [self.marker_size, self.marker_size, self.marker_size]  # Use the configurable size
+            g.pos[:] = pos
+            g.mat[:,:] = np.eye(3)
+            g.rgba[:] = color
+            g.dataid = -1
+            g.objtype = mj.mjtObj.mjOBJ_UNKNOWN
+            g.objid = -1
 
     def load_trajectory(self):
         with open(self.traj_file, "r") as file:
@@ -168,7 +161,9 @@ class Projectile(MuJoCoBase):
         # self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [random.uniform(0.35, 0.42), random.uniform(-0.5, -0.35), random.uniform(0.2, 0.35)]
         self.randomize_free_cube()
 
-        self.position_visualizer = PositionVisualizer(self.model, self.data, self.scene)
+        # Clear markers when resetting
+        self.marker_geoms = []
+        self.marker_counter = 0
 
         mj.set_mjcb_control(self.controller)
 
@@ -380,12 +375,12 @@ class Projectile(MuJoCoBase):
         cube_quat = self.data.xquat[cube_body_id].copy()  # Quaternion orientation
         fixed_box_pos = self.data.xpos[fixed_box_body_id].copy()
         fixed_box_quat = self.data.xquat[fixed_box_body_id].copy()
-
-
-        # Add positions to visualizer
-        if self.position_visualizer:
-            self.position_visualizer.add_positions(cube_pos, fixed_box_pos)
         
+
+        # Add position markers
+        self.add_position_markers(cube_pos, fixed_box_pos)
+
+
         # Store velocities
         cube_lin_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3].copy()
         cube_ang_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]+3:self.model.body_jntadr[cube_body_id]+6].copy()
@@ -777,13 +772,16 @@ class Projectile(MuJoCoBase):
                     viewport_width, viewport_height = glfw.get_framebuffer_size(self.window)
                     viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
 
-                    # Update scene and render
+                    # Update scene
                     mj.mjv_updateScene(self.model, self.data, self.opt, None, self.cam,
                                     mj.mjtCatBit.mjCAT_ALL.value, self.scene)
-
-                    # Draw position trails
-                    if self.position_visualizer:
-                        self.position_visualizer.draw_positions()
+                    
+                    # Add markers to scene
+                    self.add_markers_to_scene()
+                    
+                    # get framebuffer viewport
+                    viewport_width, viewport_height = glfw.get_framebuffer_size(self.window)
+                    viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
 
                     mj.mjr_render(viewport, self.scene, self.context)
 
