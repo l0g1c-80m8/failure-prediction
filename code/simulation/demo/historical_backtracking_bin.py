@@ -501,7 +501,7 @@ class Projectile(MuJoCoBase):
         # Wider ranges for more noticeable variation
         pos_ranges = {
             'x': (-0.3, 0.3),    # Wider range for x offset
-            'y': (-0.5, -0.3),    # Wider range for y offset
+            'y': (0.3, 0.5),    # Wider range for y offset
             'z': (2.0, 2.5),     # Height variation
             'azimuth': (-15, 15),  # Degrees of rotation around vertical axis
             'elevation': (-1, 0), # Degrees of tilt
