@@ -37,6 +37,7 @@ def sin_interpolation(first_failure_time_step, failure_time_step_trim):
 class Projectile(MuJoCoBase):
     def __init__(self, xml_path, traj_file, initial_delay=3.0):
         super().__init__(xml_path)
+        
         # self.init_angular_speed = 1.0  # Angular speed in radians per second
         self.initial_delay = initial_delay  # Delay before starting movement
         self.speed_scale = random.uniform(0.5, 1.0)  # New parameter to control joint speed
@@ -689,9 +690,11 @@ class Projectile(MuJoCoBase):
         video_dir = './demo'
         video_filename = os.path.join(video_dir, 'simulation_video.mp4')
         top_camera_video_filename = os.path.join(video_dir, 'top_camera_video.mp4')
+        front_camera_video_filename = os.path.join(video_dir, 'front_camera_video.mp4')
 
         writer = imageio.get_writer(video_filename, fps=60)
         top_camera_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
+        front_camera_writer = imageio.get_writer(front_camera_video_filename, fps=60, macro_block_size=16)
 
         # Create directory if it does not exist
         os.makedirs(video_dir, exist_ok=True)
@@ -795,6 +798,10 @@ class Projectile(MuJoCoBase):
                     # Get top camera frame
                     top_camera_frame = self.get_camera_image('top_camera')
                     top_camera_writer.append_data(top_camera_frame)
+
+                    # Get front camera frame
+                    front_camera_frame = self.get_camera_image('front_camera')
+                    front_camera_writer.append_data(front_camera_frame)
 
                     # swap OpenGL buffers (blocking call due to v-sync)
                     glfw.swap_buffers(self.window)

@@ -65,7 +65,9 @@
 
   <worldbody>
     <!-- Add camera definition -->
-    <camera name="top_camera" mode="fixed" pos="0 0 2.0" euler="0 0 0"/>
+    <camera name="top_camera" mode="fixed" pos="0 0 2.0" euler="0 0 0"  fovy="45"/>
+    <camera name="side_camera" mode="fixed" pos="1.5 0 0.8" euler="0 -30 0" fovy="45"/>
+    <camera name="front_camera" mode="fixed" pos="0 -2.0 1.2" euler="45 0 0" fovy="45"/>
     <light name="spotlight" mode="targetbodycom" target="wrist_2_link" pos="0 -1 2"/>
     <body name="base" quat="1 0 0 1" childclass="ur5e">
       <inertial mass="4.0" pos="0 0 0" diaginertia="0.00443333156 0.00443333156 0.0072"/>
