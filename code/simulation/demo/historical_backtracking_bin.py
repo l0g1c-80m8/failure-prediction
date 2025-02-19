@@ -523,9 +523,9 @@ class Projectile(MuJoCoBase):
         # Define ranges for camera randomization
         # Wider ranges for more noticeable variation
         pos_ranges = {
-            'x': (self.cam_position[cam_id][0]-0.001, self.cam_position[cam_id][0]+0.001),    # Wider range for x offset
-            'y': (self.cam_position[cam_id][1]-0.001, self.cam_position[cam_id][1]+0.001),    # Wider range for y offset
-            'z': (self.cam_position[cam_id][2]-0.01, self.cam_position[cam_id][2]+0.01),     # Height variation
+            'x': (self.cam_position[cam_id][0]-0.1, self.cam_position[cam_id][0]+0.1),    # Wider range for x offset
+            'y': (self.cam_position[cam_id][1]-0.1, self.cam_position[cam_id][1]+0.1),    # Wider range for y offset
+            'z': (self.cam_position[cam_id][2]-0.1, self.cam_position[cam_id][2]+0.1),     # Height variation
             'azimuth': (-5, 5),  # Degrees of rotation around vertical axis
             'elevation': (-1, 0), # Degrees of tilt
         }
@@ -639,8 +639,8 @@ class Projectile(MuJoCoBase):
             original_geomgroup = self.opt.geomgroup.copy()
             
             # For top and front cameras, show only groups 2 (cube) and 3 (fixed box)
-            # self.opt.geomgroup[:] = 0  # Hide all groups
-            # self.opt.geomgroup[1] = 1  # Show fixed box
+            self.opt.geomgroup[:] = 0  # Hide all groups
+            self.opt.geomgroup[1] = 1  # Show fixed box
             # self.opt.geomgroup[2] = 1  # Show cube
         
         # Update scene
