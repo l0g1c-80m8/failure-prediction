@@ -65,10 +65,10 @@
 
   <worldbody>
     <!-- Add camera definition -->
-    <camera name="top_camera" mode="fixed" pos="0 0 2.0" euler="0 0 0"  fovy="45"/>
-    <camera name="side_camera" mode="fixed" pos="1.5 0 0.8" euler="0 -30 0" fovy="45"/>
-    <camera name="front_camera" mode="fixed" pos="0 -2.0 1.2" euler="45 0 0" fovy="45"/>
-    <light name="spotlight" mode="targetbodycom" target="wrist_2_link" pos="0 -1 2"/>
+    <camera name="top_camera" mode="fixed" pos="0 0 3.0" euler="0 0 0"  fovy="45"/>
+    <!-- <camera name="side_camera" mode="fixed" pos="1.5 0 0.8" euler="0 -30 0" fovy="45"/> -->
+    <camera name="front_camera" mode="fixed" pos="3.0 0 2" euler="0 45 0" fovy="45"/>
+    <!-- <light name="spotlight" mode="targetbodycom" target="wrist_2_link" pos="0 -1 2"/> -->
     <body name="base" quat="1 0 0 1" childclass="ur5e">
       <inertial mass="4.0" pos="0 0 0" diaginertia="0.00443333156 0.00443333156 0.0072"/>
       <geom mesh="base_0" material="black" class="visual"/>
@@ -163,7 +163,7 @@
   <statistic center="0.3 0 0.4" extent="0.8"/>
 
   <visual>
-    <headlight diffuse="0.6 0.6 0.6" ambient="0.1 0.1 0.1" specular="0 0 0"/>
+    <!-- <headlight diffuse="0.6 0.6 0.6" ambient="0.1 0.1 0.1" specular="0 0 0"/> -->
     <rgba haze="0.15 0.25 0.35 1"/>
     <global azimuth="120" elevation="-20"/>
   </visual>
@@ -203,7 +203,7 @@
   </asset>
 
   <worldbody>
-    <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+    <!-- <light pos="0 0 1.5" dir="0 0 -1" directional="true"/> -->
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane1" group="0"/>
   </worldbody>
 </mujoco>

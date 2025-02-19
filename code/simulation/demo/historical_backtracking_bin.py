@@ -15,6 +15,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+import cv2
+
 
 N_TRAIN_EPISODES = 1
 N_VAL_EPISODES = 10
@@ -57,6 +59,9 @@ class Projectile(MuJoCoBase):
         self.current_target = None
         self.next_target = None
         self.transition_start_time = None
+        self.ncam = self.model.ncam  # Get number of cameras in the model
+        self.cam_position = [None] * self.ncam  # Initialize with None for each camera
+        self.cam_position_read = [False] * self.ncam  # Initialize all as unread
 
         # Add visualization markers# Marker appearance settings
         self.marker_size = 0.005  # Increased size - adjust this value as needed
@@ -66,6 +71,16 @@ class Projectile(MuJoCoBase):
         # Initialize marker colors
         self.cube_marker_color = [1, 0, 0, 0.8]  # Red for cube
         self.box_marker_color = [0, 1, 0, 0.8]   # Green for fixed box
+
+        # Create windows
+        # cv2.namedWindow('Top Camera View', cv2.WINDOW_NORMAL)
+        # cv2.namedWindow('Front Camera View', cv2.WINDOW_NORMAL)
+        # cv2.namedWindow('Side Camera View', cv2.WINDOW_NORMAL)
+        
+        # Set window sizes
+        # cv2.resizeWindow('Top Camera View', 640, 640)
+        # cv2.resizeWindow('Front Camera View', 640, 640)
+        # cv2.resizeWindow('Side Camera View', 640, 640)
 
     def add_position_markers(self, cube_pos, box_pos):
         """Add markers for both cube and fixed box positions"""
@@ -122,7 +137,8 @@ class Projectile(MuJoCoBase):
         self.cam.elevation = -40 # random.uniform(-50, -30)
         # print("self.cam", self.cam.azimuth, self.cam.distance, self.cam.elevation)
 
-        self.randomize_camera_position()
+        self.randomize_camera_position('top_camera')
+        self.randomize_camera_position('front_camera')
 
         # Add random rotation parameters
         # Subtle random rotation parameters
@@ -490,21 +506,27 @@ class Projectile(MuJoCoBase):
         # Just for debugging
         return 0.5
 
-    def randomize_camera_position(self):
+    def randomize_camera_position(self, camera_name='top_camera'):
         """
         Improved camera position randomization with proper orientation handling
         and direct camera parameter updates.
         """
         # Get camera id
-        cam_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_CAMERA, 'top_camera')
+        cam_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_CAMERA, camera_name)
+
+
+        if not self.cam_position_read[cam_id]:
+            self.cam_position[cam_id] = self.model.cam_pos[cam_id]
+            print(self.cam_position[cam_id])
+            self.cam_position_read[cam_id] = True
         
         # Define ranges for camera randomization
         # Wider ranges for more noticeable variation
         pos_ranges = {
-            'x': (-0.3, 0.3),    # Wider range for x offset
-            'y': (0.3, 0.5),    # Wider range for y offset
-            'z': (2.0, 2.5),     # Height variation
-            'azimuth': (-15, 15),  # Degrees of rotation around vertical axis
+            'x': (self.cam_position[cam_id][0]-0.001, self.cam_position[cam_id][0]+0.001),    # Wider range for x offset
+            'y': (self.cam_position[cam_id][1]-0.001, self.cam_position[cam_id][1]+0.001),    # Wider range for y offset
+            'z': (self.cam_position[cam_id][2]-0.01, self.cam_position[cam_id][2]+0.01),     # Height variation
+            'azimuth': (-5, 5),  # Degrees of rotation around vertical axis
             'elevation': (-1, 0), # Degrees of tilt
         }
         
@@ -514,70 +536,70 @@ class Projectile(MuJoCoBase):
         pos_z = random.uniform(*pos_ranges['z'])
         
         # Convert angles to radians for rotation calculation
-        azimuth = np.radians(random.uniform(*pos_ranges['azimuth']))
-        elevation = np.radians(random.uniform(*pos_ranges['elevation']))
+        # azimuth = np.radians(random.uniform(*pos_ranges['azimuth']))
+        # elevation = np.radians(random.uniform(*pos_ranges['elevation']))
         
-        # Update camera position
+        # Update camera self.cam_position
         self.model.cam_pos[cam_id] = np.array([pos_x, pos_y, pos_z])
         
         # Calculate rotation matrix
         # First rotate around Y axis (elevation)
-        Ry = np.array([
-            [np.cos(elevation), 0, np.sin(elevation)],
-            [0, 1, 0],
-            [-np.sin(elevation), 0, np.cos(elevation)]
-        ])
+        # Ry = np.array([
+        #     [np.cos(elevation), 0, np.sin(elevation)],
+        #     [0, 1, 0],
+        #     [-np.sin(elevation), 0, np.cos(elevation)]
+        # ])
         
-        # Then rotate around Z axis (azimuth)
-        Rz = np.array([
-            [np.cos(azimuth), -np.sin(azimuth), 0],
-            [np.sin(azimuth), np.cos(azimuth), 0],
-            [0, 0, 1]
-        ])
+        # # Then rotate around Z axis (azimuth)
+        # Rz = np.array([
+        #     [np.cos(azimuth), -np.sin(azimuth), 0],
+        #     [np.sin(azimuth), np.cos(azimuth), 0],
+        #     [0, 0, 1]
+        # ])
         
-        # Combine rotations
-        R = Rz @ Ry
+        # # Combine rotations
+        # R = Rz @ Ry
         
-        # Convert rotation matrix to quaternion
-        # Using simplified method since we know R is orthogonal
-        trace = np.trace(R)
-        if trace > 0:
-            S = np.sqrt(trace + 1.0) * 2
-            qw = 0.25 * S
-            qx = (R[2, 1] - R[1, 2]) / S
-            qy = (R[0, 2] - R[2, 0]) / S
-            qz = (R[1, 0] - R[0, 1]) / S
-        else:
-            if R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
-                S = np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]) * 2
-                qw = (R[2, 1] - R[1, 2]) / S
-                qx = 0.25 * S
-                qy = (R[0, 1] + R[1, 0]) / S
-                qz = (R[0, 2] + R[2, 0]) / S
-            elif R[1, 1] > R[2, 2]:
-                S = np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]) * 2
-                qw = (R[0, 2] - R[2, 0]) / S
-                qx = (R[0, 1] + R[1, 0]) / S
-                qy = 0.25 * S
-                qz = (R[1, 2] + R[2, 1]) / S
-            else:
-                S = np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]) * 2
-                qw = (R[1, 0] - R[0, 1]) / S
-                qx = (R[0, 2] + R[2, 0]) / S
-                qy = (R[1, 2] + R[2, 1]) / S
-                qz = 0.25 * S
+        # # Convert rotation matrix to quaternion
+        # # Using simplified method since we know R is orthogonal
+        # trace = np.trace(R)
+        # if trace > 0:
+        #     S = np.sqrt(trace + 1.0) * 2
+        #     qw = 0.25 * S
+        #     qx = (R[2, 1] - R[1, 2]) / S
+        #     qy = (R[0, 2] - R[2, 0]) / S
+        #     qz = (R[1, 0] - R[0, 1]) / S
+        # else:
+        #     if R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+        #         S = np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]) * 2
+        #         qw = (R[2, 1] - R[1, 2]) / S
+        #         qx = 0.25 * S
+        #         qy = (R[0, 1] + R[1, 0]) / S
+        #         qz = (R[0, 2] + R[2, 0]) / S
+        #     elif R[1, 1] > R[2, 2]:
+        #         S = np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]) * 2
+        #         qw = (R[0, 2] - R[2, 0]) / S
+        #         qx = (R[0, 1] + R[1, 0]) / S
+        #         qy = 0.25 * S
+        #         qz = (R[1, 2] + R[2, 1]) / S
+        #     else:
+        #         S = np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]) * 2
+        #         qw = (R[1, 0] - R[0, 1]) / S
+        #         qx = (R[0, 2] + R[2, 0]) / S
+        #         qy = (R[1, 2] + R[2, 1]) / S
+        #         qz = 0.25 * S
         
-        # Update camera quaternion
-        self.model.cam_quat[cam_id] = np.array([qw, qx, qy, qz])
+        # # Update camera quaternion
+        # self.model.cam_quat[cam_id] = np.array([qw, qx, qy, qz])
         
         # Make sure camera is looking at the scene center
-        target_pos = np.array([0, 0, 0])  # Scene center
-        cam_pos = self.model.cam_pos[cam_id]
-        forward = target_pos - cam_pos
-        forward = forward / np.linalg.norm(forward)
+        # target_pos = np.array([0, 0, 0])  # Scene center
+        # cam_pos = self.model.cam_pos[cam_id]
+        # forward = target_pos - cam_pos
+        # forward = forward / np.linalg.norm(forward)
         
         # Update camera orientation to look at target
-        self.model.cam_pos[cam_id] = cam_pos
+        # self.model.cam_pos[cam_id] = cam_pos
         
         # Force update scene
         mj.mj_forward(self.model, self.data)
@@ -598,8 +620,8 @@ class Projectile(MuJoCoBase):
             raise ValueError(f"Camera '{camera_name}' not found in model")
         
         # Get image dimensions
-        width = 224
-        height = 224
+        width = 640
+        height = 640
         
         # Initialize image array
         img = np.zeros((height, width, 3), dtype=np.uint8)
@@ -617,8 +639,8 @@ class Projectile(MuJoCoBase):
             original_geomgroup = self.opt.geomgroup.copy()
             
             # For top and front cameras, show only groups 2 (cube) and 3 (fixed box)
-            self.opt.geomgroup[:] = 0  # Hide all groups
-            self.opt.geomgroup[1] = 1  # Show fixed box
+            # self.opt.geomgroup[:] = 0  # Hide all groups
+            # self.opt.geomgroup[1] = 1  # Show fixed box
             # self.opt.geomgroup[2] = 1  # Show cube
         
         # Update scene
@@ -637,9 +659,6 @@ class Projectile(MuJoCoBase):
         # Restore original visibility settings if modified
         if camera_name in ['top_camera', 'front_camera']:
             self.opt.geomgroup[:] = original_geomgroup
-        
-        # Flip image vertically (MuJoCo returns image upside down)
-        img = img[::-1, :, :]
         
         return img
 
@@ -795,11 +814,28 @@ class Projectile(MuJoCoBase):
 
                     # Get top camera frame
                     top_camera_frame = self.get_camera_image('top_camera')
+                    # top_camera_frame = top_camera_frame[::-1, :, :]
                     top_camera_writer.append_data(top_camera_frame)
+                    top_camera_view = cv2.cvtColor(top_camera_frame, cv2.COLOR_RGB2BGR)
+                    # side_view = self.get_camera_image('side_camera')
 
                     # Get front camera frame
                     front_camera_frame = self.get_camera_image('front_camera')
+                    front_camera_frame = cv2.rotate(front_camera_frame, cv2.ROTATE_90_CLOCKWISE)
                     front_camera_writer.append_data(front_camera_frame)
+                    front_camera_view = cv2.cvtColor(front_camera_frame, cv2.COLOR_RGB2BGR)
+                    # side_view = cv2.cvtColor(side_view, cv2.COLOR_RGB2BGR)
+
+
+                    # Display images
+                    cv2.imshow('Top Camera View', top_camera_view)
+                    cv2.imshow('Front Camera View', front_camera_view)
+                    # cv2.imshow('Side Camera View', side_view)
+
+                    # Check for 'q' key press to quit
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        break
+
 
                     # swap OpenGL buffers (blocking call due to v-sync)
                     glfw.swap_buffers(self.window)
@@ -850,17 +886,17 @@ class Projectile(MuJoCoBase):
                             self.episode.append({
                             'image': top_camera_frame,
                             # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
-                            'state': np.asarray(state, dtype=np.float32),  # Save the padded state
+                            # 'state': np.asarray(state, dtype=np.float32),  # Save the padded state
                             'action': np.asarray([action_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
                             'language_instruction': 'dummy instruction',
                                 })
                             # For plot     
                             print("action_value!!!!!!!!!!!!step_num - cube_drop_time", step_num - cube_drop_time, action_value) # + episode_num * (EPISODE_LENGTH - cube_drop_time), action_value)
-                            displacements.append([state[0], state[1], state[2]])  # Displacement
-                            linear_velocities.append([state[3], state[4], state[5]])  # Linear velocity
-                            angular_velocities.append([state[6], state[7], state[8]])  # Angular velocity
+                            # displacements.append([state[0], state[1], state[2]])  # Displacement
+                            # linear_velocities.append([state[3], state[4], state[5]])  # Linear velocity
+                            # angular_velocities.append([state[6], state[7], state[8]])  # Angular velocity
                             action_values.append(action_value) # Action value
-                            fixed_box_velocities.append(fixed_box_linear_speed)
+                            # fixed_box_velocities.append(fixed_box_linear_speed)
                 episode_filled_tag = True
                 print("len(self.episode)", len(self.episode), "episode_filled_tag", episode_filled_tag, "episode_failed_tag", episode_failed_tag, "failure_time_step", failure_time_step)
 
@@ -906,11 +942,12 @@ class Projectile(MuJoCoBase):
             #     np.save(f'demo/data/val/episode_{episode_num}.npy', self.episode)
 
             # Plot after simulation
-            self.plot_metrics(linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities, episode_num)
+            # self.plot_metrics(linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities, episode_num)
 
 
         writer.close()
         top_camera_writer.close()
+        front_camera_writer.close()
         glfw.terminate()
         # self.save_trajectory()
 
