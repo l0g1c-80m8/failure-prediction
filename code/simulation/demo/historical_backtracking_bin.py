@@ -36,6 +36,48 @@ def sin_interpolation(first_failure_time_step, failure_time_step_trim):
     x = np.linspace(0, 1, first_failure_time_step - failure_time_step_trim + 1)
     return np.sin(x)
 
+def process_camera_frame(frame):
+    """
+    Process camera frame to get mask and contours for non-zero pixel values.
+    
+    Args:
+        frame: RGB image array (height, width, 3)
+    
+    Returns:
+        tuple: (mask, contours, filtered_image)
+    """
+    # Convert to grayscale
+    gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+    
+    # Create mask for non-zero pixels
+    # Use a small threshold to filter out near-black pixels
+    _, mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY)
+    
+    # Find contours
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Filter small contours (noise)
+    min_contour_area = 100  # Adjust this threshold as needed
+    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
+    
+    # Create visualization of the filtered image
+    filtered_image = frame.copy()
+    cv2.drawContours(filtered_image, contours, -1, (0, 255, 0), 2)
+    
+    # Draw bounding boxes around detected objects
+    # for contour in contours:
+    #     x, y, w, h = cv2.boundingRect(contour)
+    #     cv2.rectangle(filtered_image, (x, y), (x + w, y + h), (255, 0, 0), 2)
+        
+    #     # Calculate and display centroid
+    #     M = cv2.moments(contour)
+    #     if M["m00"] != 0:
+    #         cx = int(M["m10"] / M["m00"])
+    #         cy = int(M["m01"] / M["m00"])
+    #         cv2.circle(filtered_image, (cx, cy), 5, (0, 0, 255), -1)
+    
+    return mask, contours, filtered_image
+
 class Projectile(MuJoCoBase):
     def __init__(self, xml_path, traj_file, initial_delay=3.0):
         super().__init__(xml_path)
@@ -817,6 +859,7 @@ class Projectile(MuJoCoBase):
                     # top_camera_frame = top_camera_frame[::-1, :, :]
                     top_camera_writer.append_data(top_camera_frame)
                     top_camera_view = cv2.cvtColor(top_camera_frame, cv2.COLOR_RGB2BGR)
+                    top_mask, top_contours, top_filtered = process_camera_frame(top_camera_view)
                     # side_view = self.get_camera_image('side_camera')
 
                     # Get front camera frame
@@ -824,12 +867,14 @@ class Projectile(MuJoCoBase):
                     front_camera_frame = cv2.rotate(front_camera_frame, cv2.ROTATE_90_CLOCKWISE)
                     front_camera_writer.append_data(front_camera_frame)
                     front_camera_view = cv2.cvtColor(front_camera_frame, cv2.COLOR_RGB2BGR)
+                    front_mask, front_contours, front_filtered = process_camera_frame(front_camera_view)
                     # side_view = cv2.cvtColor(side_view, cv2.COLOR_RGB2BGR)
 
+                    # Process both frames
 
                     # Display images
-                    cv2.imshow('Top Camera View', top_camera_view)
-                    cv2.imshow('Front Camera View', front_camera_view)
+                    cv2.imshow('Top Camera View', top_filtered)
+                    cv2.imshow('Front Camera View', front_filtered)
                     # cv2.imshow('Side Camera View', side_view)
 
                     # Check for 'q' key press to quit
