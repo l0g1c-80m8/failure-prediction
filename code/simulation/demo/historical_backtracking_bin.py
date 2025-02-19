@@ -584,7 +584,7 @@ class Projectile(MuJoCoBase):
 
     def get_camera_image(self, camera_name):
         """
-        Get image from the specified camera with proper handling of randomized parameters.
+        Get image from the specified camera with selective rendering.
         
         Args:
             camera_name (str): Name of the camera to capture from
@@ -598,8 +598,8 @@ class Projectile(MuJoCoBase):
             raise ValueError(f"Camera '{camera_name}' not found in model")
         
         # Get image dimensions
-        width = 224 #640  # Set to be divisible by 16
-        height = 224 #640  # Set to be divisible by 16
+        width = 224
+        height = 224
         
         # Initialize image array
         img = np.zeros((height, width, 3), dtype=np.uint8)
@@ -611,14 +611,17 @@ class Projectile(MuJoCoBase):
         cam.type = mj.mjtCamera.mjCAMERA_FIXED
         cam.fixedcamid = cam_id
         
-        # Ensure camera parameters are properly set
-        cam.distance = np.linalg.norm(self.model.cam_pos[cam_id])  # Distance from target
-        cam.azimuth = np.degrees(np.arctan2(self.model.cam_pos[cam_id][1], 
-                                        self.model.cam_pos[cam_id][0]))  # Rotation around z-axis
-        cam.elevation = -np.degrees(np.arctan2(self.model.cam_pos[cam_id][2], 
-                                            np.sqrt(np.sum(self.model.cam_pos[cam_id][:2]**2))))  # Angle from xy-plane
+        # Configure scene to show specific groups for different cameras
+        if camera_name in ['top_camera', 'front_camera']:
+            # Save current geom groups visibility
+            original_geomgroup = self.opt.geomgroup.copy()
+            
+            # For top and front cameras, show only groups 2 (cube) and 3 (fixed box)
+            self.opt.geomgroup[:] = 0  # Hide all groups
+            self.opt.geomgroup[1] = 1  # Show fixed box
+            # self.opt.geomgroup[2] = 1  # Show cube
         
-        # Update scene with camera
+        # Update scene
         mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
                         mj.mjtCatBit.mjCAT_ALL.value, self.scene)
         
@@ -628,20 +631,15 @@ class Projectile(MuJoCoBase):
         # Render scene
         mj.mjr_render(viewport, self.scene, self.context)
         
-        # Read pixels from framebuffer
+        # Read pixels
         mj.mjr_readPixels(img, None, viewport, self.context)
+        
+        # Restore original visibility settings if modified
+        if camera_name in ['top_camera', 'front_camera']:
+            self.opt.geomgroup[:] = original_geomgroup
         
         # Flip image vertically (MuJoCo returns image upside down)
         img = img[::-1, :, :]
-        
-        # Optional: Add debug information to verify camera parameters
-        if False:  # Set to True when debugging
-            print(f"Camera {camera_name} parameters:")
-            print(f"Position: {self.model.cam_pos[cam_id]}")
-            print(f"Quaternion: {self.model.cam_quat[cam_id]}")
-            print(f"Distance: {cam.distance}")
-            print(f"Azimuth: {cam.azimuth}")
-            print(f"Elevation: {cam.elevation}")
         
         return img
 
@@ -1064,7 +1062,7 @@ class Projectile(MuJoCoBase):
         plt.savefig('./demo/cube_trajectory_{}.png'.format(episode_num))
 
 def main():
-    xml_path = "./model/universal_robots_ur5e/test_scene.xml"
+    xml_path = "./model/universal_robots_ur5e/test_scene_complete.xml"
     traj_path = "../ur5-scripts/traj_20250209.txt"  # Adjust path as needed
 
     os.makedirs('demo/data/train', exist_ok=True)
