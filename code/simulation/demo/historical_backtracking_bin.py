@@ -559,7 +559,7 @@ class Projectile(MuJoCoBase):
 
         if not self.cam_position_read[cam_id]:
             self.cam_position[cam_id] = self.model.cam_pos[cam_id]
-            print(self.cam_position[cam_id])
+            # print(self.cam_position[cam_id])
             self.cam_position_read[cam_id] = True
         
         # Define ranges for camera randomization
@@ -648,13 +648,13 @@ class Projectile(MuJoCoBase):
 
     def get_camera_image(self, camera_name):
         """
-        Get image from the specified camera with selective rendering.
+        Get two images from the specified camera - one for fixed box and one for cube.
         
         Args:
             camera_name (str): Name of the camera to capture from
             
         Returns:
-            np.ndarray: RGB image array of shape (height, width, 3)
+            tuple: Two RGB image arrays (fixed_box_img, cube_img) each of shape (height, width, 3)
         """
         # Get camera id
         cam_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_CAMERA, camera_name)
@@ -665,8 +665,9 @@ class Projectile(MuJoCoBase):
         width = 640
         height = 640
         
-        # Initialize image array
-        img = np.zeros((height, width, 3), dtype=np.uint8)
+        # Initialize image arrays for both fixed box and cube
+        fixed_box_img = np.zeros((height, width, 3), dtype=np.uint8)
+        cube_img = np.zeros((height, width, 3), dtype=np.uint8)
         
         # Create camera instance
         cam = mj.MjvCamera()
@@ -675,34 +676,43 @@ class Projectile(MuJoCoBase):
         cam.type = mj.mjtCamera.mjCAMERA_FIXED
         cam.fixedcamid = cam_id
         
-        # Configure scene to show specific groups for different cameras
+        # Save current geom groups visibility
+        original_geomgroup = self.opt.geomgroup.copy()
+        
         if camera_name in ['top_camera', 'front_camera']:
-            # Save current geom groups visibility
-            original_geomgroup = self.opt.geomgroup.copy()
+            # Set up viewport
+            viewport = mj.MjrRect(0, 0, width, height)
             
-            # For top and front cameras, show only groups 2 (cube) and 3 (fixed box)
+            # First render - fixed box only
             self.opt.geomgroup[:] = 0  # Hide all groups
-            self.opt.geomgroup[1] = 1  # Show fixed box
-            # self.opt.geomgroup[2] = 1  # Show cube
-        
-        # Update scene
-        mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
-                        mj.mjtCatBit.mjCAT_ALL.value, self.scene)
-        
-        # Set up viewport
-        viewport = mj.MjrRect(0, 0, width, height)
-        
-        # Render scene
-        mj.mjr_render(viewport, self.scene, self.context)
-        
-        # Read pixels
-        mj.mjr_readPixels(img, None, viewport, self.context)
-        
-        # Restore original visibility settings if modified
-        if camera_name in ['top_camera', 'front_camera']:
+            self.opt.geomgroup[1] = 1  # Show only fixed box
+            
+            # Update and render scene for fixed box
+            mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
+                            mj.mjtCatBit.mjCAT_ALL.value, self.scene)
+            mj.mjr_render(viewport, self.scene, self.context)
+            
+            # Read pixels for fixed box image
+            mj.mjr_readPixels(fixed_box_img, None, viewport, self.context)
+            
+            # Second render - cube only
+            self.opt.geomgroup[:] = 0  # Hide all groups
+            self.opt.geomgroup[2] = 1  # Show only cube
+            
+            # Update and render scene for cube
+            mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
+                            mj.mjtCatBit.mjCAT_ALL.value, self.scene)
+            mj.mjr_render(viewport, self.scene, self.context)
+            
+            # Read pixels for cube image
+            mj.mjr_readPixels(cube_img, None, viewport, self.context)
+            
+            # Restore original visibility settings
             self.opt.geomgroup[:] = original_geomgroup
+            
+            return fixed_box_img, cube_img
         
-        return img
+        return None, None  # Return None for both images if camera name not recognized
 
 
     def validate_episode(self, episode):
@@ -752,8 +762,10 @@ class Projectile(MuJoCoBase):
         front_camera_video_filename = os.path.join(video_dir, 'front_camera_video.mp4')
 
         writer = imageio.get_writer(video_filename, fps=60)
-        top_camera_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
-        front_camera_writer = imageio.get_writer(front_camera_video_filename, fps=60, macro_block_size=16)
+        top_box_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
+        top_cube_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
+        front_box_writer = imageio.get_writer(front_camera_video_filename, fps=60, macro_block_size=16)
+        front_cube_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
 
         # Create directory if it does not exist
         os.makedirs(video_dir, exist_ok=True)
@@ -855,27 +867,41 @@ class Projectile(MuJoCoBase):
                     writer.append_data(framebuffer)
 
                     # Get top camera frame
-                    top_camera_frame = self.get_camera_image('top_camera')
+                    top_box_frame, top_cube_frame = self.get_camera_image('top_camera')
                     # top_camera_frame = top_camera_frame[::-1, :, :]
-                    top_camera_writer.append_data(top_camera_frame)
-                    top_camera_view = cv2.cvtColor(top_camera_frame, cv2.COLOR_RGB2BGR)
-                    top_mask, top_contours, top_filtered = process_camera_frame(top_camera_view)
-                    # side_view = self.get_camera_image('side_camera')
+                    if top_box_frame is not None and top_cube_frame is not None:
+                        # Process box frame
+                        top_box_writer.append_data(top_box_frame)
+                        top_box_view = cv2.cvtColor(top_box_frame, cv2.COLOR_RGB2BGR)
+                        top_box_mask, top_box_contours, top_box_filtered = process_camera_frame(top_box_view)
+                        
+                        # Process cube frame
+                        top_cube_writer.append_data(top_cube_frame)
+                        top_cube_view = cv2.cvtColor(top_cube_frame, cv2.COLOR_RGB2BGR)
+                        top_cube_mask, top_cube_contours, top_cube_filtered = process_camera_frame(top_cube_view)
 
-                    # Get front camera frame
-                    front_camera_frame = self.get_camera_image('front_camera')
-                    front_camera_frame = cv2.rotate(front_camera_frame, cv2.ROTATE_90_CLOCKWISE)
-                    front_camera_writer.append_data(front_camera_frame)
-                    front_camera_view = cv2.cvtColor(front_camera_frame, cv2.COLOR_RGB2BGR)
-                    front_mask, front_contours, front_filtered = process_camera_frame(front_camera_view)
-                    # side_view = cv2.cvtColor(side_view, cv2.COLOR_RGB2BGR)
+                    # Get front camera frames
+                    front_box_frame, front_cube_frame = self.get_camera_image('front_camera')
+                    if front_box_frame is not None and front_cube_frame is not None:
+                        # Rotate and process box frame
+                        front_box_frame = cv2.rotate(front_box_frame, cv2.ROTATE_90_CLOCKWISE)
+                        front_box_writer.append_data(front_box_frame)
+                        front_box_view = cv2.cvtColor(front_box_frame, cv2.COLOR_RGB2BGR)
+                        front_box_mask, front_box_contours, front_box_filtered = process_camera_frame(front_box_view)
+                        
+                        # Rotate and process cube frame
+                        front_cube_frame = cv2.rotate(front_cube_frame, cv2.ROTATE_90_CLOCKWISE)
+                        front_cube_writer.append_data(front_cube_frame)
+                        front_cube_view = cv2.cvtColor(front_cube_frame, cv2.COLOR_RGB2BGR)
+                        front_cube_mask, front_cube_contours, front_cube_filtered = process_camera_frame(front_cube_view)
 
                     # Process both frames
 
                     # Display images
-                    cv2.imshow('Top Camera View', top_filtered)
-                    cv2.imshow('Front Camera View', front_filtered)
-                    # cv2.imshow('Side Camera View', side_view)
+                    cv2.imshow('Top Camera Box View', top_box_filtered)
+                    cv2.imshow('Top Camera Cube View', top_cube_filtered)
+                    cv2.imshow('Front Camera Box View', front_box_filtered)
+                    cv2.imshow('Front Camera Cube View', front_cube_filtered)
 
                     # Check for 'q' key press to quit
                     if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -929,7 +955,7 @@ class Projectile(MuJoCoBase):
 
                         if not episode_filled_tag:
                             self.episode.append({
-                            'image': top_camera_frame,
+                            'image': top_box_frame,
                             # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
                             # 'state': np.asarray(state, dtype=np.float32),  # Save the padded state
                             'action': np.asarray([action_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
@@ -991,8 +1017,10 @@ class Projectile(MuJoCoBase):
 
 
         writer.close()
-        top_camera_writer.close()
-        front_camera_writer.close()
+        top_box_writer.close()
+        top_cube_writer.close()
+        front_box_writer.close()
+        front_cube_writer.close()
         glfw.terminate()
         # self.save_trajectory()
 

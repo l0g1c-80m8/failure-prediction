@@ -82,6 +82,18 @@ distribution channels. Once you have downloaded the `.deb` package, you can run 
 ### Nvidia Container Toolkit ###
 - To allow gpu access from within a docker container, you need to have the nvidia container toolkit installed.
 - You can get install it by following [this](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) link.
+```
+sudo apt-get purge nvidia-docker2 nvidia-container-toolkit
+sudo apt-get autoremove
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
+  && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt-get update
+sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
 - Make sure to configure the docker after installation (see [this](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)).
 - <b>Troubleshoot:</b> If the `MuJoCo` environment fails to start, you can try to set this value `no-cgroups = false`, in the `/etc/nvidia-container-runtime/config.toml` file.
 
