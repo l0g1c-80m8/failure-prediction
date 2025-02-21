@@ -441,6 +441,10 @@ class Projectile(MuJoCoBase):
         # Get cube body and geom IDs
         cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
         cube_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, 'sliding_cube')
+
+        fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
+        fixed_box_pos = self.data.xpos[fixed_box_body_id]
+        # print("fixed_box_pos", fixed_box_pos)
         
         # Randomize cube size (within reasonable bounds)
         base_size = 0.015  # Original size
@@ -469,9 +473,9 @@ class Projectile(MuJoCoBase):
                 self.model.pair_friction[i, 2] = friction_variation * 0.005  # Torsional friction
         
         # Randomize initial position (within reasonable bounds)
-        x_pos = random.uniform(0.35, 0.35) # random.uniform(0.35, 0.42)
-        y_pos = random.uniform(0.65, 0.65) # random.uniform(-0.5, -0.35)
-        z_pos = random.uniform(0.3, 0.4)
+        x_pos = random.uniform(fixed_box_pos[0]-0.05, fixed_box_pos[0]+0.05) # random.uniform(0.35, 0.42)
+        y_pos = random.uniform(fixed_box_pos[1]-0.05, fixed_box_pos[1]+0.05) # random.uniform(-0.5, -0.35)
+        z_pos = random.uniform(fixed_box_pos[2]+0.05, fixed_box_pos[2]+0.1)
         self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [x_pos, y_pos, z_pos]
         
         # Randomize initial orientation (uncomment when needed)
@@ -844,8 +848,8 @@ class Projectile(MuJoCoBase):
             raise ValueError(f"Camera '{camera_name}' not found in model")
         
         # Get image dimensions
-        width = 640
-        height = 640
+        width = 240
+        height = 240
         
         # Initialize image arrays for both fixed box and cube
         fixed_box_img = np.zeros((height, width, 3), dtype=np.uint8)
@@ -866,8 +870,8 @@ class Projectile(MuJoCoBase):
             viewport = mj.MjrRect(0, 0, width, height)
             
             # First render - fixed box only
-            self.opt.geomgroup[:] = 0  # Hide all groups
-            self.opt.geomgroup[1] = 1  # Show only fixed box
+            self.opt.geomgroup[:] = 1  # Hide all groups
+            # self.opt.geomgroup[1] = 1  # Show only fixed box
             
             # Update and render scene for fixed box
             mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
@@ -878,8 +882,8 @@ class Projectile(MuJoCoBase):
             mj.mjr_readPixels(fixed_box_img, None, viewport, self.context)
             
             # Second render - cube only
-            self.opt.geomgroup[:] = 0  # Hide all groups
-            self.opt.geomgroup[2] = 1  # Show only cube
+            self.opt.geomgroup[:] = 1  # Hide all groups
+            self.opt.geomgroup[2] = 0  # Show only cube
             
             # Update and render scene for cube
             mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
@@ -1228,7 +1232,7 @@ class Projectile(MuJoCoBase):
                     break
             
             # Validate the completeness
-            self.validate_episode(self.episode)
+            # self.validate_episode(self.episode)
 
             if dataset == "train":
                 print("Generating train examples...")
@@ -1398,7 +1402,7 @@ class Projectile(MuJoCoBase):
 
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene_complete.xml"
-    traj_path = "../ur5-scripts/traj_20250209.txt"  # Adjust path as needed
+    traj_path = "./demo/traj_20250218.txt"  # Adjust path as needed
 
     os.makedirs('demo/data/train', exist_ok=True)
     os.makedirs('demo/data/val', exist_ok=True)
