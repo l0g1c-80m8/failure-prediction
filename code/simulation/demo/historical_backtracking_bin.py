@@ -16,6 +16,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import cv2
+from scipy.spatial.distance import cdist
 
 
 N_TRAIN_EPISODES = 1
@@ -35,6 +36,195 @@ def linear_interpolation(first_failure_time_step, failure_time_step_trim):
 def sin_interpolation(first_failure_time_step, failure_time_step_trim):
     x = np.linspace(0, 1, first_failure_time_step - failure_time_step_trim + 1)
     return np.sin(x)
+
+def extract_transform_features(transforms):
+    if not transforms:
+        # Return zeros if no transforms
+        return np.zeros(6)  # 4 for rotation matrix elements + 2 for translation
+    
+    # Take first transform if multiple are present
+    H, error = transforms[0]
+    
+    # Extract rotation matrix and translation vector
+    R = H[:2, :2]  # 2x2 rotation matrix
+    t = H[:2, 2]   # 2D translation vector
+    
+    # Convert to numpy arrays if needed
+    R = np.array(R)
+    t = np.array(t)
+    
+    # Ensure correct shapes before concatenating
+    R_flat = R.flatten()  # Make 2x2 matrix into 1D array of length 4
+    t = t.reshape(-1)    # Ensure translation is 1D array
+    
+    # Combine into single feature vector
+    features = np.concatenate([R_flat, t])
+    
+    return features
+
+def find_closest_points(src_points, dst_points):
+    """
+    Find closest point pairs between source and destination point sets.
+    
+    Args:
+        src_points: (N, 2) array of source points
+        dst_points: (M, 2) array of destination points
+        
+    Returns:
+        Tuple of matched points arrays, both of shape (K, 2)
+    """
+    # Calculate pairwise distances between all points
+    distances = cdist(src_points, dst_points)
+    
+    # Find closest destination point for each source point
+    closest_indices = np.argmin(distances, axis=1)
+    
+    # Create matched pairs
+    src_matched = src_points
+    dst_matched = dst_points[closest_indices]
+    
+    return src_matched, dst_matched
+
+def calculate_transformation(src_points, dst_points):
+    """
+    Calculate rigid transformation (R, t) between matched point sets.
+    
+    Args:
+        src_points: (N, 2) array of source points
+        dst_points: (N, 2) array of destination points
+        
+    Returns:
+        R: 2x2 rotation matrix
+        t: 2D translation vector
+    """
+    # Calculate centroids
+    src_centroid = np.mean(src_points, axis=0)
+    dst_centroid = np.mean(dst_points, axis=0)
+    
+    # Center the point sets
+    src_centered = src_points - src_centroid
+    dst_centered = dst_points - dst_centroid
+    
+    # Calculate covariance matrix
+    H = src_centered.T @ dst_centered
+    
+    # SVD decomposition
+    U, _, Vt = np.linalg.svd(H)
+    
+    # Calculate rotation matrix
+    R = Vt.T @ U.T
+    
+    # Ensure proper rotation (determinant = 1)
+    if np.linalg.det(R) < 0:
+        Vt[-1, :] *= -1
+        R = Vt.T @ U.T
+    
+    # Calculate translation
+    t = dst_centroid - (R @ src_centroid)
+    
+    return R, t
+
+def create_homogeneous_matrix(R, t):
+    """
+    Create a 3x3 homogeneous transformation matrix from rotation R and translation t.
+    
+    Args:
+        R: 2x2 rotation matrix
+        t: 2D translation vector
+        
+    Returns:
+        3x3 homogeneous transformation matrix
+    """
+    H = np.eye(3)
+    H[:2, :2] = R
+    H[:2, 2] = t
+    return H
+
+def icp_2d(src_contour, dst_contour, max_iterations=50, tolerance=1e-6):
+    """
+    Perform 2D ICP algorithm between two contours.
+    
+    Args:
+        src_contour: Source contour points from OpenCV findContours
+        dst_contour: Destination contour points from OpenCV findContours
+        max_iterations: Maximum number of iterations
+        tolerance: Convergence threshold for mean squared error
+        
+    Returns:
+        H: 3x3 homogeneous transformation matrix
+        error: Final mean squared error
+    """
+    # Convert contours to point arrays
+    src_points = src_contour.reshape(-1, 2).astype(np.float32)
+    dst_points = dst_contour.reshape(-1, 2).astype(np.float32)
+    
+    # Initialize transformation
+    R_total = np.eye(2)
+    t_total = np.zeros(2)
+    
+    prev_error = float('inf')
+    
+    for iteration in range(max_iterations):
+        # Find closest point pairs
+        src_matched, dst_matched = find_closest_points(src_points, dst_points)
+        
+        # Calculate transformation
+        R, t = calculate_transformation(src_matched, dst_matched)
+        
+        # Update total transformation
+        R_total = R @ R_total
+        t_total = R @ t_total + t
+        
+        # Apply transformation to source points
+        src_points = (R @ src_points.T).T + t
+        
+        # Calculate error
+        current_error = np.mean(np.sum((src_matched - dst_matched) ** 2, axis=1))
+        
+        # Check convergence
+        if abs(prev_error - current_error) < tolerance:
+            break
+        
+        prev_error = current_error
+    
+    # Create homogeneous transformation matrix
+    H = create_homogeneous_matrix(R_total, t_total)
+    return H, current_error
+
+def process_consecutive_frames(contours1, contours2):
+    """
+    Process consecutive frames and calculate transformations for each contour pair.
+    
+    Args:
+        contours1: List of contours from first frame
+        contours2: List of contours from second frame
+        
+    Returns:
+        List of (R, t, error) tuples for each matched contour pair
+    """
+    results = []
+    
+    # Match contours based on area similarity
+    areas1 = [cv2.contourArea(cnt) for cnt in contours1]
+    areas2 = [cv2.contourArea(cnt) for cnt in contours2]
+    
+    for i, cnt1 in enumerate(contours1):
+        # Find best matching contour in second frame
+        best_match = None
+        best_area_diff = float('inf')
+        
+        for j, cnt2 in enumerate(contours2):
+            area_diff = abs(areas1[i] - areas2[j])
+            if area_diff < best_area_diff:
+                best_area_diff = area_diff
+                best_match = cnt2
+        
+        if best_match is not None:
+            # Calculate ICP between matched contours
+            H, error = icp_2d(cnt1, best_match)
+            results.append((H, error))
+    
+    return results
 
 def process_camera_frame(frame):
     """
@@ -79,7 +269,7 @@ def process_camera_frame(frame):
     return mask, contours, filtered_image
 
 class Projectile(MuJoCoBase):
-    def __init__(self, xml_path, traj_file, initial_delay=3.0):
+    def __init__(self, xml_path, traj_file, initial_delay=3.0, display_camera=False):
         super().__init__(xml_path)
         
         # self.init_angular_speed = 1.0  # Angular speed in radians per second
@@ -114,15 +304,7 @@ class Projectile(MuJoCoBase):
         self.cube_marker_color = [1, 0, 0, 0.8]  # Red for cube
         self.box_marker_color = [0, 1, 0, 0.8]   # Green for fixed box
 
-        # Create windows
-        # cv2.namedWindow('Top Camera View', cv2.WINDOW_NORMAL)
-        # cv2.namedWindow('Front Camera View', cv2.WINDOW_NORMAL)
-        # cv2.namedWindow('Side Camera View', cv2.WINDOW_NORMAL)
-        
-        # Set window sizes
-        # cv2.resizeWindow('Top Camera View', 640, 640)
-        # cv2.resizeWindow('Front Camera View', 640, 640)
-        # cv2.resizeWindow('Side Camera View', 640, 640)
+        self.display_camera = display_camera
 
     def add_position_markers(self, cube_pos, box_pos):
         """Add markers for both cube and fixed box positions"""
@@ -807,6 +989,10 @@ class Projectile(MuJoCoBase):
             displacements = []
             action_values = []
             fixed_box_velocities = []
+            top_camera_cube_contours = []
+            top_camera_box_contours = []
+            front_camera_cube_contours = []
+            front_camera_box_contours = []
 
             for overal_step_num in range(EPISODE_LENGTH):
 
@@ -873,12 +1059,12 @@ class Projectile(MuJoCoBase):
                         # Process box frame
                         top_box_writer.append_data(top_box_frame)
                         top_box_view = cv2.cvtColor(top_box_frame, cv2.COLOR_RGB2BGR)
-                        top_box_mask, top_box_contours, top_box_filtered = process_camera_frame(top_box_view)
+                        top_box_mask, top_box_contour, top_box_filtered = process_camera_frame(top_box_view)
                         
                         # Process cube frame
                         top_cube_writer.append_data(top_cube_frame)
                         top_cube_view = cv2.cvtColor(top_cube_frame, cv2.COLOR_RGB2BGR)
-                        top_cube_mask, top_cube_contours, top_cube_filtered = process_camera_frame(top_cube_view)
+                        top_cube_mask, top_cube_contour, top_cube_filtered = process_camera_frame(top_cube_view)
 
                     # Get front camera frames
                     front_box_frame, front_cube_frame = self.get_camera_image('front_camera')
@@ -887,25 +1073,26 @@ class Projectile(MuJoCoBase):
                         front_box_frame = cv2.rotate(front_box_frame, cv2.ROTATE_90_CLOCKWISE)
                         front_box_writer.append_data(front_box_frame)
                         front_box_view = cv2.cvtColor(front_box_frame, cv2.COLOR_RGB2BGR)
-                        front_box_mask, front_box_contours, front_box_filtered = process_camera_frame(front_box_view)
+                        front_box_mask, front_box_contour, front_box_filtered = process_camera_frame(front_box_view)
                         
                         # Rotate and process cube frame
                         front_cube_frame = cv2.rotate(front_cube_frame, cv2.ROTATE_90_CLOCKWISE)
                         front_cube_writer.append_data(front_cube_frame)
                         front_cube_view = cv2.cvtColor(front_cube_frame, cv2.COLOR_RGB2BGR)
-                        front_cube_mask, front_cube_contours, front_cube_filtered = process_camera_frame(front_cube_view)
+                        front_cube_mask, front_cube_contour, front_cube_filtered = process_camera_frame(front_cube_view)
 
                     # Process both frames
 
                     # Display images
-                    cv2.imshow('Top Camera Box View', top_box_filtered)
-                    cv2.imshow('Top Camera Cube View', top_cube_filtered)
-                    cv2.imshow('Front Camera Box View', front_box_filtered)
-                    cv2.imshow('Front Camera Cube View', front_cube_filtered)
+                    if self.display_camera:
+                        cv2.imshow('Top Camera Box View', top_box_filtered)
+                        cv2.imshow('Top Camera Cube View', top_cube_filtered)
+                        cv2.imshow('Front Camera Box View', front_box_filtered)
+                        cv2.imshow('Front Camera Cube View', front_cube_filtered)
 
-                    # Check for 'q' key press to quit
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
+                        # Check for 'q' key press to quit
+                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                            break
 
 
                     # swap OpenGL buffers (blocking call due to v-sync)
@@ -954,20 +1141,58 @@ class Projectile(MuJoCoBase):
                             first_failure_time_step = step_num - cube_drop_time # + episode_num * (EPISODE_LENGTH - cube_drop_time)
 
                         if not episode_filled_tag:
-                            self.episode.append({
-                            'image': top_box_frame,
-                            # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
-                            # 'state': np.asarray(state, dtype=np.float32),  # Save the padded state
-                            'action': np.asarray([action_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
-                            'language_instruction': 'dummy instruction',
-                                })
-                            # For plot     
-                            print("action_value!!!!!!!!!!!!step_num - cube_drop_time", step_num - cube_drop_time, action_value) # + episode_num * (EPISODE_LENGTH - cube_drop_time), action_value)
-                            # displacements.append([state[0], state[1], state[2]])  # Displacement
-                            # linear_velocities.append([state[3], state[4], state[5]])  # Linear velocity
-                            # angular_velocities.append([state[6], state[7], state[8]])  # Angular velocity
-                            action_values.append(action_value) # Action value
-                            # fixed_box_velocities.append(fixed_box_linear_speed)
+                            top_camera_cube_contours.append(top_cube_contour)
+                            top_camera_box_contours.append(top_box_contour)
+                            front_camera_cube_contours.append(front_cube_contour)
+                            front_camera_box_contours.append(front_box_contour)
+                            if len(top_camera_cube_contours) > 1:
+                                top_cube_transforms = process_consecutive_frames(top_camera_cube_contours[-1], top_cube_contour)
+                                # print("top_cube_transforms", top_cube_transforms.shape)
+                                top_box_transforms = process_consecutive_frames(top_camera_box_contours[-1], top_box_contour)
+                                # print("top_box_transforms", top_box_transforms.shape)
+                                front_cube_transforms = process_consecutive_frames(front_camera_cube_contours[-1], front_cube_contour)
+                                # print("front_cube_transforms", front_cube_transforms)
+                                front_box_transforms = process_consecutive_frames(front_camera_box_contours[-1], front_box_contour)
+                                # print("front_box_transforms", front_box_transforms)
+
+                                # Extract features from each transform set
+                                top_cube_features = extract_transform_features(top_cube_transforms)
+                                top_box_features = extract_transform_features(top_box_transforms)
+                                front_cube_features = extract_transform_features(front_cube_transforms)
+                                front_box_features = extract_transform_features(front_box_transforms)
+                                
+                                # Combine all features
+                                combined_features = np.concatenate([
+                                    top_cube_features,
+                                    top_box_features,
+                                    front_cube_features,
+                                    front_box_features
+                                ])
+                                # Print or store the transformations
+                                # for H, error in top_cube_transforms:
+                                #     print("Box transformation:")
+                                #     print("Homogeneous transformation matrix:\n", H)
+                                #     print("Error:", error)
+                                    
+                                #     # If you need to extract R and t separately:
+                                #     R = H[:2, :2]  # Extract rotation matrix
+                                #     t = H[:2, 2]   # Extract translation vector
+
+                                self.episode.append({
+                                # 'image': top_box_frame,
+                                # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
+                                'state': np.asarray(combined_features, dtype=np.float32),  # Save the padded state
+                                'action': np.asarray([action_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
+                                # 'language_instruction': 'dummy instruction',
+                                    })
+                                # For plot     
+                                print("action_value!!!!!!!!!!!!step_num - cube_drop_time", step_num - cube_drop_time, action_value) # + episode_num * (EPISODE_LENGTH - cube_drop_time), action_value)
+                                # displacements.append([state[0], state[1], state[2]])  # Displacement
+                                # linear_velocities.append([state[3], state[4], state[5]])  # Linear velocity
+                                # angular_velocities.append([state[6], state[7], state[8]])  # Angular velocity
+                                action_values.append(action_value) # Action value
+                                # fixed_box_velocities.append(fixed_box_linear_speed)
+                    
                 episode_filled_tag = True
                 print("len(self.episode)", len(self.episode), "episode_filled_tag", episode_filled_tag, "episode_failed_tag", episode_failed_tag, "failure_time_step", failure_time_step)
 
@@ -1005,12 +1230,12 @@ class Projectile(MuJoCoBase):
             # Validate the completeness
             self.validate_episode(self.episode)
 
-            # if dataset == "train":
-            #     print("Generating train examples...")
-            #     np.save(f'demo/data/train/episode_{episode_num}.npy', self.episode)
-            # elif dataset == "val":
-            #     print("Generating val examples...")
-            #     np.save(f'demo/data/val/episode_{episode_num}.npy', self.episode)
+            if dataset == "train":
+                print("Generating train examples...")
+                np.save(f'demo/data/train/episode_{episode_num}.npy', self.episode)
+            elif dataset == "val":
+                print("Generating val examples...")
+                np.save(f'demo/data/val/episode_{episode_num}.npy', self.episode)
 
             # Plot after simulation
             # self.plot_metrics(linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities, episode_num)
@@ -1178,7 +1403,7 @@ def main():
     os.makedirs('demo/data/train', exist_ok=True)
     os.makedirs('demo/data/val', exist_ok=True)
 
-    sim = Projectile(xml_path, traj_path, initial_delay=2)
+    sim = Projectile(xml_path, traj_path, initial_delay=2, display_camera=False)
     sim.reset(RANDOM_EPISODE_TMP)
     sim.simulate(sys.argv[1])
 
