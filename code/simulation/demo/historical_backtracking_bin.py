@@ -639,6 +639,10 @@ class Projectile(MuJoCoBase):
         fixed_box_pos = self.data.xpos[fixed_box_body_id].copy()
         fixed_box_quat = self.data.xquat[fixed_box_body_id].copy()
         
+        # Get end effector position (wrist_3_link)
+        wrist_3_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'wrist_3_link')
+        end_effector_pos = self.data.xpos[wrist_3_body_id].copy()
+        # print("end_effector_pos", end_effector_pos)
 
         # Add position markers
         self.add_position_markers(cube_pos, fixed_box_pos)
@@ -647,7 +651,7 @@ class Projectile(MuJoCoBase):
         # Store velocities
         cube_lin_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3].copy()
         cube_ang_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]+3:self.model.body_jntadr[cube_body_id]+6].copy()
-        fixed_box_lin_vel = self.data.cvel[fixed_box_body_id].reshape((6,))[:3].copy()
+        # fixed_box_lin_vel = self.data.cvel[fixed_box_body_id].reshape((6,))[:3].copy()
         
         # Convert quaternions to rotation matrices (3x3)
         def quat_to_mat(quat):
@@ -674,25 +678,22 @@ class Projectile(MuJoCoBase):
             
             # Calculate relative transform between cube and fixed box
             relative_pos = fixed_box_pos - cube_pos
-            relative_rot = fixed_box_rot @ cube_rot.T
             
-            transform_data = {
+            transform_data_3D = {
                 'cube_translation': cube_translation,
                 'cube_rotation_delta': cube_rot_delta,
                 'fixed_box_translation': fixed_box_translation,
                 'fixed_box_rotation_delta': fixed_box_rot_delta,
-                'relative_position': relative_pos,
-                'relative_rotation': relative_rot
+                'relative_position': relative_pos
             }
         else:
             # For first frame, set deltas to identity/zero
-            transform_data = {
+            transform_data_3D = {
                 'cube_translation': np.zeros(3),
                 'cube_rotation_delta': np.eye(3),
                 'fixed_box_translation': np.zeros(3),
                 'fixed_box_rotation_delta': np.eye(3),
-                'relative_position': fixed_box_pos - cube_pos,
-                'relative_rotation': fixed_box_rot @ cube_rot.T
+                'relative_position': fixed_box_pos - cube_pos
             }
         
         # Store current transforms for next frame
@@ -701,54 +702,20 @@ class Projectile(MuJoCoBase):
         self.prev_fixed_box_pos = fixed_box_pos
         self.prev_fixed_box_rot = fixed_box_rot
         
-        # Combine state information (keeping existing format)
-        state = np.hstack([
-            transform_data['relative_position'],  # 3 values
-            cube_lin_vel,                        # 3 values
-            cube_ang_vel                         # 3 values
-        ])
-        
-        return state, fixed_box_lin_vel, transform_data
+        return end_effector_pos, transform_data_3D
 
 
     # Function to calculate action value based on displacement, linear speed, and angular speed
-    def calculate_action(self, displacement, linear_speed, angular_speed):
-        # Check if all values are in the lower range
-        # print("DISPLACEMENT_THRESHOLD_LOW:", DISPLACEMENT_THRESHOLD_LOW, "displacement:", displacement, "DISPLACEMENT_THRESHOLD_HIGH", DISPLACEMENT_THRESHOLD_HIGH)
-        # print("LINEAR_SPEED_THRESHOLD_LOW:", LINEAR_SPEED_THRESHOLD_LOW, "linear_speed:", linear_speed, "LINEAR_SPEED_THRESHOLD_HIGH", LINEAR_SPEED_THRESHOLD_HIGH)
-        # print("ANGULAR_SPEED_THRESHOLD_LOW:", ANGULAR_SPEED_THRESHOLD_LOW, "angular_speed:", abs(angular_speed), "ANGULAR_SPEED_THRESHOLD_HIGH", ANGULAR_SPEED_THRESHOLD_HIGH)
-
-
-        # if displacement < DISPLACEMENT_THRESHOLD_LOW and \
-        # linear_speed < LINEAR_SPEED_THRESHOLD_LOW and \
-        # abs(angular_speed) < ANGULAR_SPEED_THRESHOLD_LOW:
+    def calculate_action(self, displacement):
+        
         if displacement[2] < DISPLACEMENT_THRESHOLD_LOW:
             # print("Safe")
             return 0.0  # Set action to 0
 
-        # Check if any value exceeds the higher thresholds
-        # if displacement > DISPLACEMENT_THRESHOLD_HIGH or \
-        # linear_speed > LINEAR_SPEED_THRESHOLD_HIGH or \
-        # abs(angular_speed) > ANGULAR_SPEED_THRESHOLD_HIGH:
         if displacement[2] > DISPLACEMENT_THRESHOLD_HIGH:
             # print("Failure")
             return 1.0  # Set action to 1
 
-        # If the values fall between thresholds, interpolate a reasonable action
-        # Normalize between 0 and 1 based on distance from the lower to upper threshold
-        # displacement_factor = (displacement - DISPLACEMENT_THRESHOLD_LOW) / \
-        #                     (DISPLACEMENT_THRESHOLD_HIGH - DISPLACEMENT_THRESHOLD_LOW)
-        # linear_speed_factor = (linear_speed - LINEAR_SPEED_THRESHOLD_LOW) / \
-        #                     (LINEAR_SPEED_THRESHOLD_HIGH - LINEAR_SPEED_THRESHOLD_LOW)
-        # angular_speed_factor = (abs(angular_speed) - ANGULAR_SPEED_THRESHOLD_LOW) / \
-        #                     (ANGULAR_SPEED_THRESHOLD_HIGH - ANGULAR_SPEED_THRESHOLD_LOW)
-
-        # Combine the factors with an average, assuming equal importance
-        # action_value = (displacement_factor + linear_speed_factor + angular_speed_factor) / 3.0
-        # print("Risk")
-        # return action_value
-        
-        # Just for debugging
         return 0.5
 
     def randomize_camera_position(self, camera_name='top_camera'):
@@ -759,14 +726,14 @@ class Projectile(MuJoCoBase):
         # Get camera id
         cam_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_CAMERA, camera_name)
 
-        print("self.cam_position_read[cam_id]", cam_id, self.cam_position_read[cam_id])
+        # print("self.cam_position_read[cam_id]", cam_id, self.cam_position_read[cam_id])
 
         if not self.cam_position_read[cam_id]:
             self.cam_position_init[cam_id] = self.model.cam_pos[cam_id].copy()
             # print(self.cam_position_init[cam_id])
             self.cam_position_read[cam_id] = True
         
-        print("self.cam_position_init[cam_id]", cam_id, self.cam_position_init[cam_id])
+        # print("self.cam_position_init[cam_id]", cam_id, self.cam_position_init[cam_id])
         
         # Define ranges for camera randomization
         # Wider ranges for more noticeable variation
@@ -1062,7 +1029,7 @@ class Projectile(MuJoCoBase):
                                     mj.mjtCatBit.mjCAT_ALL.value, self.scene)
                     
                     # Add markers to scene
-                    self.add_markers_to_scene()
+                    # self.add_markers_to_scene()
                     
                     # get framebuffer viewport
                     viewport_width, viewport_height = glfw.get_framebuffer_size(self.window)
@@ -1129,17 +1096,15 @@ class Projectile(MuJoCoBase):
                     if step_num >= cube_drop_time:
                         # print("step_num", step_num)
 
-                        state, fixed_box_linear_speed, transforms = self.data_collection(cube_body_id, fixed_box_body_id)
-                        displacement = [state[0], state[1], state[2]]
-                        linear_speed = [state[3], state[4], state[5]]
-                        angular_speed = [state[6], state[7], state[8]]
+                        end_effector_pos, transform_data_3D = self.data_collection(cube_body_id, fixed_box_body_id)
+                        displacement = [transform_data_3D['relative_position'][0], transform_data_3D['relative_position'][1], transform_data_3D['relative_position'][2]]
 
                         if displacement[2] >= DISPLACEMENT_THRESHOLD_HIGH:
                             if not self.is_high_threshold_step_set:
                                 self.high_threshold_step = step_num  # Mark the step for interpolation endpoint
                                 self.is_high_threshold_step_set = True
 
-                        action_value = self.calculate_action(displacement, linear_speed, angular_speed)
+                        action_value = self.calculate_action(displacement)
 
 
                         # Historical backtracking for backtracking_steps time steps
@@ -1199,15 +1164,16 @@ class Projectile(MuJoCoBase):
                                     top_cube_features,
                                     top_box_features,
                                     front_cube_features,
-                                    front_box_features
+                                    front_box_features,
+                                    end_effector_pos
                                 ])
 
-                                # print("top_cube_features", np.asarray(top_cube_features).shape)
-                                # print("top_box_features", np.asarray(top_box_features).shape)
-                                # print("front_cube_features", np.asarray(front_cube_features).shape)
-                                # print("front_box_features", np.asarray(front_box_features).shape)
-                                # print("combined_features", combined_features.shape)
-                                if not combined_features.shape[0]==16:
+                                print("top_cube_features", np.asarray(top_cube_features).shape) # (4,)
+                                print("top_box_features", np.asarray(top_box_features).shape) # (4,)
+                                print("front_cube_features", np.asarray(front_cube_features).shape) # (4,)
+                                print("front_box_features", np.asarray(front_box_features).shape) # (4,)
+                                print("combined_features", combined_features.shape) # (19,)
+                                if not combined_features.shape[0]==19:
                                     print(f"Error combined_features.shape")
                                     return
                                 # Print or store the transformations
@@ -1228,7 +1194,7 @@ class Projectile(MuJoCoBase):
                                 # 'language_instruction': 'dummy instruction',
                                     })
                                 # For plot     
-                                # print("action_value!!!!!!!!!!!!step_num - cube_drop_time", step_num - cube_drop_time, action_value) # + episode_num * (EPISODE_LENGTH - cube_drop_time), action_value)
+                                print("action_value!!!!!!!!!!!!step_num - cube_drop_time", step_num - cube_drop_time, action_value) # + episode_num * (EPISODE_LENGTH - cube_drop_time), action_value)
                                 # displacements.append([state[0], state[1], state[2]])  # Displacement
                                 # linear_velocities.append([state[3], state[4], state[5]])  # Linear velocity
                                 # angular_velocities.append([state[6], state[7], state[8]])  # Angular velocity
