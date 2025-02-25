@@ -49,15 +49,15 @@ class RobotTrajectoryDataset(Dataset):
         # Extract window data
         window_data = episode_data[start_idx:end_idx]
         
-        # Get states sequence (shape: window_size x 9)
-        states = np.stack([frame['state'] for frame in window_data])
+        # Get states sequence (shape: window_size x 16)
+        states = np.stack([frame['state'] for frame in window_data])        
         
         # Get the action for the last timestep
         # Convert to numpy array first, then to tensor
         action = np.array(window_data[-1]['action'], dtype=np.float32)
         
         return {
-            'states': torch.FloatTensor(states).transpose(0, 1),  # Transform to (9 x window_size) for 1D convolution
+            'states': torch.FloatTensor(states).transpose(0, 1),  # Transform to (16 x window_size) for 1D convolution
             'action': torch.FloatTensor(action)  # Convert numpy array to tensor
         }
 
@@ -288,17 +288,17 @@ if __name__ == "__main__":
         val_dir='data/val',
         window_size=10,
         stride=1,
-        batch_size=1024,
+        batch_size=1016,
         num_workers=8
     )
     
     # Example of using different ResNet architectures
     models = {
-        'ResNet18': resnet18(input_channels=9)
-        # 'ResNet34': resnet34(input_channels=9),
-        # 'ResNet50': resnet50(input_channels=9),
-        # 'ResNet101': resnet101(input_channels=9),
-        # 'ResNet152': resnet152(input_channels=9)
+        'ResNet18': resnet18(input_channels=16)
+        # 'ResNet34': resnet34(input_channels=16),
+        # 'ResNet50': resnet50(input_channels=16),
+        # 'ResNet101': resnet101(input_channels=16),
+        # 'ResNet152': resnet152(input_channels=16)
     }
     
     # Train and evaluate each model

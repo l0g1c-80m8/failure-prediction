@@ -19,15 +19,15 @@ import cv2
 from scipy.spatial.distance import cdist
 
 
-N_TRAIN_EPISODES = 1
-N_VAL_EPISODES = 10
-EPISODE_LENGTH = 1200  # Number of points in trajectory
+N_TRAIN_EPISODES = 100
+N_VAL_EPISODES = 25
+EPISODE_LENGTH = 400  # Number of points in trajectory
 
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_HIGH = 0.01
 DISPLACEMENT_THRESHOLD_LOW = 0
 
-RANDOM_EPISODE_TMP = random.randint(0, EPISODE_LENGTH) # 67 86 #  109
+RANDOM_EPISODE_TMP = random.randint(0, EPISODE_LENGTH) # 67 86 #  109 282
 
 # Define different interpolation methods
 def linear_interpolation(first_failure_time_step, failure_time_step_trim):
@@ -57,8 +57,12 @@ def extract_transform_features(transforms):
     R_flat = R.flatten()  # Make 2x2 matrix into 1D array of length 4
     t = t.reshape(-1)    # Ensure translation is 1D array
     
+    # print("R_flat", R_flat)
+    # print("t", t)
     # Combine into single feature vector
     features = np.concatenate([R_flat, t])
+    features = [features[0], features[1], features[4], features[5]]
+    # print("features", features)
     
     return features
 
@@ -140,7 +144,7 @@ def create_homogeneous_matrix(R, t):
     H[:2, 2] = t
     return H
 
-def icp_2d(src_contour, dst_contour, max_iterations=50, tolerance=1e-6):
+def icp_2d(src_contour, dst_contour, max_iterations=16, tolerance=1e-6):
     """
     Perform 2D ICP algorithm between two contours.
     
@@ -187,8 +191,21 @@ def icp_2d(src_contour, dst_contour, max_iterations=50, tolerance=1e-6):
         
         prev_error = current_error
     
-    # Create homogeneous transformation matrix
-    H = create_homogeneous_matrix(R_total, t_total)
+    # Apply log1p scaling to R_total and t_total
+    scale_factor = 1e5
+    R_total_scaled = np.sign(R_total) * np.log1p(np.abs(R_total) * scale_factor)
+    t_total_scaled = np.sign(t_total) * np.log1p(np.abs(t_total) * scale_factor)
+    
+    # print("Original R_total:", R_total)
+    # print("Scaled R_total:", R_total_scaled)
+    # print("Original t_total:", t_total)
+    # print("Scaled t_total:", t_total_scaled)
+    
+    # Create homogeneous transformation matrix with scaled values
+    H = create_homogeneous_matrix(R_total_scaled, t_total_scaled)
+
+    # print("H with scaled values:", H)
+    
     return H, current_error
 
 def process_consecutive_frames(contours1, contours2):
@@ -274,7 +291,7 @@ class Projectile(MuJoCoBase):
         
         # self.init_angular_speed = 1.0  # Angular speed in radians per second
         self.initial_delay = initial_delay  # Delay before starting movement
-        self.speed_scale = random.uniform(0.5, 1.0)  # New parameter to control joint speed
+        self.speed_scale = random.uniform(2.5, 3.5)  # New parameter to control joint speed
         self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
         self.start_time = None  # To track the start time
         self.positions = []  # To store the position data
@@ -292,7 +309,7 @@ class Projectile(MuJoCoBase):
         self.next_target = None
         self.transition_start_time = None
         self.ncam = self.model.ncam  # Get number of cameras in the model
-        self.cam_position = [None] * self.ncam  # Initialize with None for each camera
+        self.cam_position_init = [None] * self.ncam  # Initialize with None for each camera
         self.cam_position_read = [False] * self.ncam  # Initialize all as unread
 
         # Add visualization markers# Marker appearance settings
@@ -356,9 +373,9 @@ class Projectile(MuJoCoBase):
 
 
         # Set camera configuration
-        self.cam.azimuth = 300 # -250 random.uniform(-225, -315)
+        self.cam.azimuth = 300 # -216 random.uniform(-225, -315)
         self.cam.distance = 2.5 # random.uniform(2, 3)
-        self.cam.elevation = -40 # random.uniform(-50, -30)
+        self.cam.elevation = -40 # random.uniform(-16, -30)
         # print("self.cam", self.cam.azimuth, self.cam.distance, self.cam.elevation)
 
         self.randomize_camera_position('top_camera')
@@ -386,7 +403,7 @@ class Projectile(MuJoCoBase):
         self.current_target = None
         self.next_target = None
         self.transition_start_time = None
-        self.speed_scale = random.uniform(0.5, 1.0)  # New parameter to control joint speed
+        self.speed_scale = random.uniform(2.5, 3.5)  # New parameter to control joint speed
         self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
 
         self.emergency_stop = False  # Flag to trigger the emergency stop
@@ -447,8 +464,8 @@ class Projectile(MuJoCoBase):
         # print("fixed_box_pos", fixed_box_pos)
         
         # Randomize cube size (within reasonable bounds)
-        base_size = 0.015  # Original size
-        size_variation = random.uniform(0.8, 3)  # n% variation
+        base_size = 0.025  # Original size
+        size_variation = random.uniform(1.0, 3)  # n% variation
         new_size = base_size * size_variation
         self.model.geom_size[cube_geom_id] = [new_size, new_size, new_size]
         
@@ -742,18 +759,21 @@ class Projectile(MuJoCoBase):
         # Get camera id
         cam_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_CAMERA, camera_name)
 
+        print("self.cam_position_read[cam_id]", cam_id, self.cam_position_read[cam_id])
 
         if not self.cam_position_read[cam_id]:
-            self.cam_position[cam_id] = self.model.cam_pos[cam_id]
-            # print(self.cam_position[cam_id])
+            self.cam_position_init[cam_id] = self.model.cam_pos[cam_id].copy()
+            # print(self.cam_position_init[cam_id])
             self.cam_position_read[cam_id] = True
+        
+        print("self.cam_position_init[cam_id]", cam_id, self.cam_position_init[cam_id])
         
         # Define ranges for camera randomization
         # Wider ranges for more noticeable variation
         pos_ranges = {
-            'x': (self.cam_position[cam_id][0]-0.1, self.cam_position[cam_id][0]+0.1),    # Wider range for x offset
-            'y': (self.cam_position[cam_id][1]-0.1, self.cam_position[cam_id][1]+0.1),    # Wider range for y offset
-            'z': (self.cam_position[cam_id][2]-0.1, self.cam_position[cam_id][2]+0.1),     # Height variation
+            'x': (self.cam_position_init[cam_id][0]-0.1, self.cam_position_init[cam_id][0]+0.1),    # Wider range for x offset
+            'y': (self.cam_position_init[cam_id][1]-0.1, self.cam_position_init[cam_id][1]+0.1),    # Wider range for y offset
+            'z': (self.cam_position_init[cam_id][2]-0.1, self.cam_position_init[cam_id][2]+0.1),     # Height variation
             'azimuth': (-5, 5),  # Degrees of rotation around vertical axis
             'elevation': (-1, 0), # Degrees of tilt
         }
@@ -848,8 +868,8 @@ class Projectile(MuJoCoBase):
             raise ValueError(f"Camera '{camera_name}' not found in model")
         
         # Get image dimensions
-        width = 240
-        height = 240
+        width = 640
+        height = 640
         
         # Initialize image arrays for both fixed box and cube
         fixed_box_img = np.zeros((height, width, 3), dtype=np.uint8)
@@ -870,8 +890,8 @@ class Projectile(MuJoCoBase):
             viewport = mj.MjrRect(0, 0, width, height)
             
             # First render - fixed box only
-            self.opt.geomgroup[:] = 1  # Hide all groups
-            # self.opt.geomgroup[1] = 1  # Show only fixed box
+            self.opt.geomgroup[:] = 0  # Hide all groups
+            self.opt.geomgroup[1] = 1  # Show only fixed box
             
             # Update and render scene for fixed box
             mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
@@ -882,8 +902,8 @@ class Projectile(MuJoCoBase):
             mj.mjr_readPixels(fixed_box_img, None, viewport, self.context)
             
             # Second render - cube only
-            self.opt.geomgroup[:] = 1  # Hide all groups
-            self.opt.geomgroup[2] = 0  # Show only cube
+            self.opt.geomgroup[:] = 0  # Hide all groups
+            self.opt.geomgroup[2] = 1  # Show only cube
             
             # Update and render scene for cube
             mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
@@ -947,7 +967,7 @@ class Projectile(MuJoCoBase):
         top_camera_video_filename = os.path.join(video_dir, 'top_camera_video.mp4')
         front_camera_video_filename = os.path.join(video_dir, 'front_camera_video.mp4')
 
-        writer = imageio.get_writer(video_filename, fps=60)
+        # writer = imageio.get_writer(video_filename, fps=60)
         top_box_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
         top_cube_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
         front_box_writer = imageio.get_writer(front_camera_video_filename, fps=60, macro_block_size=16)
@@ -983,7 +1003,7 @@ class Projectile(MuJoCoBase):
             print("random_seed_tmp", random_seed_tmp)
             failure_time_step = -1
             first_failure_time_step = -1
-            cube_drop_time = 50
+            cube_drop_time = 16
             # Clear position data
             episode_filled_tag = False
 
@@ -1051,10 +1071,10 @@ class Projectile(MuJoCoBase):
                     mj.mjr_render(viewport, self.scene, self.context)
 
                     # Capture the current frame
-                    framebuffer = np.zeros((viewport_height, viewport_width, 3), dtype=np.uint8)
-                    mj.mjr_readPixels(framebuffer, None, viewport, self.context)
-                    framebuffer = framebuffer[::-1, :, :]  # Reverse the order of rows
-                    writer.append_data(framebuffer)
+                    # framebuffer = np.zeros((viewport_height, viewport_width, 3), dtype=np.uint8)
+                    # mj.mjr_readPixels(framebuffer, None, viewport, self.context)
+                    # framebuffer = framebuffer[::-1, :, :]  # Reverse the order of rows
+                    # writer.append_data(framebuffer)
 
                     # Get top camera frame
                     top_box_frame, top_cube_frame = self.get_camera_image('top_camera')
@@ -1149,21 +1169,30 @@ class Projectile(MuJoCoBase):
                             top_camera_box_contours.append(top_box_contour)
                             front_camera_cube_contours.append(front_cube_contour)
                             front_camera_box_contours.append(front_box_contour)
-                            if len(top_camera_cube_contours) > 1:
-                                top_cube_transforms = process_consecutive_frames(top_camera_cube_contours[-1], top_cube_contour)
-                                # print("top_cube_transforms", top_cube_transforms.shape)
-                                top_box_transforms = process_consecutive_frames(top_camera_box_contours[-1], top_box_contour)
-                                # print("top_box_transforms", top_box_transforms.shape)
-                                front_cube_transforms = process_consecutive_frames(front_camera_cube_contours[-1], front_cube_contour)
+                            window = 30
+                            if len(top_camera_cube_contours) > window:
+                                top_cube_transforms = process_consecutive_frames(top_camera_cube_contours[-window], top_cube_contour)
+                                # print("top_cube_transforms", top_cube_transforms)
+                                top_box_transforms = process_consecutive_frames(top_camera_box_contours[-window], top_box_contour)
+                                # print("top_box_transforms", top_box_transforms)
+                                front_cube_transforms = process_consecutive_frames(front_camera_cube_contours[-window], front_cube_contour)
                                 # print("front_cube_transforms", front_cube_transforms)
-                                front_box_transforms = process_consecutive_frames(front_camera_box_contours[-1], front_box_contour)
+                                front_box_transforms = process_consecutive_frames(front_camera_box_contours[-window], front_box_contour)
                                 # print("front_box_transforms", front_box_transforms)
+
+                                try:
+                                    len(top_cube_transforms)==0 and len(top_box_transforms)==0 and len(front_cube_transforms)==0 and not len(front_box_transforms)==0
+                                except Exception as e:
+                                    print(f"Error Contour")
+                                    return
 
                                 # Extract features from each transform set
                                 top_cube_features = extract_transform_features(top_cube_transforms)
                                 top_box_features = extract_transform_features(top_box_transforms)
                                 front_cube_features = extract_transform_features(front_cube_transforms)
                                 front_box_features = extract_transform_features(front_box_transforms)
+                                # print("top_cube_transforms",top_cube_transforms)
+                                # print("top_cube_features",top_cube_features)
                                 
                                 # Combine all features
                                 combined_features = np.concatenate([
@@ -1172,6 +1201,15 @@ class Projectile(MuJoCoBase):
                                     front_cube_features,
                                     front_box_features
                                 ])
+
+                                # print("top_cube_features", np.asarray(top_cube_features).shape)
+                                # print("top_box_features", np.asarray(top_box_features).shape)
+                                # print("front_cube_features", np.asarray(front_cube_features).shape)
+                                # print("front_box_features", np.asarray(front_box_features).shape)
+                                # print("combined_features", combined_features.shape)
+                                if not combined_features.shape[0]==16:
+                                    print(f"Error combined_features.shape")
+                                    return
                                 # Print or store the transformations
                                 # for H, error in top_cube_transforms:
                                 #     print("Box transformation:")
@@ -1190,7 +1228,7 @@ class Projectile(MuJoCoBase):
                                 # 'language_instruction': 'dummy instruction',
                                     })
                                 # For plot     
-                                print("action_value!!!!!!!!!!!!step_num - cube_drop_time", step_num - cube_drop_time, action_value) # + episode_num * (EPISODE_LENGTH - cube_drop_time), action_value)
+                                # print("action_value!!!!!!!!!!!!step_num - cube_drop_time", step_num - cube_drop_time, action_value) # + episode_num * (EPISODE_LENGTH - cube_drop_time), action_value)
                                 # displacements.append([state[0], state[1], state[2]])  # Displacement
                                 # linear_velocities.append([state[3], state[4], state[5]])  # Linear velocity
                                 # angular_velocities.append([state[6], state[7], state[8]])  # Angular velocity
@@ -1245,7 +1283,7 @@ class Projectile(MuJoCoBase):
             # self.plot_metrics(linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities, episode_num)
 
 
-        writer.close()
+        # writer.close()
         top_box_writer.close()
         top_cube_writer.close()
         front_box_writer.close()
