@@ -171,6 +171,7 @@ MUJOCO_LOG.TXT
 *.mp4
 
 code/simulation/data
+code/simulation/demo/data
 code/simulation/*/*.png
 code/simulation/*/*.npy
 code/simulation/*/*.txt
@@ -178,3 +179,8 @@ code/simulation/*/*.txt
 
 # ignore vscode files
 .vscode/settings.json
+
+code/simple_model/wandb/
+code/simple_model/data/*
+code/octo/exp/*
+code/octo/tests/*

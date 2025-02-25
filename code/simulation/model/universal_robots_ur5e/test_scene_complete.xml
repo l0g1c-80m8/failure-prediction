@@ -19,15 +19,15 @@
         <general gainprm="500" biasprm="0 -500 -100" forcerange="-28 28"/>
       </default>
       <default class="visual">
-        <geom type="mesh" contype="0" conaffinity="0" group="0"/>
+        <geom type="mesh" contype="0" conaffinity="0"/>
       </default>
       <default class="collision">
-        <geom type="capsule" group="0"/>
+        <geom type="capsule" group="3"/>
         <default class="eef_collision">
-          <geom type="cylinder" group="0"/>
+          <geom type="cylinder"/>
         </default>
       </default>
-      <site size="0.001" rgba="0.5 0.5 0.5 0.3" group="0"/>
+      <site size="0.001" rgba="0.5 0.5 0.5 0.3"/>
     </default>
   </default>
 
@@ -204,6 +204,6 @@
 
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
-    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane1" group="0"/>
+    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane1"/>
   </worldbody>
 </mujoco>

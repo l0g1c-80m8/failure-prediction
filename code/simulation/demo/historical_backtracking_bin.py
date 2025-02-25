@@ -1445,7 +1445,7 @@ def main():
     os.makedirs('demo/data/train', exist_ok=True)
     os.makedirs('demo/data/val', exist_ok=True)
 
-    sim = Projectile(xml_path, traj_path, initial_delay=2, display_camera=False)
+    sim = Projectile(xml_path, traj_path, initial_delay=2, display_camera=True)
     sim.reset(RANDOM_EPISODE_TMP)
     sim.simulate(sys.argv[1])
 
