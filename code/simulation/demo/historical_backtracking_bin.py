@@ -37,35 +37,6 @@ def sin_interpolation(first_failure_time_step, failure_time_step_trim):
     x = np.linspace(0, 1, first_failure_time_step - failure_time_step_trim + 1)
     return np.sin(x)
 
-def extract_transform_features(transforms):
-    if not transforms:
-        # Return zeros if no transforms
-        return np.zeros(6)  # 4 for rotation matrix elements + 2 for translation
-    
-    # Take first transform if multiple are present
-    H, error = transforms[0]
-    
-    # Extract rotation matrix and translation vector
-    R = H[:2, :2]  # 2x2 rotation matrix
-    t = H[:2, 2]   # 2D translation vector
-    
-    # Convert to numpy arrays if needed
-    R = np.array(R)
-    t = np.array(t)
-    
-    # Ensure correct shapes before concatenating
-    R_flat = R.flatten()  # Make 2x2 matrix into 1D array of length 4
-    t = t.reshape(-1)    # Ensure translation is 1D array
-    
-    # print("R_flat", R_flat)
-    # print("t", t)
-    # Combine into single feature vector
-    features = np.concatenate([R_flat, t])
-    features = [features[0], features[1], features[4], features[5]]
-    # print("features", features)
-    
-    return features
-
 def find_closest_points(src_points, dst_points):
     """
     Find closest point pairs between source and destination point sets.
@@ -243,6 +214,35 @@ def process_consecutive_frames(contours1, contours2):
     
     return results
 
+def extract_transform_features(transforms):
+    if not transforms:
+        # Return zeros if no transforms
+        return np.zeros(6)  # 4 for rotation matrix elements + 2 for translation
+    
+    # Take first transform if multiple are present
+    H, error = transforms[0]
+    
+    # Extract rotation matrix and translation vector
+    R = H[:2, :2]  # 2x2 rotation matrix
+    t = H[:2, 2]   # 2D translation vector
+    
+    # Convert to numpy arrays if needed
+    R = np.array(R)
+    t = np.array(t)
+    
+    # Ensure correct shapes before concatenating
+    R_flat = R.flatten()  # Make 2x2 matrix into 1D array of length 4
+    t = t.reshape(-1)    # Ensure translation is 1D array
+    
+    # print("R_flat", R_flat)
+    # print("t", t)
+    # Combine into single feature vector
+    features = np.concatenate([R_flat, t])
+    features = [features[0], features[1], features[4], features[5]]
+    # print("features", features)
+    
+    return features
+
 def process_camera_frame(frame):
     """
     Process camera frame to get mask and contours for non-zero pixel values.
@@ -289,88 +289,86 @@ class Projectile(MuJoCoBase):
     def __init__(self, xml_path, traj_file, initial_delay=3.0, display_camera=False):
         super().__init__(xml_path)
         
-        # self.init_angular_speed = 1.0  # Angular speed in radians per second
+        # Simulation parameters
         self.initial_delay = initial_delay  # Delay before starting movement
-        self.speed_scale = random.uniform(2.5, 3.5)  # New parameter to control joint speed
-        self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
-        self.start_time = None  # To track the start time
+        self.display_camera = display_camera
         self.positions = []  # To store the position data
         self.episode = [] # To store the episode data
-        # self.human_intervene = False  # New attribute to track cube drop
-        # self.intervene_step = 0  # Step when human intervention occurs
-        # self.is_intervene_step_set = False
         self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
         self.is_high_threshold_step_set = False
-        
+
+        # Trajectory loading
         self.traj_file = traj_file
         self.trajectory = self.load_trajectory()
+
+        # Simulation state
         self.current_step = 0
         self.current_target = None
         self.next_target = None
         self.transition_start_time = None
+        self.start_time = None  # To track the start time
+
+        # Camera settings
         self.ncam = self.model.ncam  # Get number of cameras in the model
         self.cam_position_init = [None] * self.ncam  # Initialize with None for each camera
         self.cam_position_read = [False] * self.ncam  # Initialize all as unread
 
-        # Add visualization markers# Marker appearance settings
+        # Marker settings
         self.marker_size = 0.005  # Increased size - adjust this value as needed
         self.marker_positions = []  # Store positions and colors
         self.max_markers = 100  # Maximum number of position markers to show
-        
-        # Initialize marker colors
         self.cube_marker_color = [1, 0, 0, 0.8]  # Red for cube
         self.box_marker_color = [0, 1, 0, 0.8]   # Green for fixed box
 
-        self.display_camera = display_camera
+        # self.speed_scale = random.uniform(2.5, 3.5)  # New parameter to control joint speed
+        # self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
 
-    def add_position_markers(self, cube_pos, box_pos):
-        """Add markers for both cube and fixed box positions"""
-        # Add new positions and colors
-        self.marker_positions.append((cube_pos, self.cube_marker_color))
-        self.marker_positions.append((box_pos, self.box_marker_color))
+    def load_trajectory(self, randomize=True):
+        """
+        Load trajectory from a text file containing lists of joint positions.
         
-        # Keep only the most recent markers
-        while len(self.marker_positions) > self.max_markers * 2:  # *2 because we add two markers at a time
-            self.marker_positions.pop(0)
-
-    def add_markers_to_scene(self):
-        """Add all stored markers to the scene"""
-        if not self.marker_positions:
-            return
+        Args:
+            randomize (bool): Whether to add random variations to the joint positions
             
-        for pos, color in self.marker_positions:
-            self.scene.ngeom += 1
-            g = self.scene.geoms[self.scene.ngeom - 1]
-            
-            # Set geometry properties
-            g.type = mj.mjtGeom.mjGEOM_SPHERE
-            g.size[:] = [self.marker_size, self.marker_size, self.marker_size]  # Use the configurable size
-            g.pos[:] = pos
-            g.mat[:,:] = np.eye(3)
-            g.rgba[:] = color
-            g.dataid = -1
-            g.objtype = mj.mjtObj.mjOBJ_UNKNOWN
-            g.objid = -1
-
-    def load_trajectory(self):
-        """Load trajectory from a text file containing lists of joint positions"""
+        Returns:
+            list: List of joint position arrays with optional randomization
+        """
         with open(self.traj_file, "r") as file:
             trajectory = []
             for line in file:
                 try:
-                    # Strip whitespace and convert string representation of list to numpy array
                     joint_positions = np.array(ast.literal_eval(line.strip()))
+                    
+                    # Apply randomization if enabled
+                    if randomize:
+                        # Define randomization ranges for each joint (in radians)
+                        # These values can be adjusted based on how much variation you want
+                        variation_ranges = [
+                            (-0.05, 0.05),  # Joint 1: ±0.05 radians
+                            (-0.03, 0.03),  # Joint 2: ±0.03 radians
+                            (-0.04, 0.04),  # Joint 3: ±0.04 radians
+                            (-0.03, 0.03),  # Joint 4: ±0.03 radians
+                            (-0.05, 0.05),  # Joint 5: ±0.05 radians
+                            (-0.02, 0.02),  # Joint 6: ±0.02 radians
+                        ]
+                        
+                        # Apply random variation to each joint
+                        for i in range(min(len(joint_positions), len(variation_ranges))):
+                            min_var, max_var = variation_ranges[i]
+                            variation = random.uniform(min_var, max_var)
+                            joint_positions[i] += variation
+                    
                     trajectory.append(joint_positions)
                 except Exception as e:
                     print(f"Error parsing line: {line.strip()}. Error: {e}")
                     continue
-                    
-            print(f"Loaded {len(trajectory)} waypoints")
+            
+            print(f"Loaded {len(trajectory)} waypoints{' with randomization' if randomize else ''}")
             return trajectory
 
     def reset(self, seed):
+        """Reset the simulation environment with the given seed."""
         random.seed(seed)
-
 
         # Set camera configuration
         self.cam.azimuth = 300 # -216 random.uniform(-225, -315)
@@ -378,27 +376,21 @@ class Projectile(MuJoCoBase):
         self.cam.elevation = -40 # random.uniform(-16, -30)
         # print("self.cam", self.cam.azimuth, self.cam.distance, self.cam.elevation)
 
+        # Randomize camera positions
         self.randomize_camera_position('top_camera')
         self.randomize_camera_position('front_camera')
 
-        # Add random rotation parameters
-        # Subtle random rotation parameters
+        # Set random rotation parameters
         self.rotation_speed = random.uniform(-0.01, 0.01)  # Slower random speed between 0.2 and 0.5 rad/s
         self.target_angle = random.uniform(-0.03, 0.03)   # Small random angle between -0.3 and 0.3 rad (about ±17 degrees)
         self.reverse_on_target = random.choice([True, False])  # Randomly decide to stop or reverse
         self.reached_target = False  # Track if we've reached target
         # print(f"New rotation parameters - Speed: {self.rotation_speed:.2f} rad/s, Target angle: {self.target_angle:.2f} rad, Reverse: {self.reverse_on_target}")
 
-        # self.angular_speed = self.init_angular_speed
-        # self.human_intervene = False  # New attribute to track cube drop
-        # self.intervene_step = 0  # Step when human intervention occurs
-        # self.is_intervene_step_set = False
+        # Reset simulation state
         self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
         self.is_high_threshold_step_set = False
-
-        # Initialize start time
         self.start_time = None
-
         self.current_step = 0
         self.current_target = None
         self.next_target = None
@@ -406,23 +398,18 @@ class Projectile(MuJoCoBase):
         self.speed_scale = random.uniform(2.5, 3.5)  # New parameter to control joint speed
         self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
 
+        # Emergency stop settings
         self.emergency_stop = False  # Flag to trigger the emergency stop
         self.emergency_stop_pos_first_set = False  # Flag to first set the emergency stop pose
         self.current_qpos = None
 
-        # Add floor randomization
+        # Randomize environment
         self.randomize_floor()
-        # Randomize fixed_box and free_cube
         self.randomize_object_colors()
-
-        # cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
-        # fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
-        # self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [random.uniform(0.35, 0.42), random.uniform(-0.5, -0.35), random.uniform(0.2, 0.35)]
         self.randomize_free_cube()
 
         # Clear markers when resetting
-        self.marker_geoms = []
-        self.marker_counter = 0
+        self.marker_positions = []
 
         mj.set_mjcb_control(self.controller)
 
@@ -451,7 +438,6 @@ class Projectile(MuJoCoBase):
         rgb_noise = np.random.uniform(-0.1, 0.1, 3)
         self.model.mat_rgba[material_id][:3] += rgb_noise
         self.model.mat_rgba[material_id][:3] = np.clip(self.model.mat_rgba[material_id][:3], 0, 1)
-
 
     def randomize_free_cube(self):
         """Randomize the free cube's size, mass, friction, and other physical properties."""
@@ -514,6 +500,42 @@ class Projectile(MuJoCoBase):
         self.model.geom_rgba[fixed_box_geom_id] = box_color
         self.model.geom_rgba[free_cube_geom_id] = cube_color
 
+    def randomize_camera_position(self, camera_name='top_camera'):
+        """
+        Improved camera position randomization with proper orientation handling
+        and direct camera parameter updates.
+        """
+        # Get camera id
+        cam_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_CAMERA, camera_name)
+
+        # print("self.cam_position_read[cam_id]", cam_id, self.cam_position_read[cam_id])
+
+        if not self.cam_position_read[cam_id]:
+            self.cam_position_init[cam_id] = self.model.cam_pos[cam_id].copy()
+            # print(self.cam_position_init[cam_id])
+            self.cam_position_read[cam_id] = True
+        
+        # print("self.cam_position_init[cam_id]", cam_id, self.cam_position_init[cam_id])
+        
+        # Define ranges for camera randomization
+        # Wider ranges for more noticeable variation
+        pos_ranges = {
+            'x': (self.cam_position_init[cam_id][0]-0.1, self.cam_position_init[cam_id][0]+0.1),    # Wider range for x offset
+            'y': (self.cam_position_init[cam_id][1]-0.1, self.cam_position_init[cam_id][1]+0.1),    # Wider range for y offset
+            'z': (self.cam_position_init[cam_id][2]-0.1, self.cam_position_init[cam_id][2]+0.1),     # Height variation
+        }
+        
+        # Randomly sample camera parameters
+        pos_x = random.uniform(*pos_ranges['x'])
+        pos_y = random.uniform(*pos_ranges['y'])
+        pos_z = random.uniform(*pos_ranges['z'])
+        
+        # Update camera self.cam_position
+        self.model.cam_pos[cam_id] = np.array([pos_x, pos_y, pos_z])
+        
+        # Force update scene
+        mj.mj_forward(self.model, self.data)
+
     def activate_emergency_stop(self):
         self.emergency_stop = True
         # self.emergency_stop_first_set = True
@@ -528,9 +550,7 @@ class Projectile(MuJoCoBase):
         if self.emergency_stop:
             data.ctrl = self.current_qpos
             # print("Emergency Stop Activated! Robot is holding position.")
-                
             return
-
 
         if self.start_time is None:
             self.start_time = data.time
@@ -538,7 +558,6 @@ class Projectile(MuJoCoBase):
             self.transition_start_time = data.time
             self.current_target = self.trajectory[0]
             self.next_target = self.trajectory[1] if len(self.trajectory) > 1 else None
-            # self.joint_pause = 0.5  # Duration of pause at each key pose in seconds
             self.is_pausing = True  # Start with a pause at the first pose
             self.pause_start_time = data.time
             return
@@ -572,12 +591,8 @@ class Projectile(MuJoCoBase):
         # Apply rotation with smoothed speed near target
         smoothing_factor = min(1.0, abs(angle_diff) / 0.05)  # Smooth speed when within 0.1 rad of target
         box_rotation = self.rotation_speed * np.sign(angle_diff) * smoothing_factor
-        
         # Set the box rotation control
         data.ctrl[6] = box_rotation
-        # if int(elapsed_time * 10) % 10 == 0:  # Print every 0.1 seconds
-        #     print(f"Time: {elapsed_time:.2f}, Current angle: {current_angle:.2f}, Target: {self.target_angle:.2f}, Speed: {self.rotation_speed:.2f}, Reverse: {self.reverse_on_target}")
-
 
         # Handle pausing at key poses
         if self.is_pausing:
@@ -627,6 +642,34 @@ class Projectile(MuJoCoBase):
             for joint_idx, position in enumerate(self.current_target):
                 data.ctrl[joint_idx] = position
 
+    def add_position_markers(self, cube_pos, box_pos):
+        """Add markers for both cube and fixed box positions"""
+        # Add new positions and colors
+        self.marker_positions.append((cube_pos, self.cube_marker_color))
+        self.marker_positions.append((box_pos, self.box_marker_color))
+        
+        # Keep only the most recent markers
+        while len(self.marker_positions) > self.max_markers * 2:  # *2 because we add two markers at a time
+            self.marker_positions.pop(0)
+
+    def add_markers_to_scene(self):
+        """Add all stored markers to the scene"""
+        if not self.marker_positions:
+            return
+            
+        for pos, color in self.marker_positions:
+            self.scene.ngeom += 1
+            g = self.scene.geoms[self.scene.ngeom - 1]
+            
+            # Set geometry properties
+            g.type = mj.mjtGeom.mjGEOM_SPHERE
+            g.size[:] = [self.marker_size, self.marker_size, self.marker_size]  # Use the configurable size
+            g.pos[:] = pos
+            g.mat[:,:] = np.eye(3)
+            g.rgba[:] = color
+            g.dataid = -1
+            g.objtype = mj.mjtObj.mjOBJ_UNKNOWN
+            g.objid = -1
 
     def data_collection(self, cube_body_id, fixed_box_body_id):
         """
@@ -646,7 +689,6 @@ class Projectile(MuJoCoBase):
 
         # Add position markers
         self.add_position_markers(cube_pos, fixed_box_pos)
-
 
         # Store velocities
         cube_lin_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3].copy()
@@ -704,7 +746,6 @@ class Projectile(MuJoCoBase):
         
         return end_effector_pos, transform_data_3D
 
-
     # Function to calculate action value based on displacement, linear speed, and angular speed
     def calculate_action(self, displacement):
         
@@ -717,107 +758,6 @@ class Projectile(MuJoCoBase):
             return 1.0  # Set action to 1
 
         return 0.5
-
-    def randomize_camera_position(self, camera_name='top_camera'):
-        """
-        Improved camera position randomization with proper orientation handling
-        and direct camera parameter updates.
-        """
-        # Get camera id
-        cam_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_CAMERA, camera_name)
-
-        # print("self.cam_position_read[cam_id]", cam_id, self.cam_position_read[cam_id])
-
-        if not self.cam_position_read[cam_id]:
-            self.cam_position_init[cam_id] = self.model.cam_pos[cam_id].copy()
-            # print(self.cam_position_init[cam_id])
-            self.cam_position_read[cam_id] = True
-        
-        # print("self.cam_position_init[cam_id]", cam_id, self.cam_position_init[cam_id])
-        
-        # Define ranges for camera randomization
-        # Wider ranges for more noticeable variation
-        pos_ranges = {
-            'x': (self.cam_position_init[cam_id][0]-0.1, self.cam_position_init[cam_id][0]+0.1),    # Wider range for x offset
-            'y': (self.cam_position_init[cam_id][1]-0.1, self.cam_position_init[cam_id][1]+0.1),    # Wider range for y offset
-            'z': (self.cam_position_init[cam_id][2]-0.1, self.cam_position_init[cam_id][2]+0.1),     # Height variation
-            'azimuth': (-5, 5),  # Degrees of rotation around vertical axis
-            'elevation': (-1, 0), # Degrees of tilt
-        }
-        
-        # Randomly sample camera parameters
-        pos_x = random.uniform(*pos_ranges['x'])
-        pos_y = random.uniform(*pos_ranges['y'])
-        pos_z = random.uniform(*pos_ranges['z'])
-        
-        # Convert angles to radians for rotation calculation
-        # azimuth = np.radians(random.uniform(*pos_ranges['azimuth']))
-        # elevation = np.radians(random.uniform(*pos_ranges['elevation']))
-        
-        # Update camera self.cam_position
-        self.model.cam_pos[cam_id] = np.array([pos_x, pos_y, pos_z])
-        
-        # Calculate rotation matrix
-        # First rotate around Y axis (elevation)
-        # Ry = np.array([
-        #     [np.cos(elevation), 0, np.sin(elevation)],
-        #     [0, 1, 0],
-        #     [-np.sin(elevation), 0, np.cos(elevation)]
-        # ])
-        
-        # # Then rotate around Z axis (azimuth)
-        # Rz = np.array([
-        #     [np.cos(azimuth), -np.sin(azimuth), 0],
-        #     [np.sin(azimuth), np.cos(azimuth), 0],
-        #     [0, 0, 1]
-        # ])
-        
-        # # Combine rotations
-        # R = Rz @ Ry
-        
-        # # Convert rotation matrix to quaternion
-        # # Using simplified method since we know R is orthogonal
-        # trace = np.trace(R)
-        # if trace > 0:
-        #     S = np.sqrt(trace + 1.0) * 2
-        #     qw = 0.25 * S
-        #     qx = (R[2, 1] - R[1, 2]) / S
-        #     qy = (R[0, 2] - R[2, 0]) / S
-        #     qz = (R[1, 0] - R[0, 1]) / S
-        # else:
-        #     if R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
-        #         S = np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]) * 2
-        #         qw = (R[2, 1] - R[1, 2]) / S
-        #         qx = 0.25 * S
-        #         qy = (R[0, 1] + R[1, 0]) / S
-        #         qz = (R[0, 2] + R[2, 0]) / S
-        #     elif R[1, 1] > R[2, 2]:
-        #         S = np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]) * 2
-        #         qw = (R[0, 2] - R[2, 0]) / S
-        #         qx = (R[0, 1] + R[1, 0]) / S
-        #         qy = 0.25 * S
-        #         qz = (R[1, 2] + R[2, 1]) / S
-        #     else:
-        #         S = np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]) * 2
-        #         qw = (R[1, 0] - R[0, 1]) / S
-        #         qx = (R[0, 2] + R[2, 0]) / S
-        #         qy = (R[1, 2] + R[2, 1]) / S
-        #         qz = 0.25 * S
-        
-        # # Update camera quaternion
-        # self.model.cam_quat[cam_id] = np.array([qw, qx, qy, qz])
-        
-        # Make sure camera is looking at the scene center
-        # target_pos = np.array([0, 0, 0])  # Scene center
-        # cam_pos = self.model.cam_pos[cam_id]
-        # forward = target_pos - cam_pos
-        # forward = forward / np.linalg.norm(forward)
-        
-        # Update camera orientation to look at target
-        # self.model.cam_pos[cam_id] = cam_pos
-        
-        # Force update scene
-        mj.mj_forward(self.model, self.data)
 
     def get_camera_image(self, camera_name):
         """
@@ -844,7 +784,6 @@ class Projectile(MuJoCoBase):
         
         # Create camera instance
         cam = mj.MjvCamera()
-        
         # Copy camera configuration from model to camera instance
         cam.type = mj.mjtCamera.mjCAMERA_FIXED
         cam.fixedcamid = cam_id
@@ -887,50 +826,9 @@ class Projectile(MuJoCoBase):
         
         return None, None  # Return None for both images if camera name not recognized
 
-
-    def validate_episode(self, episode):
-        required_keys = ['image', 'state', 'action', 'language_instruction']
-        
-        for i, item in enumerate(episode):
-            # Check if all required keys are present
-            for key in required_keys:
-                if key not in item:
-                    print(f"Episode {i} is missing key: {key}")
-                    return False
-                
-                # Check if the value is not None or empty
-                value = item[key]
-                if value is None:
-                    print(f"Episode {i} has None value for key: {key}")
-                    return False
-                
-                # Additional checks for specific keys
-                if key == 'image' and not isinstance(value, (np.ndarray, list)):
-                    print(f"Episode {i} has invalid type for 'image': {type(value)}")
-                    return False
-                
-                if key == 'state' and (not isinstance(value, np.ndarray) or value.size == 0):
-                    print(f"Episode {i} has invalid or empty 'state': {value}")
-                    return False
-                
-                # if i == 124:
-                # if key == 'action':
-                #     print("isinstance(value, np.ndarray)", isinstance(value, np.ndarray))
-                #     print("value.shape", value.shape)
-                if key == 'action' and (not isinstance(value, np.ndarray) or value.shape != (1,)):
-                    print(f"Episode {i} has invalid 'action': {value}")
-                    return False
-                
-                if key == 'language_instruction' and not isinstance(value, str):
-                    print(f"Episode {i} has invalid 'language_instruction': {value}")
-                    return False
-
-        print("All episodes are valid.")
-        return True
-
     def simulate(self, dataset="train"):
         video_dir = './demo'
-        video_filename = os.path.join(video_dir, 'simulation_video.mp4')
+        os.makedirs(video_dir, exist_ok=True)
         top_camera_video_filename = os.path.join(video_dir, 'top_camera_video.mp4')
         front_camera_video_filename = os.path.join(video_dir, 'front_camera_video.mp4')
 
@@ -940,53 +838,46 @@ class Projectile(MuJoCoBase):
         front_box_writer = imageio.get_writer(front_camera_video_filename, fps=60, macro_block_size=16)
         front_cube_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
 
-        # Create directory if it does not exist
-        os.makedirs(video_dir, exist_ok=True)
+        # Create data directories
+        os.makedirs('demo/data/train', exist_ok=True)
+        os.makedirs('demo/data/val', exist_ok=True)
 
-        # Transition to the 'start' joint pose from traj.txt
-        start_pose = self.trajectory[0]  # 'start' joint pose from traj.txt
-        print(f"Moving to the 'start' pose: {start_pose}")
-        # for joint_idx, position in enumerate(start_pose):
-        #     self.data.qpos[joint_idx] = position  # Directly set the joint positions
-
-        # mj.mj_forward(self.model, self.data)  # Forward dynamics to update the simulation state
-
+        # Get object IDs
         cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
         fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
-        # self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [0.4, 0.45, 0.6]
-
-        self.positions = []
-        self.episode = []  # Reset episode data for each new episode
 
         # while not glfw.window_should_close(self.window):
         if dataset == "train":
             N_EPISODES = N_TRAIN_EPISODES
         elif dataset == "val":
             N_EPISODES = N_VAL_EPISODES
+        else:
+            print(f"Unknown dataset type: {dataset}")
+            return
+
+        # self.positions = []
+        # self.episode = []  # Reset episode data for each new episode
 
         for episode_num in range(N_EPISODES):
             
             random_seed_tmp = random.randint(0, EPISODE_LENGTH)
-            print("random_seed_tmp", random_seed_tmp)
+            print(f"Episode {episode_num+1}/{N_EPISODES}, random seed: {random_seed_tmp}")
+
+            # Initialize episode variables
             failure_time_step = -1
             first_failure_time_step = -1
-            cube_drop_time = 16
-            # Clear position data
+            cube_drop_time = 16  # Steps to ignore while cube is initially falling
             episode_filled_tag = False
 
             # Initialize lists to store metrics
-            linear_velocities = []
-            angular_velocities = []
-            displacements = []
             action_values = []
-            fixed_box_velocities = []
             top_camera_cube_contours = []
             top_camera_box_contours = []
             front_camera_cube_contours = []
             front_camera_box_contours = []
 
+            # Main simulation loop
             for overal_step_num in range(EPISODE_LENGTH):
-
                 episode_failed_tag = False
                 backtracking_steps = 5
 
@@ -994,24 +885,19 @@ class Projectile(MuJoCoBase):
                 keyframe_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_KEY, 'home')
                 if keyframe_id >= 0:
                     mj.mj_resetDataKeyframe(self.model, self.data, keyframe_id)
+
                 # Reset to start pose again at the beginning of each episode
+                start_pose = self.trajectory[0]  # 'start' joint pose from traj.txt
                 for joint_idx, position in enumerate(start_pose):
                     self.data.qpos[joint_idx] = position
 
                 mj.mj_forward(self.model, self.data)
                 
-                # random_seed_tmp = RANDOM_EPISODE_TMP
-                # if overal_step_num > 0:
-                #     random_seed_tmp = random.randint(0, EPISODE_LENGTH)
-
                 self.reset(RANDOM_EPISODE_TMP if episode_num == 0 else random_seed_tmp)  # Reset simulation
-                # DEBUG
-                # self.reset(RANDOM_EPISODE_TMP[1])
 
+                # Inner simulation loop
                 for step_num in range(EPISODE_LENGTH):
-
                     simstart = self.data.time
-
                     while (self.data.time - simstart < 1.0/60.0):
                         # Step simulation environment
                         mj.mj_step(self.model, self.data)
@@ -1027,21 +913,9 @@ class Projectile(MuJoCoBase):
                     # Update scene
                     mj.mjv_updateScene(self.model, self.data, self.opt, None, self.cam,
                                     mj.mjtCatBit.mjCAT_ALL.value, self.scene)
-                    
-                    # Add markers to scene
-                    # self.add_markers_to_scene()
-                    
-                    # get framebuffer viewport
-                    viewport_width, viewport_height = glfw.get_framebuffer_size(self.window)
-                    viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
 
+                    # Render scene
                     mj.mjr_render(viewport, self.scene, self.context)
-
-                    # Capture the current frame
-                    # framebuffer = np.zeros((viewport_height, viewport_width, 3), dtype=np.uint8)
-                    # mj.mjr_readPixels(framebuffer, None, viewport, self.context)
-                    # framebuffer = framebuffer[::-1, :, :]  # Reverse the order of rows
-                    # writer.append_data(framebuffer)
 
                     # Get top camera frame
                     top_box_frame, top_cube_frame = self.get_camera_image('top_camera')
@@ -1085,7 +959,6 @@ class Projectile(MuJoCoBase):
                         if cv2.waitKey(1) & 0xFF == ord('q'):
                             break
 
-
                     # swap OpenGL buffers (blocking call due to v-sync)
                     glfw.swap_buffers(self.window)
 
@@ -1095,7 +968,6 @@ class Projectile(MuJoCoBase):
                     # skip the first cube_drop_time steps because the cube is falling from the sky
                     if step_num >= cube_drop_time:
                         # print("step_num", step_num)
-
                         end_effector_pos, transform_data_3D = self.data_collection(cube_body_id, fixed_box_body_id)
                         displacement = [transform_data_3D['relative_position'][0], transform_data_3D['relative_position'][1], transform_data_3D['relative_position'][2]]
 
@@ -1105,7 +977,6 @@ class Projectile(MuJoCoBase):
                                 self.is_high_threshold_step_set = True
 
                         action_value = self.calculate_action(displacement)
-
 
                         # Historical backtracking for backtracking_steps time steps
                         # print("episode_filled_tag!!!!!!", episode_filled_tag)
@@ -1134,6 +1005,7 @@ class Projectile(MuJoCoBase):
                             top_camera_box_contours.append(top_box_contour)
                             front_camera_cube_contours.append(front_cube_contour)
                             front_camera_box_contours.append(front_box_contour)
+
                             window = 30
                             if len(top_camera_cube_contours) > window:
                                 top_cube_transforms = process_consecutive_frames(top_camera_cube_contours[-window], top_cube_contour)
@@ -1146,10 +1018,13 @@ class Projectile(MuJoCoBase):
                                 # print("front_box_transforms", front_box_transforms)
 
                                 try:
-                                    len(top_cube_transforms)==0 and len(top_box_transforms)==0 and len(front_cube_transforms)==0 and not len(front_box_transforms)==0
+                                    # Check for empty transforms
+                                    if len(top_cube_transforms) == 0 and len(top_box_transforms) == 0 and \
+                                       len(front_cube_transforms) == 0 and len(front_box_transforms) == 0:
+                                        raise Exception("All transforms are empty")
                                 except Exception as e:
-                                    print(f"Error Contour")
-                                    return
+                                    print(f"Error in contour processing: {e}")
+                                    continue
 
                                 # Extract features from each transform set
                                 top_cube_features = extract_transform_features(top_cube_transforms)
@@ -1168,23 +1043,14 @@ class Projectile(MuJoCoBase):
                                     end_effector_pos
                                 ])
 
-                                print("top_cube_features", np.asarray(top_cube_features).shape) # (4,)
-                                print("top_box_features", np.asarray(top_box_features).shape) # (4,)
-                                print("front_cube_features", np.asarray(front_cube_features).shape) # (4,)
-                                print("front_box_features", np.asarray(front_box_features).shape) # (4,)
-                                print("combined_features", combined_features.shape) # (19,)
-                                if not combined_features.shape[0]==19:
-                                    print(f"Error combined_features.shape")
+                                # print("top_cube_features", np.asarray(top_cube_features).shape) # (4,)
+                                # print("top_box_features", np.asarray(top_box_features).shape) # (4,)
+                                # print("front_cube_features", np.asarray(front_cube_features).shape) # (4,)
+                                # print("front_box_features", np.asarray(front_box_features).shape) # (4,)
+                                # print("combined_features", combined_features.shape) # (19,)
+                                if combined_features.shape[0]!=19:
+                                    print(f"Error: combined_features shape {combined_features.shape} != 19")
                                     return
-                                # Print or store the transformations
-                                # for H, error in top_cube_transforms:
-                                #     print("Box transformation:")
-                                #     print("Homogeneous transformation matrix:\n", H)
-                                #     print("Error:", error)
-                                    
-                                #     # If you need to extract R and t separately:
-                                #     R = H[:2, :2]  # Extract rotation matrix
-                                #     t = H[:2, 2]   # Extract translation vector
 
                                 self.episode.append({
                                 # 'image': top_box_frame,
@@ -1195,11 +1061,7 @@ class Projectile(MuJoCoBase):
                                     })
                                 # For plot     
                                 print("action_value!!!!!!!!!!!!step_num - cube_drop_time", step_num - cube_drop_time, action_value) # + episode_num * (EPISODE_LENGTH - cube_drop_time), action_value)
-                                # displacements.append([state[0], state[1], state[2]])  # Displacement
-                                # linear_velocities.append([state[3], state[4], state[5]])  # Linear velocity
-                                # angular_velocities.append([state[6], state[7], state[8]])  # Angular velocity
                                 action_values.append(action_value) # Action value
-                                # fixed_box_velocities.append(fixed_box_linear_speed)
                     
                 episode_filled_tag = True
                 print("len(self.episode)", len(self.episode), "episode_filled_tag", episode_filled_tag, "episode_failed_tag", episode_failed_tag, "failure_time_step", failure_time_step)
@@ -1214,12 +1076,17 @@ class Projectile(MuJoCoBase):
                     print("failure_time_step_trim", failure_time_step_trim)
                     print("self.episode[failure_time_step_trim-1]['action']", self.episode[failure_time_step_trim-1]['action'])
                     print("self.episode[failure_time_step_trim]['action']", self.episode[failure_time_step_trim]['action'])
+                    
+                    # Set action to 1 at failure point
                     self.episode[failure_time_step_trim]['action'] = np.asarray([1.0], dtype=np.float32)
                     action_values[failure_time_step_trim] = 1
+
+                    # Set actions to 1 for failure range
                     for idx in range(failure_time_step_trim, first_failure_time_step):
                         # print("idx", idx)
                         self.episode[idx]['action'] = np.asarray([1.0], dtype=np.float32)
-                        action_values[idx] = 1  
+                        action_values[idx] = 1
+                # If backtracking was successful (no failure after applying e-stop)
                 elif episode_filled_tag and first_failure_time_step != -1: # if not failed after backtracking, the time step to apply e-stop is safe, backtracking over
                     self.episode[failure_time_step_trim]['action'] = np.asarray([0.0], dtype=np.float32)
                     action_values[failure_time_step_trim] = 0
@@ -1232,12 +1099,10 @@ class Projectile(MuJoCoBase):
                         self.episode[idx]["action"] = np.asarray([value], dtype=np.float32)
                         action_values[idx] = value
                     break
+                # If no failure occurred during the episode
                 elif episode_filled_tag and first_failure_time_step == -1:
                     break
-            
-            # Validate the completeness
-            # self.validate_episode(self.episode)
-
+        
             if dataset == "train":
                 print("Generating train examples...")
                 np.save(f'demo/data/train/episode_{episode_num}.npy', self.episode)
@@ -1245,171 +1110,16 @@ class Projectile(MuJoCoBase):
                 print("Generating val examples...")
                 np.save(f'demo/data/val/episode_{episode_num}.npy', self.episode)
 
-            # Plot after simulation
-            # self.plot_metrics(linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities, episode_num)
-
-
         # writer.close()
         top_box_writer.close()
         top_cube_writer.close()
         front_box_writer.close()
         front_cube_writer.close()
         glfw.terminate()
-        # self.save_trajectory()
-
-
-    def save_trajectory(self):
-        """
-        Save or plot the trajectory of the cube.
-        """
-        positions = np.array(self.positions)
-        if len(positions) > 0:
-            # Save to a file
-            np.savetxt('./demo/cube_trajectory.txt', positions)
-
-            # # Plot the trajectory
-            # plt.figure(figsize=(10, 6))
-            # plt.plot(positions[:, 0], positions[:, 1], label='Trajectory')
-            # plt.xlabel('X Position')
-            # plt.ylabel('Y Position')
-            # plt.title('Trajectory of the Cube')
-            # plt.legend()
-            # plt.grid(True)
-            # plt.savefig('cube_trajectory.png')
-            # plt.show()
-
-    def plot_metrics(self, linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities, episode_num):
-        """
-        Plot linear velocity, angular velocity, and displacement over time.
-        """
-        time_steps = range(len(linear_velocities))
-        print("range", range(len(linear_velocities)), range(len(angular_velocities)), range(len(displacements)), range(len(action_values)))  # 800
-
-        # Convert to NumPy array
-        linear_velocities = np.array(linear_velocities)
-        angular_velocities = np.array(angular_velocities)
-        displacements = np.array(displacements)
-        fixed_box_velocities = np.array(fixed_box_velocities)
-
-
-        pic_number = 13
-        pic_idx = 0
-        plt.figure(figsize=(pic_number*4, pic_number*4))
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, linear_velocities[:, 0], label='Linear Velocity X')
-        plt.xlabel('Time Step')
-        plt.ylabel('Linear Velocity X (m/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, linear_velocities[:, 1], label='Linear Velocity Y')
-        plt.xlabel('Time Step')
-        plt.ylabel('Linear Velocity Y (m/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, linear_velocities[:, 2], label='Linear Velocity Z')
-        plt.xlabel('Time Step')
-        plt.ylabel('Linear Velocity Z (m/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, angular_velocities[:, 0], label='Angular Velocity Theta', color='orange')
-        plt.xlabel('Time Step')
-        plt.ylabel('Angular Velocity Theta (rad/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, angular_velocities[:, 1], label='Angular Velocity Phi', color='orange')
-        plt.xlabel('Time Step')
-        plt.ylabel('Angular Velocity Phi (rad/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, angular_velocities[:, 2], label='Angular Velocity Psi', color='orange')
-        plt.xlabel('Time Step')
-        plt.ylabel('Angular Velocity Psi (rad/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, displacements[:, 0], label='Displacement X', color='green')
-        plt.xlabel('Time Step')
-        plt.ylabel('Displacement X (m)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, displacements[:, 1], label='Displacement Y', color='green')
-        plt.xlabel('Time Step')
-        plt.ylabel('Displacement Y (m)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, displacements[:, 2], label='Displacement Z', color='green')
-        plt.xlabel('Time Step')
-        plt.ylabel('Displacement Z (m)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, fixed_box_velocities[:, 0], label='Fixed_box_values X', color='blue')
-        plt.xlabel('Time Step')
-        plt.ylabel('Fixed_box_values X (m/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, fixed_box_velocities[:, 1], label='Fixed_box_values Y', color='blue')
-        plt.xlabel('Time Step')
-        plt.ylabel('Fixed_box_values Y (m/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, fixed_box_velocities[:, 2], label='Fixed_box_values Z', color='blue')
-        plt.xlabel('Time Step')
-        plt.ylabel('Fixed_box_values Z (m/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, action_values, label='Risk value', color='red')
-        plt.xlabel('Time Step')
-        plt.ylabel('Risk value')
-        plt.legend()
-        plt.grid()
-
-        plt.tight_layout()
-        # plt.show()
-        plt.savefig('./demo/cube_trajectory_{}.png'.format(episode_num))
 
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene_complete.xml"
     traj_path = "./demo/traj_20250218.txt"  # Adjust path as needed
-
-    os.makedirs('demo/data/train', exist_ok=True)
-    os.makedirs('demo/data/val', exist_ok=True)
 
     sim = Projectile(xml_path, traj_path, initial_delay=2, display_camera=True)
     sim.reset(RANDOM_EPISODE_TMP)
