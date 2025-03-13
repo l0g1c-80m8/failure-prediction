@@ -63,7 +63,7 @@
   </asset>
 
   <contact>
-    <pair geom1="sliding_cube" geom2="panel" friction="0.2 0.5 0.001"/>
+    <pair geom1="stanford_bunny_collision" geom2="panel" friction="0.1 0.25 0.001"/>
   </contact>
 
   <worldbody>
@@ -137,19 +137,18 @@
     </body>
                       
     <!-- New Cube Body -->
-    <body name="free_cube" pos="-0.4 0.8 0.2"> <!-- Slightly above the box -->
-      <!-- <joint name="free_cube" type="free" /> -->
-      <geom name="sliding_cube" type="box" size="0.015 0.015 0.015" rgba="0.2 0.8 0.2 1" group="2"/> <!-- Cube dimensions and color -->
+    <!-- <body name="free_cube" pos="-0.4 0.8 0.2"> 
+      <geom name="sliding_cube" type="box" size="0.015 0.015 0.015" rgba="0.2 0.8 0.2 1" group="2"/>
       <joint type="free"/>
       <inertial mass="1" pos="0 0 0" quat="1 0 0 0" diaginertia="0.01 0.01 0.01"/>
-    </body>
+    </body> -->
 
     <!-- New Customized Body -->
-    <body name="custom_object_body" pos="0.0 0.5 0.1">
+    <body name="stanford_bunny_body" pos="0.0 0.5 0.1">
       <joint type="free"/>
-      <geom name="custom_object_visual" type="mesh" mesh="stanford_bunny" rgba="0.7 0.5 0.3 1" group="2"/>
-      <geom name="custom_object_collision" type="mesh" mesh="stanford_bunny" rgba="0.7 0.5 0.3 1" group="2" contype="1" conaffinity="1"/>
-      <inertial mass="0.8" pos="0 0 0.01" diaginertia="0.005 0.005 0.005"/>
+      <!-- <geom name="stanford_bunny_visual" type="mesh" mesh="stanford_bunny" rgba="0.7 0.5 0.3 1" group="2"/> -->
+      <geom name="stanford_bunny_collision" type="mesh" mesh="stanford_bunny" rgba="0.7 0.5 0.3 1" group="2" contype="1" conaffinity="1"/>
+      <inertial pos="0 0 0" mass="0.8" diaginertia="0.005 0.005 0.005"/>
     </body>
                   
   </worldbody>
@@ -165,7 +164,7 @@
   </actuator>
 
   <keyframe>
-    <key name="home" qpos="1.3500753657730578 -1.865456836594901 -2.0400916711745514 -2.3380169136860096 -0.26860617161064493 3.0982337160377313 0 0 0 1 0 0 0 0 0 0 1 0 0 0 0" 
+    <key name="home" qpos="1.3500753657730578 -1.865456836594901 -2.0400916711745514 -2.3380169136860096 -0.26860617161064493 3.0982337160377313 0 0 0 1 0 0 0 0" 
           ctrl="1.3500753657730578 -1.865456836594901 -2.0400916711745514 -2.3380169136860096 -0.26860617161064493 3.0982337160377313 0"/>
   </keyframe>
 

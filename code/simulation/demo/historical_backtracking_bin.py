@@ -21,13 +21,13 @@ from scipy.spatial.distance import cdist
 
 N_TRAIN_EPISODES = 100
 N_VAL_EPISODES = 25
-EPISODE_LENGTH = 400  # Number of points in trajectory
+EPISODE_LENGTH = 1000  # Number of points in trajectory
 
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_HIGH = 0.01
 DISPLACEMENT_THRESHOLD_LOW = 0
 
-RANDOM_EPISODE_TMP = random.randint(0, EPISODE_LENGTH) # 67 86 #  109 282
+RANDOM_EPISODE_TMP = random.randint(0, EPISODE_LENGTH) # 67 86 #  109 282 731
 
 # Define different interpolation methods
 def linear_interpolation(first_failure_time_step, failure_time_step_trim):
@@ -286,7 +286,7 @@ def process_camera_frame(frame):
     return mask, contours, filtered_image
 
 class Projectile(MuJoCoBase):
-    def __init__(self, xml_path, traj_file, initial_delay=3.0, display_camera=False):
+    def __init__(self, xml_path, traj_file, initial_delay=3.0, display_camera=False, enable_cameras=True):
         super().__init__(xml_path)
         
         # Simulation parameters
@@ -317,8 +317,11 @@ class Projectile(MuJoCoBase):
         self.marker_size = 0.005  # Increased size - adjust this value as needed
         self.marker_positions = []  # Store positions and colors
         self.max_markers = 100  # Maximum number of position markers to show
-        self.cube_marker_color = [1, 0, 0, 0.8]  # Red for cube
+        self.object_marker_color = [1, 0, 0, 0.8]  # Red for object
         self.box_marker_color = [0, 1, 0, 0.8]   # Green for fixed box
+
+        # New camera control flag
+        self.enable_cameras = enable_cameras
 
         # self.speed_scale = random.uniform(2.5, 3.5)  # New parameter to control joint speed
         # self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
@@ -405,8 +408,9 @@ class Projectile(MuJoCoBase):
 
         # Randomize environment
         self.randomize_floor()
-        self.randomize_object_colors()
-        self.randomize_free_cube()
+        self.randomize_object_colors("stanford_bunny_collision")
+        self.randomize_object('stanford_bunny_body', 'stanford_bunny_collision')
+        # self.randomize_stanford_bunny()
 
         # Clear markers when resetting
         self.marker_positions = []
@@ -439,38 +443,38 @@ class Projectile(MuJoCoBase):
         self.model.mat_rgba[material_id][:3] += rgb_noise
         self.model.mat_rgba[material_id][:3] = np.clip(self.model.mat_rgba[material_id][:3], 0, 1)
 
-    def randomize_free_cube(self):
-        """Randomize the free cube's size, mass, friction, and other physical properties."""
-        # Get cube body and geom IDs
-        cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
-        cube_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, 'sliding_cube')
+    def randomize_object(self, object_body_id, object_geom_id):
+        """Randomize the object's size, mass, friction, and other physical properties."""
+        # Get object body and geom IDs
+        object_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, object_body_id)
+        object_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, object_geom_id)
 
         fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
         fixed_box_pos = self.data.xpos[fixed_box_body_id]
         # print("fixed_box_pos", fixed_box_pos)
         
-        # Randomize cube size (within reasonable bounds)
+        # Randomize object size (within reasonable bounds)
         base_size = 0.025  # Original size
         size_variation = random.uniform(1.0, 3)  # n% variation
         new_size = base_size * size_variation
-        self.model.geom_size[cube_geom_id] = [new_size, new_size, new_size]
+        self.model.geom_size[object_geom_id] = [new_size, new_size, new_size]
         
         # Randomize mass (scaled with size)
-        base_mass = 0.5  # Original mass
+        base_mass = 0.2  # Original mass
         mass_variation = random.uniform(0.8, 1.2)  # ±20% variation
         new_mass = base_mass * mass_variation  # base_mass * size_variation * mass_variation  # Scale mass with size
-        self.model.body_mass[cube_body_id] = new_mass
+        self.model.body_mass[object_body_id] = new_mass
         
         # Adjust inertia based on new mass and size
         new_inertia = (new_mass * new_size**2) / 6  # Simple box inertia approximation
-        self.model.body_inertia[cube_body_id] = [new_inertia, new_inertia, new_inertia]
+        self.model.body_inertia[object_body_id] = [new_inertia, new_inertia, new_inertia]
         
         # Randomize friction properties
         friction_variation = random.uniform(0.25, 0.35)  # Base friction is 0.2
-        # Find the contact pair involving the sliding cube
+        # Find the contact pair involving the sliding object
         for i in range(self.model.npair):
-            if (self.model.pair_geom1[i] == cube_geom_id or 
-                self.model.pair_geom2[i] == cube_geom_id):
+            if (self.model.pair_geom1[i] == object_geom_id or 
+                self.model.pair_geom2[i] == object_geom_id):
                 self.model.pair_friction[i, 0] = friction_variation  # Sliding friction
                 self.model.pair_friction[i, 1] = friction_variation * 2.5  # Rolling friction
                 self.model.pair_friction[i, 2] = friction_variation * 0.005  # Torsional friction
@@ -478,27 +482,80 @@ class Projectile(MuJoCoBase):
         # Randomize initial position (within reasonable bounds)
         x_pos = random.uniform(fixed_box_pos[0]-0.05, fixed_box_pos[0]+0.05) # random.uniform(0.35, 0.42)
         y_pos = random.uniform(fixed_box_pos[1]-0.05, fixed_box_pos[1]+0.05) # random.uniform(-0.5, -0.35)
-        z_pos = random.uniform(fixed_box_pos[2]+0.05, fixed_box_pos[2]+0.1)
-        self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [x_pos, y_pos, z_pos]
+        z_pos = random.uniform(fixed_box_pos[2]+0.1, fixed_box_pos[2]+0.15)
+        self.data.qpos[self.model.body_jntadr[object_body_id]:self.model.body_jntadr[object_body_id]+3] = [x_pos, y_pos, z_pos]
         
         # Randomize initial orientation (uncomment when needed)
         # quat = [random.uniform(-1, 1) for _ in range(4)]
         # quat = quat / np.linalg.norm(quat)  # Normalize quaternion
-        # self.data.qpos[self.model.body_jntadr[cube_body_id]+3:self.model.body_jntadr[cube_body_id]+7] = quat
+        # self.data.qpos[self.model.body_jntadr[object_body_id]+3:self.model.body_jntadr[object_body_id]+7] = quat
 
-    def randomize_object_colors(self):
-        """Randomize colors for fixed box and free cube"""
+    def randomize_stanford_bunny(self):
+        """Randomize the Stanford Bunny's position, size, mass, friction, and other physical properties."""
+        # Get bunny body and geom IDs
+        bunny_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'stanford_bunny_body')
+        bunny_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, 'stanford_bunny_collision')
+        
+        # Get a reference point (fixed_box position) to position relative to
+        fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
+        fixed_box_pos = self.data.xpos[fixed_box_body_id]
+        
+        # Randomize size (scale is set in XML, but can adjust some parameters here)
+        # Visual geometry may already have scale in mesh definition, so we're mostly adjusting physics properties
+        
+        # Randomize mass
+        base_mass = 0.8  # Original mass
+        mass_variation = random.uniform(0.8, 1.2)  # ±20% variation
+        new_mass = base_mass * mass_variation
+        self.model.body_mass[bunny_body_id] = new_mass
+        
+        # Adjust inertia based on new mass
+        # For a complex shape like a bunny, we'll use simple approximate scaling
+        inertia_scale = mass_variation
+        self.model.body_inertia[bunny_body_id] *= inertia_scale
+        
+        # Randomize initial position (within reasonable bounds, on opposite side of the scene from the object)
+        x_pos = random.uniform(fixed_box_pos[0]+2, fixed_box_pos[0]+1)
+        y_pos = random.uniform(fixed_box_pos[1]-2, fixed_box_pos[1]-1) 
+        z_pos = random.uniform(fixed_box_pos[2]+0.15, fixed_box_pos[2]+0.2)
+        
+        # Set the position using qpos
+        self.data.qpos[self.model.body_jntadr[bunny_body_id]:self.model.body_jntadr[bunny_body_id]+3] = [x_pos, y_pos, z_pos]
+        
+        # Randomize initial orientation
+        # Create a random quaternion for rotation
+        quat = [random.uniform(-1, 1) for _ in range(4)]
+        quat = quat / np.linalg.norm(quat)  # Normalize quaternion
+        self.data.qpos[self.model.body_jntadr[bunny_body_id]+3:self.model.body_jntadr[bunny_body_id]+7] = quat
+        
+        # Optionally randomize color
+        bunny_color = [random.uniform(0.1, 0.9), random.uniform(0.1, 0.9), random.uniform(0.1, 0.9), 1.0]
+        
+        # If both visual and collision geometries have the same ID for color
+        self.model.geom_rgba[bunny_geom_id] = bunny_color
+        
+        # Try to set collision geom color too (if it exists with a different ID)
+        bunny_coll_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, 'stanford_bunny_collision')
+        if bunny_coll_geom_id >= 0:  # Valid ID
+            self.model.geom_rgba[bunny_coll_geom_id] = bunny_color
+        
+        # Optionally add contact pair with other objects if needed
+        # This would be done in the XML typically, but can be adjusted here too if needed
+
+    def randomize_object_colors(self, object_geom_name):
+        """Randomize colors for fixed box and free object"""
+        # Zeyu: need to be revised, since combined object and the box, should be decoupled
         # Get geom IDs
         fixed_box_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, "panel")
-        free_cube_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, "sliding_cube")
+        free_object_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, object_geom_name)
         
         # Generate new colors
         box_color = [random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), 1.0]
-        cube_color = np.array([1.0, 1.0, 1.0, 2.0]) - box_color  # [random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), 1.0]
+        object_color = np.array([1.0, 1.0, 1.0, 2.0]) - box_color  # [random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), 1.0]
         
         # Set new colors
         self.model.geom_rgba[fixed_box_geom_id] = box_color
-        self.model.geom_rgba[free_cube_geom_id] = cube_color
+        self.model.geom_rgba[free_object_geom_id] = object_color
 
     def randomize_camera_position(self, camera_name='top_camera'):
         """
@@ -642,10 +699,10 @@ class Projectile(MuJoCoBase):
             for joint_idx, position in enumerate(self.current_target):
                 data.ctrl[joint_idx] = position
 
-    def add_position_markers(self, cube_pos, box_pos):
-        """Add markers for both cube and fixed box positions"""
+    def add_position_markers(self, object_pos, box_pos):
+        """Add markers for both object and fixed box positions"""
         # Add new positions and colors
-        self.marker_positions.append((cube_pos, self.cube_marker_color))
+        self.marker_positions.append((object_pos, self.object_marker_color))
         self.marker_positions.append((box_pos, self.box_marker_color))
         
         # Keep only the most recent markers
@@ -671,14 +728,14 @@ class Projectile(MuJoCoBase):
             g.objtype = mj.mjtObj.mjOBJ_UNKNOWN
             g.objid = -1
 
-    def data_collection(self, cube_body_id, fixed_box_body_id):
+    def data_collection(self, object_body_id, fixed_box_body_id):
         """
         Collect transformation data between adjacent timesteps for both objects.
         Returns positions, rotations, and relative transforms between timesteps.
         """
         # Get current positions and orientations
-        cube_pos = self.data.xpos[cube_body_id].copy()  # 3D position
-        cube_quat = self.data.xquat[cube_body_id].copy()  # Quaternion orientation
+        object_pos = self.data.xpos[object_body_id].copy()  # 3D position
+        object_quat = self.data.xquat[object_body_id].copy()  # Quaternion orientation
         fixed_box_pos = self.data.xpos[fixed_box_body_id].copy()
         fixed_box_quat = self.data.xquat[fixed_box_body_id].copy()
         
@@ -688,11 +745,11 @@ class Projectile(MuJoCoBase):
         # print("end_effector_pos", end_effector_pos)
 
         # Add position markers
-        self.add_position_markers(cube_pos, fixed_box_pos)
+        self.add_position_markers(object_pos, fixed_box_pos)
 
         # Store velocities
-        cube_lin_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3].copy()
-        cube_ang_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]+3:self.model.body_jntadr[cube_body_id]+6].copy()
+        object_lin_vel = self.data.qvel[self.model.body_jntadr[object_body_id]:self.model.body_jntadr[object_body_id]+3].copy()
+        object_ang_vel = self.data.qvel[self.model.body_jntadr[object_body_id]+3:self.model.body_jntadr[object_body_id]+6].copy()
         # fixed_box_lin_vel = self.data.cvel[fixed_box_body_id].reshape((6,))[:3].copy()
         
         # Convert quaternions to rotation matrices (3x3)
@@ -704,26 +761,26 @@ class Projectile(MuJoCoBase):
                 [2*x*z - 2*w*y, 2*y*z + 2*w*x, 1 - 2*x*x - 2*y*y]
             ])
         
-        cube_rot = quat_to_mat(cube_quat)
+        object_rot = quat_to_mat(object_quat)
         fixed_box_rot = quat_to_mat(fixed_box_quat)
         
         # If this is not the first frame, calculate transforms between frames
-        if hasattr(self, 'prev_cube_pos'):
+        if hasattr(self, 'prev_object_pos'):
             # Calculate translation vectors (movement since last frame)
-            cube_translation = cube_pos - self.prev_cube_pos
+            object_translation = object_pos - self.prev_object_pos
             fixed_box_translation = fixed_box_pos - self.prev_fixed_box_pos
             
             # Calculate rotation matrices between frames
             # R2 = dR * R1 -> dR = R2 * R1^T
-            cube_rot_delta = cube_rot @ self.prev_cube_rot.T
+            object_rot_delta = object_rot @ self.prev_object_rot.T
             fixed_box_rot_delta = fixed_box_rot @ self.prev_fixed_box_rot.T
             
-            # Calculate relative transform between cube and fixed box
-            relative_pos = fixed_box_pos - cube_pos
+            # Calculate relative transform between object and fixed box
+            relative_pos = fixed_box_pos - object_pos
             
             transform_data_3D = {
-                'cube_translation': cube_translation,
-                'cube_rotation_delta': cube_rot_delta,
+                'object_translation': object_translation,
+                'object_rotation_delta': object_rot_delta,
                 'fixed_box_translation': fixed_box_translation,
                 'fixed_box_rotation_delta': fixed_box_rot_delta,
                 'relative_position': relative_pos
@@ -731,16 +788,16 @@ class Projectile(MuJoCoBase):
         else:
             # For first frame, set deltas to identity/zero
             transform_data_3D = {
-                'cube_translation': np.zeros(3),
-                'cube_rotation_delta': np.eye(3),
+                'object_translation': np.zeros(3),
+                'object_rotation_delta': np.eye(3),
                 'fixed_box_translation': np.zeros(3),
                 'fixed_box_rotation_delta': np.eye(3),
-                'relative_position': fixed_box_pos - cube_pos
+                'relative_position': fixed_box_pos - object_pos
             }
         
         # Store current transforms for next frame
-        self.prev_cube_pos = cube_pos
-        self.prev_cube_rot = cube_rot
+        self.prev_object_pos = object_pos
+        self.prev_object_rot = object_rot
         self.prev_fixed_box_pos = fixed_box_pos
         self.prev_fixed_box_rot = fixed_box_rot
         
@@ -761,14 +818,18 @@ class Projectile(MuJoCoBase):
 
     def get_camera_image(self, camera_name):
         """
-        Get two images from the specified camera - one for fixed box and one for cube.
+        Get two images from the specified camera - one for fixed box and one for object.
         
         Args:
             camera_name (str): Name of the camera to capture from
             
         Returns:
-            tuple: Two RGB image arrays (fixed_box_img, cube_img) each of shape (height, width, 3)
+            tuple: Two RGB image arrays (fixed_box_img, object_img) each of shape (height, width, 3)
         """
+        # Skip if cameras are disabled
+        if not self.enable_cameras:
+            return None, None
+    
         # Get camera id
         cam_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_CAMERA, camera_name)
         if cam_id < 0:
@@ -778,9 +839,9 @@ class Projectile(MuJoCoBase):
         width = 640
         height = 640
         
-        # Initialize image arrays for both fixed box and cube
+        # Initialize image arrays for both fixed box and object
         fixed_box_img = np.zeros((height, width, 3), dtype=np.uint8)
-        cube_img = np.zeros((height, width, 3), dtype=np.uint8)
+        object_img = np.zeros((height, width, 3), dtype=np.uint8)
         
         # Create camera instance
         cam = mj.MjvCamera()
@@ -807,43 +868,44 @@ class Projectile(MuJoCoBase):
             # Read pixels for fixed box image
             mj.mjr_readPixels(fixed_box_img, None, viewport, self.context)
             
-            # Second render - cube only
+            # Second render - object only
             self.opt.geomgroup[:] = 0  # Hide all groups
-            self.opt.geomgroup[2] = 1  # Show only cube
+            self.opt.geomgroup[2] = 1  # Show only object
             
-            # Update and render scene for cube
+            # Update and render scene for object
             mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
                             mj.mjtCatBit.mjCAT_ALL.value, self.scene)
             mj.mjr_render(viewport, self.scene, self.context)
             
-            # Read pixels for cube image
-            mj.mjr_readPixels(cube_img, None, viewport, self.context)
+            # Read pixels for object image
+            mj.mjr_readPixels(object_img, None, viewport, self.context)
             
             # Restore original visibility settings
             self.opt.geomgroup[:] = original_geomgroup
             
-            return fixed_box_img, cube_img
+            return fixed_box_img, object_img
         
         return None, None  # Return None for both images if camera name not recognized
 
     def simulate(self, dataset="train"):
         video_dir = './demo'
         os.makedirs(video_dir, exist_ok=True)
-        top_camera_video_filename = os.path.join(video_dir, 'top_camera_video.mp4')
-        front_camera_video_filename = os.path.join(video_dir, 'front_camera_video.mp4')
+        if self.enable_cameras:
+            top_camera_video_filename = os.path.join(video_dir, 'top_camera_video.mp4')
+            front_camera_video_filename = os.path.join(video_dir, 'front_camera_video.mp4')
 
-        # writer = imageio.get_writer(video_filename, fps=60)
-        top_box_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
-        top_cube_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
-        front_box_writer = imageio.get_writer(front_camera_video_filename, fps=60, macro_block_size=16)
-        front_cube_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
+            # writer = imageio.get_writer(video_filename, fps=60)
+            top_box_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
+            top_object_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
+            front_box_writer = imageio.get_writer(front_camera_video_filename, fps=60, macro_block_size=16)
+            front_object_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
 
         # Create data directories
         os.makedirs('demo/data/train', exist_ok=True)
         os.makedirs('demo/data/val', exist_ok=True)
 
         # Get object IDs
-        cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
+        object_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'stanford_bunny')
         fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
 
         # while not glfw.window_should_close(self.window):
@@ -866,15 +928,18 @@ class Projectile(MuJoCoBase):
             # Initialize episode variables
             failure_time_step = -1
             first_failure_time_step = -1
-            cube_drop_time = 16  # Steps to ignore while cube is initially falling
+            object_drop_time = 16  # Steps to ignore while object is initially falling
             episode_filled_tag = False
 
             # Initialize lists to store metrics
             action_values = []
-            top_camera_cube_contours = []
+            top_camera_object_contours = []
             top_camera_box_contours = []
-            front_camera_cube_contours = []
+            front_camera_object_contours = []
             front_camera_box_contours = []
+        
+            # Initialize dummy contours for use when cameras are disabled
+            dummy_contour = np.array([[[0, 0]], [[0, 10]], [[10, 10]], [[10, 0]]], dtype=np.int32)
 
             # Main simulation loop
             for overal_step_num in range(EPISODE_LENGTH):
@@ -902,9 +967,9 @@ class Projectile(MuJoCoBase):
                         # Step simulation environment
                         mj.mj_step(self.model, self.data)
 
-                        # Record the cube's position
-                        cube_pos = self.data.qpos[mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')]
-                        self.positions.append(cube_pos.copy())
+                        # Record the object's position
+                        object_pos = self.data.qpos[mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'stanford_bunny')]
+                        self.positions.append(object_pos.copy())
 
                     # get framebuffer viewport
                     viewport_width, viewport_height = glfw.get_framebuffer_size(self.window)
@@ -916,44 +981,54 @@ class Projectile(MuJoCoBase):
 
                     # Render scene
                     mj.mjr_render(viewport, self.scene, self.context)
+                    
 
-                    # Get top camera frame
-                    top_box_frame, top_cube_frame = self.get_camera_image('top_camera')
-                    # top_camera_frame = top_camera_frame[::-1, :, :]
-                    if top_box_frame is not None and top_cube_frame is not None:
-                        # Process box frame
-                        top_box_writer.append_data(top_box_frame)
-                        top_box_view = cv2.cvtColor(top_box_frame, cv2.COLOR_RGB2BGR)
-                        top_box_mask, top_box_contour, top_box_filtered = process_camera_frame(top_box_view)
-                        
-                        # Process cube frame
-                        top_cube_writer.append_data(top_cube_frame)
-                        top_cube_view = cv2.cvtColor(top_cube_frame, cv2.COLOR_RGB2BGR)
-                        top_cube_mask, top_cube_contour, top_cube_filtered = process_camera_frame(top_cube_view)
+                    # Initialize contour variables with default values
+                    top_box_contour = dummy_contour
+                    top_object_contour = dummy_contour
+                    front_box_contour = dummy_contour
+                    front_object_contour = dummy_contour
 
-                    # Get front camera frames
-                    front_box_frame, front_cube_frame = self.get_camera_image('front_camera')
-                    if front_box_frame is not None and front_cube_frame is not None:
-                        # Rotate and process box frame
-                        front_box_frame = cv2.rotate(front_box_frame, cv2.ROTATE_90_CLOCKWISE)
-                        front_box_writer.append_data(front_box_frame)
-                        front_box_view = cv2.cvtColor(front_box_frame, cv2.COLOR_RGB2BGR)
-                        front_box_mask, front_box_contour, front_box_filtered = process_camera_frame(front_box_view)
-                        
-                        # Rotate and process cube frame
-                        front_cube_frame = cv2.rotate(front_cube_frame, cv2.ROTATE_90_CLOCKWISE)
-                        front_cube_writer.append_data(front_cube_frame)
-                        front_cube_view = cv2.cvtColor(front_cube_frame, cv2.COLOR_RGB2BGR)
-                        front_cube_mask, front_cube_contour, front_cube_filtered = process_camera_frame(front_cube_view)
+                    # Camera operations only if enabled
+                    if self.enable_cameras:
+                        # Get top camera frame
+                        top_box_frame, top_object_frame = self.get_camera_image('top_camera')
+                        # top_camera_frame = top_camera_frame[::-1, :, :]
+                        if top_box_frame is not None and top_object_frame is not None:
+                            # Process box frame
+                            top_box_writer.append_data(top_box_frame)
+                            top_box_view = cv2.cvtColor(top_box_frame, cv2.COLOR_RGB2BGR)
+                            top_box_mask, top_box_contour, top_box_filtered = process_camera_frame(top_box_view)
+                            
+                            # Process object frame
+                            top_object_writer.append_data(top_object_frame)
+                            top_object_view = cv2.cvtColor(top_object_frame, cv2.COLOR_RGB2BGR)
+                            top_object_mask, top_object_contour, top_object_filtered = process_camera_frame(top_object_view)
+
+                        # Get front camera frames
+                        front_box_frame, front_object_frame = self.get_camera_image('front_camera')
+                        if front_box_frame is not None and front_object_frame is not None:
+                            # Rotate and process box frame
+                            front_box_frame = cv2.rotate(front_box_frame, cv2.ROTATE_90_CLOCKWISE)
+                            front_box_writer.append_data(front_box_frame)
+                            front_box_view = cv2.cvtColor(front_box_frame, cv2.COLOR_RGB2BGR)
+                            front_box_mask, front_box_contour, front_box_filtered = process_camera_frame(front_box_view)
+                            
+                            # Rotate and process object frame
+                            front_object_frame = cv2.rotate(front_object_frame, cv2.ROTATE_90_CLOCKWISE)
+                            front_object_writer.append_data(front_object_frame)
+                            front_object_view = cv2.cvtColor(front_object_frame, cv2.COLOR_RGB2BGR)
+                        front_cobject_mask, front_object_contour, front_object_filtered = process_camera_frame(front_object_view)
 
                     # Process both frames
 
                     # Display images
                     if self.display_camera:
-                        cv2.imshow('Top Camera Box View', top_box_filtered)
-                        cv2.imshow('Top Camera Cube View', top_cube_filtered)
-                        cv2.imshow('Front Camera Box View', front_box_filtered)
-                        cv2.imshow('Front Camera Cube View', front_cube_filtered)
+                        if self.display_camera:
+                            cv2.imshow('Top Camera Panel View', top_box_filtered)
+                            cv2.imshow('Top Camera Object View', top_object_filtered)
+                            cv2.imshow('Front Camera Panel View', front_box_filtered)
+                            cv2.imshow('Front Camera Object View', front_object_filtered)
 
                         # Check for 'q' key press to quit
                         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -965,10 +1040,10 @@ class Projectile(MuJoCoBase):
                     # process pending GUI events, call GLFW callbacks
                     glfw.poll_events()
 
-                    # skip the first cube_drop_time steps because the cube is falling from the sky
-                    if step_num >= cube_drop_time:
+                    # skip the first object_drop_time steps because the object is falling from the sky
+                    if step_num >= object_drop_time:
                         # print("step_num", step_num)
-                        end_effector_pos, transform_data_3D = self.data_collection(cube_body_id, fixed_box_body_id)
+                        end_effector_pos, transform_data_3D = self.data_collection(object_body_id, fixed_box_body_id)
                         displacement = [transform_data_3D['relative_position'][0], transform_data_3D['relative_position'][1], transform_data_3D['relative_position'][2]]
 
                         if displacement[2] >= DISPLACEMENT_THRESHOLD_HIGH:
@@ -997,55 +1072,55 @@ class Projectile(MuJoCoBase):
                             self.activate_emergency_stop()
                             episode_failed_tag = True
                             failure_time_step = step_num
-                            # cube_drop_time is for avoid counting in the initial falling of the cube
-                            first_failure_time_step = step_num - cube_drop_time # + episode_num * (EPISODE_LENGTH - cube_drop_time)
+                            # object_drop_time is for avoid counting in the initial falling of the object
+                            first_failure_time_step = step_num - object_drop_time # + episode_num * (EPISODE_LENGTH - object_drop_time)
 
                         if not episode_filled_tag:
-                            top_camera_cube_contours.append(top_cube_contour)
+                            top_camera_object_contours.append(top_object_contour)
                             top_camera_box_contours.append(top_box_contour)
-                            front_camera_cube_contours.append(front_cube_contour)
+                            front_camera_object_contours.append(front_object_contour)
                             front_camera_box_contours.append(front_box_contour)
 
                             window = 30
-                            if len(top_camera_cube_contours) > window:
-                                top_cube_transforms = process_consecutive_frames(top_camera_cube_contours[-window], top_cube_contour)
-                                # print("top_cube_transforms", top_cube_transforms)
+                            if len(top_camera_object_contours) > window:
+                                top_object_transforms = process_consecutive_frames(top_camera_object_contours[-window], top_object_contour)
+                                # print("top_object_transforms", top_object_transforms)
                                 top_box_transforms = process_consecutive_frames(top_camera_box_contours[-window], top_box_contour)
                                 # print("top_box_transforms", top_box_transforms)
-                                front_cube_transforms = process_consecutive_frames(front_camera_cube_contours[-window], front_cube_contour)
-                                # print("front_cube_transforms", front_cube_transforms)
+                                front_object_transforms = process_consecutive_frames(front_camera_object_contours[-window], front_object_contour)
+                                # print("front_object_transforms", front_object_transforms)
                                 front_box_transforms = process_consecutive_frames(front_camera_box_contours[-window], front_box_contour)
                                 # print("front_box_transforms", front_box_transforms)
 
                                 try:
                                     # Check for empty transforms
-                                    if len(top_cube_transforms) == 0 and len(top_box_transforms) == 0 and \
-                                       len(front_cube_transforms) == 0 and len(front_box_transforms) == 0:
+                                    if len(top_object_transforms) == 0 and len(top_box_transforms) == 0 and \
+                                       len(front_object_transforms) == 0 and len(front_box_transforms) == 0:
                                         raise Exception("All transforms are empty")
                                 except Exception as e:
                                     print(f"Error in contour processing: {e}")
                                     continue
 
                                 # Extract features from each transform set
-                                top_cube_features = extract_transform_features(top_cube_transforms)
+                                top_object_features = extract_transform_features(top_object_transforms)
                                 top_box_features = extract_transform_features(top_box_transforms)
-                                front_cube_features = extract_transform_features(front_cube_transforms)
+                                front_object_features = extract_transform_features(front_object_transforms)
                                 front_box_features = extract_transform_features(front_box_transforms)
-                                # print("top_cube_transforms",top_cube_transforms)
-                                # print("top_cube_features",top_cube_features)
+                                # print("top_object_transforms",top_object_transforms)
+                                # print("top_object_features",top_object_features)
                                 
                                 # Combine all features
                                 combined_features = np.concatenate([
-                                    top_cube_features,
+                                    top_object_features,
                                     top_box_features,
-                                    front_cube_features,
+                                    front_object_features,
                                     front_box_features,
                                     end_effector_pos
                                 ])
 
-                                # print("top_cube_features", np.asarray(top_cube_features).shape) # (4,)
+                                # print("top_object_features", np.asarray(top_object_features).shape) # (4,)
                                 # print("top_box_features", np.asarray(top_box_features).shape) # (4,)
-                                # print("front_cube_features", np.asarray(front_cube_features).shape) # (4,)
+                                # print("front_object_features", np.asarray(front_object_features).shape) # (4,)
                                 # print("front_box_features", np.asarray(front_box_features).shape) # (4,)
                                 # print("combined_features", combined_features.shape) # (19,)
                                 if combined_features.shape[0]!=19:
@@ -1060,7 +1135,7 @@ class Projectile(MuJoCoBase):
                                 # 'language_instruction': 'dummy instruction',
                                     })
                                 # For plot     
-                                print("action_value!!!!!!!!!!!!step_num - cube_drop_time", step_num - cube_drop_time, action_value) # + episode_num * (EPISODE_LENGTH - cube_drop_time), action_value)
+                                print("action_value!!!!!!!!!!!!step_num - object_drop_time", step_num - object_drop_time, action_value) # + episode_num * (EPISODE_LENGTH - object_drop_time), action_value)
                                 action_values.append(action_value) # Action value
                     
                 episode_filled_tag = True
@@ -1068,8 +1143,8 @@ class Projectile(MuJoCoBase):
 
                 if episode_failed_tag:
                     failure_time_step -= backtracking_steps
-                    # cube_drop_time is for avoid counting in the initial falling of the cube
-                    failure_time_step_trim = failure_time_step - cube_drop_time #  + episode_num * (EPISODE_LENGTH - cube_drop_time)
+                    # object_drop_time is for avoid counting in the initial falling of the object
+                    failure_time_step_trim = failure_time_step - object_drop_time #  + episode_num * (EPISODE_LENGTH - object_drop_time)
                     # print("episode_num", episode_num)
                     # print("N_EPISODES", N_EPISODES)
                     print("first_failure_time_step", first_failure_time_step)
@@ -1111,17 +1186,20 @@ class Projectile(MuJoCoBase):
                 np.save(f'demo/data/val/episode_{episode_num}.npy', self.episode)
 
         # writer.close()
-        top_box_writer.close()
-        top_cube_writer.close()
-        front_box_writer.close()
-        front_cube_writer.close()
+        if self.display_camera:
+            top_box_writer.close()
+            top_object_writer.close()
+            front_box_writer.close()
+            front_object_writer.close()
         glfw.terminate()
 
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene_complete.xml"
     traj_path = "./demo/traj_20250218.txt"  # Adjust path as needed
 
-    sim = Projectile(xml_path, traj_path, initial_delay=2, display_camera=True)
+    camera_related = True
+
+    sim = Projectile(xml_path, traj_path, initial_delay=2, display_camera=camera_related, enable_cameras=camera_related)
     sim.reset(RANDOM_EPISODE_TMP)
     sim.simulate(sys.argv[1])
 
