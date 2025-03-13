@@ -36,6 +36,7 @@
     <material class="ur5e" name="jointgray" rgba="0.278 0.278 0.278 1"/>
     <material class="ur5e" name="linkgray" rgba="0.82 0.82 0.82 1"/>
     <material class="ur5e" name="urblue" rgba="0.49 0.678 0.8 1"/>
+    <material class="ur5e" name="bunny_red" rgba="0.49 0.0 0.0 1"/>
 
     <mesh file="base_0.obj"/>
     <mesh file="base_1.obj"/>
@@ -57,6 +58,8 @@
     <mesh file="wrist2_1.obj"/>
     <mesh file="wrist2_2.obj"/>
     <mesh file="wrist3.obj"/>
+
+    <mesh file="stanford_bunny.obj" scale="0.8 0.8 0.8"/>
   </asset>
 
   <contact>
@@ -141,7 +144,13 @@
       <inertial mass="1" pos="0 0 0" quat="1 0 0 0" diaginertia="0.01 0.01 0.01"/>
     </body>
 
-    
+    <!-- New Customized Body -->
+    <body name="custom_object_body" pos="0.0 0.5 0.1">
+      <joint type="free"/>
+      <geom name="custom_object_visual" type="mesh" mesh="stanford_bunny" rgba="0.7 0.5 0.3 1" group="2"/>
+      <geom name="custom_object_collision" type="mesh" mesh="stanford_bunny" rgba="0.7 0.5 0.3 1" group="2" contype="1" conaffinity="1"/>
+      <inertial mass="0.8" pos="0 0 0.01" diaginertia="0.005 0.005 0.005"/>
+    </body>
                   
   </worldbody>
 
@@ -156,7 +165,7 @@
   </actuator>
 
   <keyframe>
-    <key name="home" qpos="1.3500753657730578 -1.865456836594901 -2.0400916711745514 -2.3380169136860096 -0.26860617161064493 3.0982337160377313 0 0 0 1 0 0 0 0" 
+    <key name="home" qpos="1.3500753657730578 -1.865456836594901 -2.0400916711745514 -2.3380169136860096 -0.26860617161064493 3.0982337160377313 0 0 0 1 0 0 0 0 0 0 1 0 0 0 0" 
           ctrl="1.3500753657730578 -1.865456836594901 -2.0400916711745514 -2.3380169136860096 -0.26860617161064493 3.0982337160377313 0"/>
   </keyframe>
 
