@@ -21,7 +21,7 @@ from scipy.spatial.distance import cdist
 
 N_TRAIN_EPISODES = 100
 N_VAL_EPISODES = 25
-EPISODE_LENGTH = 1000  # Number of points in trajectory
+EPISODE_LENGTH = 350  # Number of points in trajectory
 
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_HIGH = 0.01
@@ -271,7 +271,7 @@ def process_camera_frame(frame):
     filtered_image = frame.copy()
     cv2.drawContours(filtered_image, contours, -1, (0, 255, 0), 2)
     
-    # Draw bounding boxes around detected objects
+    # Draw bounding panel around detected objects
     # for contour in contours:
     #     x, y, w, h = cv2.boundingRect(contour)
     #     cv2.rectangle(filtered_image, (x, y), (x + w, y + h), (255, 0, 0), 2)
@@ -294,8 +294,8 @@ class Projectile(MuJoCoBase):
         self.display_camera = display_camera
         self.positions = []  # To store the position data
         self.episode = [] # To store the episode data
-        self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
-        self.is_high_threshold_step_set = False
+        # self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
+        # self.is_high_threshold_step_set = False
 
         # Trajectory loading
         self.traj_file = traj_file
@@ -312,13 +312,6 @@ class Projectile(MuJoCoBase):
         self.ncam = self.model.ncam  # Get number of cameras in the model
         self.cam_position_init = [None] * self.ncam  # Initialize with None for each camera
         self.cam_position_read = [False] * self.ncam  # Initialize all as unread
-
-        # Marker settings
-        self.marker_size = 0.005  # Increased size - adjust this value as needed
-        self.marker_positions = []  # Store positions and colors
-        self.max_markers = 100  # Maximum number of position markers to show
-        self.object_marker_color = [1, 0, 0, 0.8]  # Red for object
-        self.box_marker_color = [0, 1, 0, 0.8]   # Green for fixed box
 
         # New camera control flag
         self.enable_cameras = enable_cameras
@@ -391,8 +384,8 @@ class Projectile(MuJoCoBase):
         # print(f"New rotation parameters - Speed: {self.rotation_speed:.2f} rad/s, Target angle: {self.target_angle:.2f} rad, Reverse: {self.reverse_on_target}")
 
         # Reset simulation state
-        self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
-        self.is_high_threshold_step_set = False
+        # self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
+        # self.is_high_threshold_step_set = False
         self.start_time = None
         self.current_step = 0
         self.current_target = None
@@ -411,9 +404,6 @@ class Projectile(MuJoCoBase):
         self.randomize_object_colors("stanford_bunny_collision")
         self.randomize_object('stanford_bunny_body', 'stanford_bunny_collision')
         # self.randomize_stanford_bunny()
-
-        # Clear markers when resetting
-        self.marker_positions = []
 
         mj.set_mjcb_control(self.controller)
 
@@ -449,12 +439,12 @@ class Projectile(MuJoCoBase):
         object_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, object_body_id)
         object_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, object_geom_id)
 
-        fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
-        fixed_box_pos = self.data.xpos[fixed_box_body_id]
-        # print("fixed_box_pos", fixed_box_pos)
+        fixed_panel_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_panel')
+        fixed_panel_pos = self.data.xpos[fixed_panel_body_id]
+        # print("fixed_panel_pos", fixed_panel_pos)
         
         # Randomize object size (within reasonable bounds)
-        base_size = 0.025  # Original size
+        base_size = 0.015  # Original size
         size_variation = random.uniform(1.0, 3)  # n% variation
         new_size = base_size * size_variation
         self.model.geom_size[object_geom_id] = [new_size, new_size, new_size]
@@ -466,7 +456,7 @@ class Projectile(MuJoCoBase):
         self.model.body_mass[object_body_id] = new_mass
         
         # Adjust inertia based on new mass and size
-        new_inertia = (new_mass * new_size**2) / 6  # Simple box inertia approximation
+        new_inertia = (new_mass * new_size**2) / 6  # Simple panel inertia approximation
         self.model.body_inertia[object_body_id] = [new_inertia, new_inertia, new_inertia]
         
         # Randomize friction properties
@@ -480,9 +470,9 @@ class Projectile(MuJoCoBase):
                 self.model.pair_friction[i, 2] = friction_variation * 0.005  # Torsional friction
         
         # Randomize initial position (within reasonable bounds)
-        x_pos = random.uniform(fixed_box_pos[0]-0.05, fixed_box_pos[0]+0.05) # random.uniform(0.35, 0.42)
-        y_pos = random.uniform(fixed_box_pos[1]-0.05, fixed_box_pos[1]+0.05) # random.uniform(-0.5, -0.35)
-        z_pos = random.uniform(fixed_box_pos[2]+0.1, fixed_box_pos[2]+0.15)
+        x_pos = random.uniform(fixed_panel_pos[0]-0.05, fixed_panel_pos[0]+0.05) # random.uniform(0.35, 0.42)
+        y_pos = random.uniform(fixed_panel_pos[1]-0.05, fixed_panel_pos[1]+0.05) # random.uniform(-0.5, -0.35)
+        z_pos = random.uniform(fixed_panel_pos[2]+0.05, fixed_panel_pos[2]+0.05)
         self.data.qpos[self.model.body_jntadr[object_body_id]:self.model.body_jntadr[object_body_id]+3] = [x_pos, y_pos, z_pos]
         
         # Randomize initial orientation (uncomment when needed)
@@ -496,9 +486,9 @@ class Projectile(MuJoCoBase):
         bunny_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'stanford_bunny_body')
         bunny_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, 'stanford_bunny_collision')
         
-        # Get a reference point (fixed_box position) to position relative to
-        fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
-        fixed_box_pos = self.data.xpos[fixed_box_body_id]
+        # Get a reference point (fixed_panel position) to position relative to
+        fixed_panel_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_panel')
+        fixed_panel_pos = self.data.xpos[fixed_panel_body_id]
         
         # Randomize size (scale is set in XML, but can adjust some parameters here)
         # Visual geometry may already have scale in mesh definition, so we're mostly adjusting physics properties
@@ -515,9 +505,9 @@ class Projectile(MuJoCoBase):
         self.model.body_inertia[bunny_body_id] *= inertia_scale
         
         # Randomize initial position (within reasonable bounds, on opposite side of the scene from the object)
-        x_pos = random.uniform(fixed_box_pos[0]+2, fixed_box_pos[0]+1)
-        y_pos = random.uniform(fixed_box_pos[1]-2, fixed_box_pos[1]-1) 
-        z_pos = random.uniform(fixed_box_pos[2]+0.15, fixed_box_pos[2]+0.2)
+        x_pos = random.uniform(fixed_panel_pos[0]+2, fixed_panel_pos[0]+1)
+        y_pos = random.uniform(fixed_panel_pos[1]-2, fixed_panel_pos[1]-1) 
+        z_pos = random.uniform(fixed_panel_pos[2]+0.15, fixed_panel_pos[2]+0.2)
         
         # Set the position using qpos
         self.data.qpos[self.model.body_jntadr[bunny_body_id]:self.model.body_jntadr[bunny_body_id]+3] = [x_pos, y_pos, z_pos]
@@ -543,18 +533,18 @@ class Projectile(MuJoCoBase):
         # This would be done in the XML typically, but can be adjusted here too if needed
 
     def randomize_object_colors(self, object_geom_name):
-        """Randomize colors for fixed box and free object"""
-        # Zeyu: need to be revised, since combined object and the box, should be decoupled
+        """Randomize colors for fixed panel and free object"""
+        # Zeyu: need to be revised, since combined object and the panel, should be decoupled
         # Get geom IDs
-        fixed_box_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, "panel")
+        fixed_panel_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, "panel")
         free_object_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, object_geom_name)
         
         # Generate new colors
-        box_color = [random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), 1.0]
-        object_color = np.array([1.0, 1.0, 1.0, 2.0]) - box_color  # [random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), 1.0]
+        panel_color = [random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), 1.0]
+        object_color = np.array([1.0, 1.0, 1.0, 2.0]) - panel_color  # [random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), 1.0]
         
         # Set new colors
-        self.model.geom_rgba[fixed_box_geom_id] = box_color
+        self.model.geom_rgba[fixed_panel_geom_id] = panel_color
         self.model.geom_rgba[free_object_geom_id] = object_color
 
     def randomize_camera_position(self, camera_name='top_camera'):
@@ -647,9 +637,9 @@ class Projectile(MuJoCoBase):
         
         # Apply rotation with smoothed speed near target
         smoothing_factor = min(1.0, abs(angle_diff) / 0.05)  # Smooth speed when within 0.1 rad of target
-        box_rotation = self.rotation_speed * np.sign(angle_diff) * smoothing_factor
-        # Set the box rotation control
-        data.ctrl[6] = box_rotation
+        panel_rotation = self.rotation_speed * np.sign(angle_diff) * smoothing_factor
+        # Set the panel rotation control
+        data.ctrl[6] = panel_rotation
 
         # Handle pausing at key poses
         if self.is_pausing:
@@ -698,37 +688,8 @@ class Projectile(MuJoCoBase):
         elif self.current_target is not None:
             for joint_idx, position in enumerate(self.current_target):
                 data.ctrl[joint_idx] = position
-
-    def add_position_markers(self, object_pos, box_pos):
-        """Add markers for both object and fixed box positions"""
-        # Add new positions and colors
-        self.marker_positions.append((object_pos, self.object_marker_color))
-        self.marker_positions.append((box_pos, self.box_marker_color))
         
-        # Keep only the most recent markers
-        while len(self.marker_positions) > self.max_markers * 2:  # *2 because we add two markers at a time
-            self.marker_positions.pop(0)
-
-    def add_markers_to_scene(self):
-        """Add all stored markers to the scene"""
-        if not self.marker_positions:
-            return
-            
-        for pos, color in self.marker_positions:
-            self.scene.ngeom += 1
-            g = self.scene.geoms[self.scene.ngeom - 1]
-            
-            # Set geometry properties
-            g.type = mj.mjtGeom.mjGEOM_SPHERE
-            g.size[:] = [self.marker_size, self.marker_size, self.marker_size]  # Use the configurable size
-            g.pos[:] = pos
-            g.mat[:,:] = np.eye(3)
-            g.rgba[:] = color
-            g.dataid = -1
-            g.objtype = mj.mjtObj.mjOBJ_UNKNOWN
-            g.objid = -1
-
-    def data_collection(self, object_body_id, fixed_box_body_id):
+    def data_collection(self, object_body_id, fixed_panel_body_id):
         """
         Collect transformation data between adjacent timesteps for both objects.
         Returns positions, rotations, and relative transforms between timesteps.
@@ -736,21 +697,21 @@ class Projectile(MuJoCoBase):
         # Get current positions and orientations
         object_pos = self.data.xpos[object_body_id].copy()  # 3D position
         object_quat = self.data.xquat[object_body_id].copy()  # Quaternion orientation
-        fixed_box_pos = self.data.xpos[fixed_box_body_id].copy()
-        fixed_box_quat = self.data.xquat[fixed_box_body_id].copy()
+        fixed_panel_pos = self.data.xpos[fixed_panel_body_id].copy()
+        fixed_panel_quat = self.data.xquat[fixed_panel_body_id].copy()
+
+        # print("object_pos", object_pos)
+        # print("fixed_panel_pos", fixed_panel_pos)
         
         # Get end effector position (wrist_3_link)
         wrist_3_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'wrist_3_link')
         end_effector_pos = self.data.xpos[wrist_3_body_id].copy()
         # print("end_effector_pos", end_effector_pos)
 
-        # Add position markers
-        self.add_position_markers(object_pos, fixed_box_pos)
-
         # Store velocities
         object_lin_vel = self.data.qvel[self.model.body_jntadr[object_body_id]:self.model.body_jntadr[object_body_id]+3].copy()
         object_ang_vel = self.data.qvel[self.model.body_jntadr[object_body_id]+3:self.model.body_jntadr[object_body_id]+6].copy()
-        # fixed_box_lin_vel = self.data.cvel[fixed_box_body_id].reshape((6,))[:3].copy()
+        # fixed_panel_lin_vel = self.data.cvel[fixed_panel_body_id].reshape((6,))[:3].copy()
         
         # Convert quaternions to rotation matrices (3x3)
         def quat_to_mat(quat):
@@ -762,27 +723,27 @@ class Projectile(MuJoCoBase):
             ])
         
         object_rot = quat_to_mat(object_quat)
-        fixed_box_rot = quat_to_mat(fixed_box_quat)
+        fixed_panel_rot = quat_to_mat(fixed_panel_quat)
         
         # If this is not the first frame, calculate transforms between frames
         if hasattr(self, 'prev_object_pos'):
             # Calculate translation vectors (movement since last frame)
             object_translation = object_pos - self.prev_object_pos
-            fixed_box_translation = fixed_box_pos - self.prev_fixed_box_pos
+            fixed_panel_translation = fixed_panel_pos - self.prev_fixed_panel_pos
             
             # Calculate rotation matrices between frames
             # R2 = dR * R1 -> dR = R2 * R1^T
             object_rot_delta = object_rot @ self.prev_object_rot.T
-            fixed_box_rot_delta = fixed_box_rot @ self.prev_fixed_box_rot.T
+            fixed_panel_rot_delta = fixed_panel_rot @ self.prev_fixed_panel_rot.T
             
-            # Calculate relative transform between object and fixed box
-            relative_pos = fixed_box_pos - object_pos
+            # Calculate relative transform between object and fixed panel
+            relative_pos = fixed_panel_pos - object_pos
             
             transform_data_3D = {
                 'object_translation': object_translation,
                 'object_rotation_delta': object_rot_delta,
-                'fixed_box_translation': fixed_box_translation,
-                'fixed_box_rotation_delta': fixed_box_rot_delta,
+                'fixed_panel_translation': fixed_panel_translation,
+                'fixed_panel_rotation_delta': fixed_panel_rot_delta,
                 'relative_position': relative_pos
             }
         else:
@@ -790,41 +751,56 @@ class Projectile(MuJoCoBase):
             transform_data_3D = {
                 'object_translation': np.zeros(3),
                 'object_rotation_delta': np.eye(3),
-                'fixed_box_translation': np.zeros(3),
-                'fixed_box_rotation_delta': np.eye(3),
-                'relative_position': fixed_box_pos - object_pos
+                'fixed_panel_translation': np.zeros(3),
+                'fixed_panel_rotation_delta': np.eye(3),
+                'relative_position': fixed_panel_pos - object_pos
             }
         
         # Store current transforms for next frame
         self.prev_object_pos = object_pos
         self.prev_object_rot = object_rot
-        self.prev_fixed_box_pos = fixed_box_pos
-        self.prev_fixed_box_rot = fixed_box_rot
+        self.prev_fixed_panel_pos = fixed_panel_pos
+        self.prev_fixed_panel_rot = fixed_panel_rot
         
         return end_effector_pos, transform_data_3D
 
     # Function to calculate action value based on displacement, linear speed, and angular speed
-    def calculate_action(self, displacement):
+    def calculate_action(self, displacement, object_pos, panel_pos):
+        """
+        Calculate action value based on object position relative to panel.
         
-        if displacement[2] < DISPLACEMENT_THRESHOLD_LOW:
-            # print("Safe")
-            return 0.0  # Set action to 0
-
-        if displacement[2] > DISPLACEMENT_THRESHOLD_HIGH:
-            # print("Failure")
-            return 1.0  # Set action to 1
-
-        return 0.5
+        Args:
+            displacement: Current displacement vector between object and panel
+            object_pos: 3D position of the object (bunny)
+            panel_pos: 3D position of the panel
+            
+        Returns:
+            float: Action value (0.0 = safe on panel, 1.0 = fallen off panel)
+        """
+        # print("displacement", displacement)
+        # Check if object is below the panel surface (has fallen)
+        if object_pos[2] < panel_pos[2] - 0.02:  # Small threshold to account for contact
+            return 1.0
+        
+        # Check horizontal displacement (if object center is too far from panel center)
+        # panel_radius = 0.15  # Approximate radius of panel - adjust based on your model
+        # horizontal_dist = np.sqrt(displacement[0]**2 + displacement[1]**2)
+        
+        # if horizontal_dist > panel_radius:
+        #     return 1.0  # Object center is outside panel radius
+            
+        # Object is safely on the panel
+        return 0.0
 
     def get_camera_image(self, camera_name):
         """
-        Get two images from the specified camera - one for fixed box and one for object.
+        Get two images from the specified camera - one for fixed panel and one for object.
         
         Args:
             camera_name (str): Name of the camera to capture from
             
         Returns:
-            tuple: Two RGB image arrays (fixed_box_img, object_img) each of shape (height, width, 3)
+            tuple: Two RGB image arrays (fixed_panel_img, object_img) each of shape (height, width, 3)
         """
         # Skip if cameras are disabled
         if not self.enable_cameras:
@@ -839,8 +815,8 @@ class Projectile(MuJoCoBase):
         width = 640
         height = 640
         
-        # Initialize image arrays for both fixed box and object
-        fixed_box_img = np.zeros((height, width, 3), dtype=np.uint8)
+        # Initialize image arrays for both fixed panel and object
+        fixed_panel_img = np.zeros((height, width, 3), dtype=np.uint8)
         object_img = np.zeros((height, width, 3), dtype=np.uint8)
         
         # Create camera instance
@@ -856,17 +832,17 @@ class Projectile(MuJoCoBase):
             # Set up viewport
             viewport = mj.MjrRect(0, 0, width, height)
             
-            # First render - fixed box only
+            # First render - fixed panel only
             self.opt.geomgroup[:] = 0  # Hide all groups
-            self.opt.geomgroup[1] = 1  # Show only fixed box
+            self.opt.geomgroup[1] = 1  # Show only fixed panel
             
-            # Update and render scene for fixed box
+            # Update and render scene for fixed panel
             mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
                             mj.mjtCatBit.mjCAT_ALL.value, self.scene)
             mj.mjr_render(viewport, self.scene, self.context)
             
-            # Read pixels for fixed box image
-            mj.mjr_readPixels(fixed_box_img, None, viewport, self.context)
+            # Read pixels for fixed panel image
+            mj.mjr_readPixels(fixed_panel_img, None, viewport, self.context)
             
             # Second render - object only
             self.opt.geomgroup[:] = 0  # Hide all groups
@@ -883,7 +859,7 @@ class Projectile(MuJoCoBase):
             # Restore original visibility settings
             self.opt.geomgroup[:] = original_geomgroup
             
-            return fixed_box_img, object_img
+            return fixed_panel_img, object_img
         
         return None, None  # Return None for both images if camera name not recognized
 
@@ -895,9 +871,9 @@ class Projectile(MuJoCoBase):
             front_camera_video_filename = os.path.join(video_dir, 'front_camera_video.mp4')
 
             # writer = imageio.get_writer(video_filename, fps=60)
-            top_box_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
+            top_panel_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
             top_object_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
-            front_box_writer = imageio.get_writer(front_camera_video_filename, fps=60, macro_block_size=16)
+            front_panel_writer = imageio.get_writer(front_camera_video_filename, fps=60, macro_block_size=16)
             front_object_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
 
         # Create data directories
@@ -905,8 +881,8 @@ class Projectile(MuJoCoBase):
         os.makedirs('demo/data/val', exist_ok=True)
 
         # Get object IDs
-        object_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'stanford_bunny')
-        fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
+        object_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'stanford_bunny_body')
+        fixed_panel_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_panel')
 
         # while not glfw.window_should_close(self.window):
         if dataset == "train":
@@ -934,9 +910,9 @@ class Projectile(MuJoCoBase):
             # Initialize lists to store metrics
             action_values = []
             top_camera_object_contours = []
-            top_camera_box_contours = []
+            top_camera_panel_contours = []
             front_camera_object_contours = []
-            front_camera_box_contours = []
+            front_camera_panel_contours = []
         
             # Initialize dummy contours for use when cameras are disabled
             dummy_contour = np.array([[[0, 0]], [[0, 10]], [[10, 10]], [[10, 0]]], dtype=np.int32)
@@ -984,21 +960,21 @@ class Projectile(MuJoCoBase):
                     
 
                     # Initialize contour variables with default values
-                    top_box_contour = dummy_contour
+                    top_panel_contour = dummy_contour
                     top_object_contour = dummy_contour
-                    front_box_contour = dummy_contour
+                    front_panel_contour = dummy_contour
                     front_object_contour = dummy_contour
 
                     # Camera operations only if enabled
                     if self.enable_cameras:
                         # Get top camera frame
-                        top_box_frame, top_object_frame = self.get_camera_image('top_camera')
+                        top_panel_frame, top_object_frame = self.get_camera_image('top_camera')
                         # top_camera_frame = top_camera_frame[::-1, :, :]
-                        if top_box_frame is not None and top_object_frame is not None:
-                            # Process box frame
-                            top_box_writer.append_data(top_box_frame)
-                            top_box_view = cv2.cvtColor(top_box_frame, cv2.COLOR_RGB2BGR)
-                            top_box_mask, top_box_contour, top_box_filtered = process_camera_frame(top_box_view)
+                        if top_panel_frame is not None and top_object_frame is not None:
+                            # Process panel frame
+                            top_panel_writer.append_data(top_panel_frame)
+                            top_panel_view = cv2.cvtColor(top_panel_frame, cv2.COLOR_RGB2BGR)
+                            top_panel_mask, top_panel_contour, top_panel_filtered = process_camera_frame(top_panel_view)
                             
                             # Process object frame
                             top_object_writer.append_data(top_object_frame)
@@ -1006,28 +982,28 @@ class Projectile(MuJoCoBase):
                             top_object_mask, top_object_contour, top_object_filtered = process_camera_frame(top_object_view)
 
                         # Get front camera frames
-                        front_box_frame, front_object_frame = self.get_camera_image('front_camera')
-                        if front_box_frame is not None and front_object_frame is not None:
-                            # Rotate and process box frame
-                            front_box_frame = cv2.rotate(front_box_frame, cv2.ROTATE_90_CLOCKWISE)
-                            front_box_writer.append_data(front_box_frame)
-                            front_box_view = cv2.cvtColor(front_box_frame, cv2.COLOR_RGB2BGR)
-                            front_box_mask, front_box_contour, front_box_filtered = process_camera_frame(front_box_view)
+                        front_panel_frame, front_object_frame = self.get_camera_image('front_camera')
+                        if front_panel_frame is not None and front_object_frame is not None:
+                            # Rotate and process panel frame
+                            front_panel_frame = cv2.rotate(front_panel_frame, cv2.ROTATE_90_CLOCKWISE)
+                            front_panel_writer.append_data(front_panel_frame)
+                            front_panel_view = cv2.cvtColor(front_panel_frame, cv2.COLOR_RGB2BGR)
+                            front_panel_mask, front_panel_contour, front_panel_filtered = process_camera_frame(front_panel_view)
                             
                             # Rotate and process object frame
                             front_object_frame = cv2.rotate(front_object_frame, cv2.ROTATE_90_CLOCKWISE)
                             front_object_writer.append_data(front_object_frame)
                             front_object_view = cv2.cvtColor(front_object_frame, cv2.COLOR_RGB2BGR)
-                        front_cobject_mask, front_object_contour, front_object_filtered = process_camera_frame(front_object_view)
+                        front_object_mask, front_object_contour, front_object_filtered = process_camera_frame(front_object_view)
 
                     # Process both frames
 
                     # Display images
                     if self.display_camera:
                         if self.display_camera:
-                            cv2.imshow('Top Camera Panel View', top_box_filtered)
+                            cv2.imshow('Top Camera Panel View', top_panel_filtered)
                             cv2.imshow('Top Camera Object View', top_object_filtered)
-                            cv2.imshow('Front Camera Panel View', front_box_filtered)
+                            cv2.imshow('Front Camera Panel View', front_panel_filtered)
                             cv2.imshow('Front Camera Object View', front_object_filtered)
 
                         # Check for 'q' key press to quit
@@ -1043,15 +1019,14 @@ class Projectile(MuJoCoBase):
                     # skip the first object_drop_time steps because the object is falling from the sky
                     if step_num >= object_drop_time:
                         # print("step_num", step_num)
-                        end_effector_pos, transform_data_3D = self.data_collection(object_body_id, fixed_box_body_id)
-                        displacement = [transform_data_3D['relative_position'][0], transform_data_3D['relative_position'][1], transform_data_3D['relative_position'][2]]
+                        end_effector_pos, transform_data_3D = self.data_collection(object_body_id, fixed_panel_body_id)
+                        displacement = transform_data_3D['relative_position']
 
-                        if displacement[2] >= DISPLACEMENT_THRESHOLD_HIGH:
-                            if not self.is_high_threshold_step_set:
-                                self.high_threshold_step = step_num  # Mark the step for interpolation endpoint
-                                self.is_high_threshold_step_set = True
+                        # Get current positions
+                        object_pos = self.data.xpos[object_body_id].copy()
+                        panel_pos = self.data.xpos[fixed_panel_body_id].copy()
 
-                        action_value = self.calculate_action(displacement)
+                        action_value = self.calculate_action(displacement, object_pos, panel_pos)
 
                         # Historical backtracking for backtracking_steps time steps
                         # print("episode_filled_tag!!!!!!", episode_filled_tag)
@@ -1077,25 +1052,25 @@ class Projectile(MuJoCoBase):
 
                         if not episode_filled_tag:
                             top_camera_object_contours.append(top_object_contour)
-                            top_camera_box_contours.append(top_box_contour)
+                            top_camera_panel_contours.append(top_panel_contour)
                             front_camera_object_contours.append(front_object_contour)
-                            front_camera_box_contours.append(front_box_contour)
+                            front_camera_panel_contours.append(front_panel_contour)
 
                             window = 30
                             if len(top_camera_object_contours) > window:
                                 top_object_transforms = process_consecutive_frames(top_camera_object_contours[-window], top_object_contour)
                                 # print("top_object_transforms", top_object_transforms)
-                                top_box_transforms = process_consecutive_frames(top_camera_box_contours[-window], top_box_contour)
-                                # print("top_box_transforms", top_box_transforms)
+                                top_panel_transforms = process_consecutive_frames(top_camera_panel_contours[-window], top_panel_contour)
+                                # print("top_panel_transforms", top_panel_transforms)
                                 front_object_transforms = process_consecutive_frames(front_camera_object_contours[-window], front_object_contour)
                                 # print("front_object_transforms", front_object_transforms)
-                                front_box_transforms = process_consecutive_frames(front_camera_box_contours[-window], front_box_contour)
-                                # print("front_box_transforms", front_box_transforms)
+                                front_panel_transforms = process_consecutive_frames(front_camera_panel_contours[-window], front_panel_contour)
+                                # print("front_panel_transforms", front_panel_transforms)
 
                                 try:
                                     # Check for empty transforms
-                                    if len(top_object_transforms) == 0 and len(top_box_transforms) == 0 and \
-                                       len(front_object_transforms) == 0 and len(front_box_transforms) == 0:
+                                    if len(top_object_transforms) == 0 and len(top_panel_transforms) == 0 and \
+                                       len(front_object_transforms) == 0 and len(front_panel_transforms) == 0:
                                         raise Exception("All transforms are empty")
                                 except Exception as e:
                                     print(f"Error in contour processing: {e}")
@@ -1103,32 +1078,33 @@ class Projectile(MuJoCoBase):
 
                                 # Extract features from each transform set
                                 top_object_features = extract_transform_features(top_object_transforms)
-                                top_box_features = extract_transform_features(top_box_transforms)
+                                top_panel_features = extract_transform_features(top_panel_transforms)
                                 front_object_features = extract_transform_features(front_object_transforms)
-                                front_box_features = extract_transform_features(front_box_transforms)
+                                front_panel_features = extract_transform_features(front_panel_transforms)
                                 # print("top_object_transforms",top_object_transforms)
                                 # print("top_object_features",top_object_features)
                                 
                                 # Combine all features
                                 combined_features = np.concatenate([
                                     top_object_features,
-                                    top_box_features,
+                                    top_panel_features,
                                     front_object_features,
-                                    front_box_features,
+                                    front_panel_features,
                                     end_effector_pos
                                 ])
 
                                 # print("top_object_features", np.asarray(top_object_features).shape) # (4,)
-                                # print("top_box_features", np.asarray(top_box_features).shape) # (4,)
+                                # print("top_panel_features", np.asarray(top_panel_features).shape) # (4,)
                                 # print("front_object_features", np.asarray(front_object_features).shape) # (4,)
-                                # print("front_box_features", np.asarray(front_box_features).shape) # (4,)
+                                # print("front_panel_features", np.asarray(front_panel_features).shape) # (4,)
+                                # print("end_effector_pos", np.asarray(end_effector_pos).shape) # (3,)
                                 # print("combined_features", combined_features.shape) # (19,)
-                                if combined_features.shape[0]!=19:
-                                    print(f"Error: combined_features shape {combined_features.shape} != 19")
-                                    return
+                                # if combined_features.shape[0]!=19:
+                                #     print(f"Error: combined_features shape {combined_features.shape} != 19")
+                                #     return
 
                                 self.episode.append({
-                                # 'image': top_box_frame,
+                                # 'image': top_panel_frame,
                                 # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
                                 'state': np.asarray(combined_features, dtype=np.float32),  # Save the padded state
                                 'action': np.asarray([action_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
@@ -1187,17 +1163,17 @@ class Projectile(MuJoCoBase):
 
         # writer.close()
         if self.display_camera:
-            top_box_writer.close()
+            top_panel_writer.close()
             top_object_writer.close()
-            front_box_writer.close()
+            front_panel_writer.close()
             front_object_writer.close()
         glfw.terminate()
 
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene_complete.xml"
-    traj_path = "./demo/traj_20250218.txt"  # Adjust path as needed
+    traj_path = "./demo/traj.txt"  # Adjust path as needed
 
-    camera_related = True
+    camera_related = False
 
     sim = Projectile(xml_path, traj_path, initial_delay=2, display_camera=camera_related, enable_cameras=camera_related)
     sim.reset(RANDOM_EPISODE_TMP)
