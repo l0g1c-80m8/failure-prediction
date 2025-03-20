@@ -23,10 +23,6 @@ N_TRAIN_EPISODES = 100
 N_VAL_EPISODES = 25
 EPISODE_LENGTH = 350  # Number of points in trajectory
 
-# Thresholds for action calculation
-DISPLACEMENT_THRESHOLD_HIGH = 0.01
-DISPLACEMENT_THRESHOLD_LOW = 0
-
 RANDOM_EPISODE_TMP = random.randint(0, EPISODE_LENGTH) # 67 86 #  109 282 731
 
 # Define different interpolation methods
@@ -401,9 +397,8 @@ class Projectile(MuJoCoBase):
 
         # Randomize environment
         self.randomize_floor()
-        self.randomize_object_colors("stanford_bunny_collision")
-        self.randomize_object('stanford_bunny_body', 'stanford_bunny_collision')
-        # self.randomize_stanford_bunny()
+        self.randomize_object_colors("object_collision")
+        self.randomize_object('object_body', 'object_collision')
 
         mj.set_mjcb_control(self.controller)
 
@@ -472,65 +467,13 @@ class Projectile(MuJoCoBase):
         # Randomize initial position (within reasonable bounds)
         x_pos = random.uniform(fixed_panel_pos[0]-0.05, fixed_panel_pos[0]+0.05) # random.uniform(0.35, 0.42)
         y_pos = random.uniform(fixed_panel_pos[1]-0.05, fixed_panel_pos[1]+0.05) # random.uniform(-0.5, -0.35)
-        z_pos = random.uniform(fixed_panel_pos[2]+0.05, fixed_panel_pos[2]+0.05)
+        z_pos = random.uniform(fixed_panel_pos[2]+0.05, fixed_panel_pos[2]+0.1)
         self.data.qpos[self.model.body_jntadr[object_body_id]:self.model.body_jntadr[object_body_id]+3] = [x_pos, y_pos, z_pos]
         
         # Randomize initial orientation (uncomment when needed)
         # quat = [random.uniform(-1, 1) for _ in range(4)]
         # quat = quat / np.linalg.norm(quat)  # Normalize quaternion
         # self.data.qpos[self.model.body_jntadr[object_body_id]+3:self.model.body_jntadr[object_body_id]+7] = quat
-
-    def randomize_stanford_bunny(self):
-        """Randomize the Stanford Bunny's position, size, mass, friction, and other physical properties."""
-        # Get bunny body and geom IDs
-        bunny_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'stanford_bunny_body')
-        bunny_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, 'stanford_bunny_collision')
-        
-        # Get a reference point (fixed_panel position) to position relative to
-        fixed_panel_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_panel')
-        fixed_panel_pos = self.data.xpos[fixed_panel_body_id]
-        
-        # Randomize size (scale is set in XML, but can adjust some parameters here)
-        # Visual geometry may already have scale in mesh definition, so we're mostly adjusting physics properties
-        
-        # Randomize mass
-        base_mass = 0.8  # Original mass
-        mass_variation = random.uniform(0.8, 1.2)  # ±20% variation
-        new_mass = base_mass * mass_variation
-        self.model.body_mass[bunny_body_id] = new_mass
-        
-        # Adjust inertia based on new mass
-        # For a complex shape like a bunny, we'll use simple approximate scaling
-        inertia_scale = mass_variation
-        self.model.body_inertia[bunny_body_id] *= inertia_scale
-        
-        # Randomize initial position (within reasonable bounds, on opposite side of the scene from the object)
-        x_pos = random.uniform(fixed_panel_pos[0]+2, fixed_panel_pos[0]+1)
-        y_pos = random.uniform(fixed_panel_pos[1]-2, fixed_panel_pos[1]-1) 
-        z_pos = random.uniform(fixed_panel_pos[2]+0.15, fixed_panel_pos[2]+0.2)
-        
-        # Set the position using qpos
-        self.data.qpos[self.model.body_jntadr[bunny_body_id]:self.model.body_jntadr[bunny_body_id]+3] = [x_pos, y_pos, z_pos]
-        
-        # Randomize initial orientation
-        # Create a random quaternion for rotation
-        quat = [random.uniform(-1, 1) for _ in range(4)]
-        quat = quat / np.linalg.norm(quat)  # Normalize quaternion
-        self.data.qpos[self.model.body_jntadr[bunny_body_id]+3:self.model.body_jntadr[bunny_body_id]+7] = quat
-        
-        # Optionally randomize color
-        bunny_color = [random.uniform(0.1, 0.9), random.uniform(0.1, 0.9), random.uniform(0.1, 0.9), 1.0]
-        
-        # If both visual and collision geometries have the same ID for color
-        self.model.geom_rgba[bunny_geom_id] = bunny_color
-        
-        # Try to set collision geom color too (if it exists with a different ID)
-        bunny_coll_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, 'stanford_bunny_collision')
-        if bunny_coll_geom_id >= 0:  # Valid ID
-            self.model.geom_rgba[bunny_coll_geom_id] = bunny_color
-        
-        # Optionally add contact pair with other objects if needed
-        # This would be done in the XML typically, but can be adjusted here too if needed
 
     def randomize_object_colors(self, object_geom_name):
         """Randomize colors for fixed panel and free object"""
@@ -881,7 +824,7 @@ class Projectile(MuJoCoBase):
         os.makedirs('demo/data/val', exist_ok=True)
 
         # Get object IDs
-        object_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'stanford_bunny_body')
+        object_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'object_body')
         fixed_panel_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_panel')
 
         # while not glfw.window_should_close(self.window):

@@ -1,0 +1,29 @@
+# OBJ file centered by obj_center_of_mass.py
+# Original file: cube.obj
+# Original center of mass: 0.000000 0.050800 0.000000
+# Vertices have been translated to place center of mass at origin
+# vertex count = 8
+# face count = 12
+# OBJ file format with ext .obj
+# vertex count = 8
+# face count = 12
+v 0.050800 0.050800 -0.050800
+v 0.050800 -0.050800 -0.050800
+v -0.050800 -0.050800 -0.050800
+v -0.050800 0.050800 -0.050800
+v -0.050800 -0.050800 0.050800
+v -0.050800 0.050800 0.050800
+v 0.050800 -0.050800 0.050800
+v 0.050800 0.050800 0.050800
+f 1 2 3
+f 3 4 1
+f 4 3 5
+f 5 6 4
+f 6 5 7
+f 7 8 6
+f 8 7 2
+f 2 1 8
+f 8 1 4
+f 4 6 8
+f 5 3 2
+f 2 7 5
