@@ -4,8 +4,10 @@ FROM --platform=${BUILD_PLATFORM} nvidia/cuda:12.1.1-cudnn8-devel-ubuntu20.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 ARG USERNAME=zeyu
-ARG USER_UID=1000
-ARG USER_GID=1000
+# ARG USER_UID=1000
+# ARG USER_GID=1000
+ARG USER_UID=1013
+ARG USER_GID=1014
 
 # Install packages
 RUN apt-get update && apt-get install -y \

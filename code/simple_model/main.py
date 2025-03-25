@@ -8,6 +8,8 @@ import os
 from tqdm import tqdm
 import wandb
 from datetime import datetime
+import matplotlib
+matplotlib.use("TkAgg")  # or "Qt5Agg"
 import matplotlib.pyplot as plt
 
 from resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
@@ -107,21 +109,6 @@ def compute_metrics(outputs, targets):
 def train_model(model, train_loader, val_loader, model_name, num_epochs=50, 
               warmup_epochs=10, initial_lr=0.01, min_lr=1e-6):
     """Train the model and validate periodically with progress tracking and logging."""
-    # Initialize wandb
-    wandb.init(
-        project="robot-trajectory-prediction",
-        name=f"{model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-        config={
-            "architecture": model_name,
-            "epochs": num_epochs,
-            "warmup_epochs": warmup_epochs,
-            "initial_lr": initial_lr,
-            "min_lr": min_lr,
-            "batch_size": train_loader.batch_size,
-            "window_size": train_loader.dataset.window_size,
-            "stride": train_loader.dataset.stride
-        }
-    )
     
     criterion = nn.MSELoss()
     optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
@@ -252,10 +239,18 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
             'lr': f"{current_lr:.6f}"
         })
     
-    wandb.finish()
 
 def evaluate_model(model, test_loader, model_name):
-    """Evaluate the model on test data with progress tracking."""
+    """Evaluate the model on test data with progress tracking and visualization."""
+    # Initialize wandb if not already done
+    # if wandb.run is None:
+    #     wandb.init(
+    #         project="robot-trajectory-prediction",
+    #         name=f"{model_name}_evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+    #         config={"architecture": model_name},
+    #         mode="disabled" if False else None
+    #     )
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
     total_mse = 0
@@ -263,8 +258,14 @@ def evaluate_model(model, test_loader, model_name):
     # Create progress bar for evaluation
     eval_pbar = tqdm(test_loader, desc=f"Evaluating {model_name}")
     
+    # Store predictions and ground truth for visualization
+    all_predictions = []
+    all_ground_truth = []
+    all_mse_values = []
+    sample_indices = []
+    
     with torch.no_grad():
-        for batch in eval_pbar:
+        for batch_idx, batch in enumerate(eval_pbar):
             states = batch['states'].to(device)
             actions = batch['action'].to(device)
             
@@ -272,44 +273,110 @@ def evaluate_model(model, test_loader, model_name):
             mse = nn.MSELoss()(outputs, actions).item()
             total_mse += mse
             
+            # Store predictions and ground truth
+            all_predictions.append(outputs.cpu().numpy())
+            all_ground_truth.append(actions.cpu().numpy())
+            all_mse_values.append(mse)
+            sample_indices.extend([batch_idx * test_loader.batch_size + i for i in range(len(outputs))])
+            
             # Update progress bar
             eval_pbar.set_postfix({'mse': f'{mse:.4f}'})
     
     avg_mse = total_mse / len(test_loader)
+    
+    # Concatenate all data for visualization
+    predictions = np.concatenate(all_predictions, axis=0)
+    ground_truth = np.concatenate(all_ground_truth, axis=0)
+    
+    # Create visualizations for wandb
+    visualize_predictions(predictions, ground_truth)
+    
     return avg_mse
 
+def visualize_predictions(predictions, ground_truth):
+    """Create visualizations comparing predictions to ground truth."""
+    # Print shapes for verification
+    print("predictions", predictions.shape)
+    print("ground_truth", ground_truth.shape)
+    
+    # Create indices for x-axis
+    indices = np.arange(len(predictions))
+    
+    # Sample data points to avoid overcrowding the plot
+    sample_size = min(10000, len(predictions))
+    sample_step = len(predictions) // sample_size
+    sample_indices = indices[::sample_step]
+    
+    # Create wandb plot
+    data = [[x, predictions[x][0], ground_truth[x][0]] for x in sample_indices]
+    table = wandb.Table(data=data, columns=["index", "prediction", "ground_truth"])
+    
+    # Create line plot without the xname parameter
+    wandb.log({"predictions_vs_ground_truth": wandb.plot.line(
+        table, 
+        "index", 
+        ["prediction", "ground_truth"],
+        title="Model Predictions vs Ground Truth"
+    )})
+
+
 if __name__ == "__main__":
-    # Initialize wandb
-    wandb.login()
-    
-    # Create data loaders
-    train_loader, val_loader = create_data_loaders(
-        train_dir='data/train',
-        val_dir='data/val',
-        window_size=10,
-        stride=1,
-        batch_size=1016,
-        num_workers=8
-    )
-    
-    # Example of using different ResNet architectures
-    models = {
-        'ResNet18': resnet18(input_channels=16)
-        # 'ResNet34': resnet34(input_channels=16),
-        # 'ResNet50': resnet50(input_channels=16),
-        # 'ResNet101': resnet101(input_channels=16),
-        # 'ResNet152': resnet152(input_channels=16)
-    }
-    
-    # Train and evaluate each model
-    for name, model in models.items():
-        print(f"\nTraining {name}")
-        # Train the model
-        train_model(model, train_loader, val_loader, name, num_epochs=1000,
-                    warmup_epochs=10,
-                    initial_lr=0.01,
-                    min_lr=1e-6)
+    try:
+        os.environ['QT_X11_NO_MITSHM'] = '1'
+        # Initialize wandb
+        wandb.login()
         
-        # Evaluate on validation set
-        val_mse = evaluate_model(model, val_loader, name)
-        print(f"Validation MSE for {name}: {val_mse:.4f}")
+        # Create data loaders
+        train_loader, val_loader = create_data_loaders(
+            train_dir='data/train',
+            val_dir='data/val',
+            window_size=10,
+            stride=1,
+            batch_size=1016,
+            num_workers=8
+        )
+        
+        # Example of using different ResNet architectures
+        models = {
+            'ResNet18': resnet18(input_channels=16)
+            # 'ResNet34': resnet34(input_channels=16),
+            # 'ResNet50': resnet50(input_channels=16),
+            # 'ResNet101': resnet101(input_channels=16),
+            # 'ResNet152': resnet152(input_channels=16)
+        }
+        
+        # Train and evaluate each model
+        for name, model in models.items():
+            print(f"\nTraining {name}")
+            # Initialize wandb
+            num_epochs=10
+            warmup_epochs=10
+            initial_lr=0.01
+            min_lr=1e-6
+            wandb.init(
+                project="robot-trajectory-prediction",
+                name=f"{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                config={
+                    "architecture": name,
+                    "epochs": num_epochs,
+                    "warmup_epochs": warmup_epochs,
+                    "initial_lr": initial_lr,
+                    "min_lr": min_lr,
+                    "batch_size": train_loader.batch_size,
+                    "window_size": train_loader.dataset.window_size,
+                    "stride": train_loader.dataset.stride
+                },
+                mode="disabled" if False else None
+            )
+            # Train the model
+            train_model(model, train_loader, val_loader, name, num_epochs=num_epochs,
+                        warmup_epochs=warmup_epochs,
+                        initial_lr=initial_lr,
+                        min_lr=min_lr)
+            
+            # Evaluate on validation set
+            val_mse = evaluate_model(model, val_loader, name)
+            print(f"Validation MSE for {name}: {val_mse:.4f}")
+            wandb.finish()
+    except Exception as e:
+        print(f"An error occurred: {e}")
