@@ -19,11 +19,11 @@ import cv2
 from scipy.spatial.distance import cdist
 
 
-N_TRAIN_EPISODES = 100
+N_TRAIN_EPISODES = 2
 N_VAL_EPISODES = 25
 EPISODE_LENGTH = 350  # Number of points in trajectory
 
-RANDOM_EPISODE_TMP = random.randint(0, EPISODE_LENGTH) # 67 86 #  109 282 731
+RANDOM_EPISODE_TMP = random.randint(0, EPISODE_LENGTH) # 67 86 #  109 282 731 344
 
 # Define different interpolation methods
 def linear_interpolation(first_failure_time_step, failure_time_step_trim):
@@ -288,7 +288,6 @@ class Projectile(MuJoCoBase):
         # Simulation parameters
         self.initial_delay = initial_delay  # Delay before starting movement
         self.display_camera = display_camera
-        self.positions = []  # To store the position data
         self.episode = [] # To store the episode data
         # self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
         # self.is_high_threshold_step_set = False
@@ -527,6 +526,9 @@ class Projectile(MuJoCoBase):
         mj.mj_forward(self.model, self.data)
 
     def activate_emergency_stop(self):
+        """
+        Active the e-stop, robot pose hold
+        """
         self.emergency_stop = True
         # self.emergency_stop_first_set = True
 
@@ -836,8 +838,6 @@ class Projectile(MuJoCoBase):
             print(f"Unknown dataset type: {dataset}")
             return
 
-        # self.positions = []
-        # self.episode = []  # Reset episode data for each new episode
 
         for episode_num in range(N_EPISODES):
             
@@ -848,6 +848,7 @@ class Projectile(MuJoCoBase):
             failure_time_step = -1
             first_failure_time_step = -1
             object_drop_time = 16  # Steps to ignore while object is initially falling
+            window = 30
             episode_filled_tag = False
 
             # Initialize lists to store metrics
@@ -856,11 +857,13 @@ class Projectile(MuJoCoBase):
             top_camera_panel_contours = []
             front_camera_object_contours = []
             front_camera_panel_contours = []
+
+            self.episode = []  # Reset episode data for each new episode
         
             # Initialize dummy contours for use when cameras are disabled
             dummy_contour = np.array([[[0, 0]], [[0, 10]], [[10, 10]], [[10, 0]]], dtype=np.int32)
 
-            # Main simulation loop
+            # Main simulation loop for backtracking
             for overal_step_num in range(EPISODE_LENGTH):
                 episode_failed_tag = False
                 backtracking_steps = 5
@@ -888,7 +891,6 @@ class Projectile(MuJoCoBase):
 
                         # Record the object's position
                         object_pos = self.data.qpos[mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'stanford_bunny')]
-                        self.positions.append(object_pos.copy())
 
                     # get framebuffer viewport
                     viewport_width, viewport_height = glfw.get_framebuffer_size(self.window)
@@ -974,32 +976,29 @@ class Projectile(MuJoCoBase):
                         # Historical backtracking for backtracking_steps time steps
                         # print("episode_filled_tag!!!!!!", episode_filled_tag)
                         if episode_filled_tag:
-                            if step_num < (failure_time_step - backtracking_steps):
+                            if step_num == (failure_time_step - backtracking_steps):
+                                self.activate_emergency_stop()  # manually active the e-stop, robot pose hold
                                 continue
-                            elif step_num == (failure_time_step - backtracking_steps):
-                                self.activate_emergency_stop()
-                            elif action_value == 1.0: # still failed enven e-stop in advance
+                            if step_num > (failure_time_step - backtracking_steps) and action_value == 1.0: # after e-stop, still failed enven e-stop in advance
                                 episode_failed_tag = True
-                                continue
+                            continue
+                        else:
+                            # Once if action_value == 1 for the first time, it will always == 1.
+                            # If failed, apply e-stop
+                            # print("failure_time_step!!!!!!", failure_time_step)
+                            if action_value == 1.0 and not self.emergency_stop and not self.emergency_stop_pos_first_set:
+                                # print("!!!!!!!!self.emergency_stop", self.emergency_stop)
+                                self.activate_emergency_stop()  # automatically active the e-stop, robot pose hold
+                                episode_failed_tag = True
+                                failure_time_step = step_num
+                                # object_drop_time is for avoid counting in the initial falling of the object
+                                first_failure_time_step = step_num - object_drop_time - window # + episode_num * (EPISODE_LENGTH - object_drop_time)
 
-                        # Once if action_value == 1 for the first time, it will always == 1.
-                        # If failed, apply e-stop
-                        # print("failure_time_step!!!!!!", failure_time_step)
-                        if action_value == 1.0 and not self.emergency_stop:
-                            # print("!!!!!!!!self.emergency_stop", self.emergency_stop)
-                            self.activate_emergency_stop()
-                            episode_failed_tag = True
-                            failure_time_step = step_num
-                            # object_drop_time is for avoid counting in the initial falling of the object
-                            first_failure_time_step = step_num - object_drop_time # + episode_num * (EPISODE_LENGTH - object_drop_time)
-
-                        if not episode_filled_tag:
                             top_camera_object_contours.append(top_object_contour)
                             top_camera_panel_contours.append(top_panel_contour)
                             front_camera_object_contours.append(front_object_contour)
                             front_camera_panel_contours.append(front_panel_contour)
 
-                            window = 30
                             if len(top_camera_object_contours) > window:
                                 top_object_transforms = process_consecutive_frames(top_camera_object_contours[-window], top_object_contour)
                                 # print("top_object_transforms", top_object_transforms)
@@ -1042,9 +1041,8 @@ class Projectile(MuJoCoBase):
                                 # print("front_panel_features", np.asarray(front_panel_features).shape) # (4,)
                                 # print("end_effector_pos", np.asarray(end_effector_pos).shape) # (3,)
                                 # print("combined_features", combined_features.shape) # (19,)
-                                # if combined_features.shape[0]!=19:
-                                #     print(f"Error: combined_features shape {combined_features.shape} != 19")
-                                #     return
+                                if combined_features.shape[0]!=19:
+                                    raise ValueError(f"Error: combined_features shape {combined_features.shape} != 19")
 
                                 self.episode.append({
                                 # 'image': top_panel_frame,
@@ -1054,36 +1052,41 @@ class Projectile(MuJoCoBase):
                                 # 'language_instruction': 'dummy instruction',
                                     })
                                 # For plot     
-                                print("action_value!!!!!!!!!!!!step_num - object_drop_time", step_num - object_drop_time, action_value) # + episode_num * (EPISODE_LENGTH - object_drop_time), action_value)
-                                action_values.append(action_value) # Action value
-                    
+                                print("action_value!!!!!!!!!!!!step_num - object_drop_time", step_num - object_drop_time - window, action_value) # + episode_num * (EPISODE_LENGTH - object_drop_time), action_value)
+                                # action_values.append(action_value) # Action value
+
+                # After a round of simulation: 
                 episode_filled_tag = True
                 print("len(self.episode)", len(self.episode), "episode_filled_tag", episode_filled_tag, "episode_failed_tag", episode_failed_tag, "failure_time_step", failure_time_step)
 
+                failure_time_step -= backtracking_steps
+                # object_drop_time is for avoid counting in the initial falling of the object
+                failure_time_step_trim = failure_time_step - object_drop_time - window #  + episode_num * (EPISODE_LENGTH - object_drop_time)
+                # print("episode_num", episode_num)
+                # print("N_EPISODES", N_EPISODES)
+                print("first_failure_time_step", first_failure_time_step)
+                print("failure_time_step_trim", failure_time_step_trim)
+
                 if episode_failed_tag:
-                    failure_time_step -= backtracking_steps
-                    # object_drop_time is for avoid counting in the initial falling of the object
-                    failure_time_step_trim = failure_time_step - object_drop_time #  + episode_num * (EPISODE_LENGTH - object_drop_time)
-                    # print("episode_num", episode_num)
-                    # print("N_EPISODES", N_EPISODES)
-                    print("first_failure_time_step", first_failure_time_step)
-                    print("failure_time_step_trim", failure_time_step_trim)
-                    print("self.episode[failure_time_step_trim-1]['action']", self.episode[failure_time_step_trim-1]['action'])
-                    print("self.episode[failure_time_step_trim]['action']", self.episode[failure_time_step_trim]['action'])
+                    # if failure_time_step_trim < 0:
+                    #     raise ValueError(f"failure_time_step_trim '{failure_time_step_trim}' < 0")
+                    # print("self.episode[failure_time_step_trim-1]['action']", self.episode[failure_time_step_trim-1]['action'])
+                    # print("self.episode[failure_time_step_trim]['action']", self.episode[failure_time_step_trim]['action'])
                     
                     # Set action to 1 at failure point
-                    self.episode[failure_time_step_trim]['action'] = np.asarray([1.0], dtype=np.float32)
-                    action_values[failure_time_step_trim] = 1
+                    # self.episode[failure_time_step_trim]['action'] = np.asarray([1.0], dtype=np.float32)
+                    # action_values[failure_time_step_trim] = 1
 
                     # Set actions to 1 for failure range
-                    for idx in range(failure_time_step_trim, first_failure_time_step):
-                        # print("idx", idx)
-                        self.episode[idx]['action'] = np.asarray([1.0], dtype=np.float32)
-                        action_values[idx] = 1
+                    # for idx in range(failure_time_step_trim, first_failure_time_step+1):
+                    #     # print("idx", idx)
+                    #     self.episode[idx]['action'] = np.asarray([1.0], dtype=np.float32)
+                        # action_values[idx] = 1
+                    pass
                 # If backtracking was successful (no failure after applying e-stop)
-                elif episode_filled_tag and first_failure_time_step != -1: # if not failed after backtracking, the time step to apply e-stop is safe, backtracking over
-                    self.episode[failure_time_step_trim]['action'] = np.asarray([0.0], dtype=np.float32)
-                    action_values[failure_time_step_trim] = 0
+                elif first_failure_time_step != -1: # if not failed after backtracking, the time step to apply e-stop is safe, backtracking over
+                    # self.episode[failure_time_step_trim]['action'] = np.asarray([0.0], dtype=np.float32)
+                    # action_values[failure_time_step_trim] = 0
 
                     # Interpolate values from 0 to 1 for latest failure_time_step to first_failure_time_step
                     interpolated_values = linear_interpolation(first_failure_time_step, failure_time_step_trim)
@@ -1091,10 +1094,10 @@ class Projectile(MuJoCoBase):
                     for idx, value in enumerate(interpolated_values, start=failure_time_step_trim):
                         # print("value", value)
                         self.episode[idx]["action"] = np.asarray([value], dtype=np.float32)
-                        action_values[idx] = value
+                    #     action_values[idx] = value
                     break
-                # If no failure occurred during the episode
-                elif episode_filled_tag and first_failure_time_step == -1:
+                # If no failure occurred at all during the episode
+                elif first_failure_time_step == -1:
                     break
         
             if dataset == "train":
@@ -1104,6 +1107,9 @@ class Projectile(MuJoCoBase):
                 print("Generating val examples...")
                 np.save(f'demo/data/val/episode_{episode_num}.npy', self.episode)
 
+            # Plot after simulation
+            self.plot_metrics(self.episode, episode_num)
+
         # writer.close()
         if self.display_camera:
             top_panel_writer.close()
@@ -1111,6 +1117,32 @@ class Projectile(MuJoCoBase):
             front_panel_writer.close()
             front_object_writer.close()
         glfw.terminate()
+
+    def plot_metrics(self, episode, episode_num):
+        """
+        Plot risk values over time.
+        """
+        time_steps = range(len(episode))
+        print("range", range(len(episode)))
+        
+        # Extract the risk values (actions) from each dictionary in episode
+        risk_values = [item['action'][0] for item in episode]  # Extract the first element of each action array
+        
+        pic_number = 1
+        pic_idx = 0
+        plt.figure(figsize=(pic_number*4, pic_number*4))
+        
+        pic_idx += 1
+        plt.subplot(pic_number, 1, pic_idx)
+        plt.plot(time_steps, risk_values, label='Risk value', color='red')
+        plt.xlabel('Time Step')
+        plt.ylabel('Risk value')
+        plt.legend()
+        plt.grid()
+        
+        plt.tight_layout()
+        # plt.show()
+        plt.savefig('./demo/object_trajectory_episode{}.png'.format(episode_num))
 
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene_complete.xml"

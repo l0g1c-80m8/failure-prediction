@@ -61,7 +61,7 @@
     <mesh file="wrist3.obj"/>
 
     <mesh file="stanford_bunny.obj" scale="0.8 0.8 0.8"/>
-    <mesh file="panel_0.obj" scale="1.0 1.0 1.0"/>
+    <mesh file="panel_1.obj" scale="1.0 1.0 1.0"/>
   </asset>
 
   <contact>
@@ -128,8 +128,8 @@
                   <body name="fixed_panel" pos="0 0.20 0" quat="0 0 1 1">
                     <joint name="box_rotation" type="hinge" axis="0 0 1" limited="true" range="-0.1 0.1"/>
                     <!-- Replace box geometry with mesh -->
-                    <!-- <geom name="panel_visual" type="mesh" mesh="panel_0" material="panel_blue" group="1"/> -->
-                    <geom name="panel_collision" type="mesh" mesh="panel_0" material="panel_blue" group="1" contype="1" conaffinity="1"/>
+                    <!-- <geom name="panel_visual" type="mesh" mesh="panel_1" material="panel_blue" group="1"/> -->
+                    <geom name="panel_collision" type="mesh" mesh="panel_1" material="panel_blue" group="1" contype="1" conaffinity="1"/>
                     <inertial mass="0.5" pos="0 0 0" diaginertia="0.001 0.001 0.001"/>
                   </body>
                 </body>
