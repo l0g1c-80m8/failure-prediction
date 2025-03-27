@@ -19,7 +19,7 @@ import cv2
 from scipy.spatial.distance import cdist
 
 
-N_TRAIN_EPISODES = 2
+N_TRAIN_EPISODES = 20
 N_VAL_EPISODES = 25
 EPISODE_LENGTH = 350  # Number of points in trajectory
 
@@ -464,9 +464,9 @@ class Projectile(MuJoCoBase):
                 self.model.pair_friction[i, 2] = friction_variation * 0.005  # Torsional friction
         
         # Randomize initial position (within reasonable bounds)
-        x_pos = random.uniform(fixed_panel_pos[0]-0.05, fixed_panel_pos[0]+0.05) # random.uniform(0.35, 0.42)
-        y_pos = random.uniform(fixed_panel_pos[1]-0.05, fixed_panel_pos[1]+0.05) # random.uniform(-0.5, -0.35)
-        z_pos = random.uniform(fixed_panel_pos[2]+0.05, fixed_panel_pos[2]+0.1)
+        x_pos = random.uniform(fixed_panel_pos[0]-0.04, fixed_panel_pos[0]+0.04) # random.uniform(0.35, 0.42)
+        y_pos = random.uniform(fixed_panel_pos[1]-0.04, fixed_panel_pos[1]+0.04) # random.uniform(-0.5, -0.35)
+        z_pos = random.uniform(fixed_panel_pos[2]+0.05, fixed_panel_pos[2]+0.06)
         self.data.qpos[self.model.body_jntadr[object_body_id]:self.model.body_jntadr[object_body_id]+3] = [x_pos, y_pos, z_pos]
         
         # Randomize initial orientation (uncomment when needed)
@@ -1100,15 +1100,18 @@ class Projectile(MuJoCoBase):
                 elif first_failure_time_step == -1:
                     break
         
+            # Resample the data
+            episode_resampled = self.resample_data(self.episode)
+            
+            # Plot after simulation
+            self.plot_metrics(self.episode, episode_resampled, episode_num)
+
             if dataset == "train":
                 print("Generating train examples...")
-                np.save(f'demo/data/train/episode_{episode_num}.npy', self.episode)
+                np.save(f'demo/data/train/episode_{episode_num}.npy', episode_resampled)
             elif dataset == "val":
                 print("Generating val examples...")
-                np.save(f'demo/data/val/episode_{episode_num}.npy', self.episode)
-
-            # Plot after simulation
-            self.plot_metrics(self.episode, episode_num)
+                np.save(f'demo/data/val/episode_{episode_num}.npy', episode_resampled)
 
         # writer.close()
         if self.display_camera:
@@ -1118,37 +1121,86 @@ class Projectile(MuJoCoBase):
             front_object_writer.close()
         glfw.terminate()
 
-    def plot_metrics(self, episode, episode_num):
+    def resample_data(self, episode):
+        episode_resampled = []
+        scale=15
+        for item_idx in range(len(episode)):
+            print(episode[item_idx]['action'][0])
+            if episode[item_idx]['action'][0] == 0.0 and item_idx%scale==0:
+                episode_resampled.append(episode[item_idx])
+            elif episode[item_idx]['action'][0] > 0.0 and episode[item_idx]['action'][0] < 1.0:
+                episode_resampled.append(episode[item_idx])
+            elif episode[item_idx]['action'][0] == 1.0 and item_idx%scale==0:
+                episode_resampled.append(episode[item_idx])
+        return episode_resampled
+                     
+
+    def plot_metrics(self, original_episode, resampled_episode, episode_num):
         """
-        Plot risk values over time.
+        Visualize original and resampled action curves in a single plot.
+        
+        Parameters:
+        -----------
+        original_episode : list
+            Original episode data
+        resampled_episode : list
+            Resampled episode data
+        episode_num : int
+            Episode number for the filename
         """
-        time_steps = range(len(episode))
-        print("range", range(len(episode)))
+        # Extract original data
+        original_time_steps = range(len(original_episode))
+        original_risk_values = [item['action'][0] for item in original_episode]
         
-        # Extract the risk values (actions) from each dictionary in episode
-        risk_values = [item['action'][0] for item in episode]  # Extract the first element of each action array
+        # Map resampled points to their original indices
+        resampled_indices = []
+        for r_item in resampled_episode:
+            # Find matching item in original episode
+            for i, o_item in enumerate(original_episode):
+                if np.array_equal(r_item['state'], o_item['state']) and r_item['action'][0] == o_item['action'][0]:
+                    resampled_indices.append(i)
+                    break
         
-        pic_number = 1
-        pic_idx = 0
-        plt.figure(figsize=(pic_number*4, pic_number*4))
+        # Extract resampled values
+        resampled_risk_values = [item['action'][0] for item in resampled_episode]
         
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, risk_values, label='Risk value', color='red')
+        # Create figure and plot
+        plt.figure(figsize=(12, 6))
+        
+        # Plot original data as a continuous line
+        plt.plot(original_time_steps, original_risk_values, 'b-', 
+                linewidth=2, alpha=0.6, label='Original data')
+        
+        # Plot resampled data as a dotted line with markers
+        plt.plot(resampled_indices, resampled_risk_values, 'r--', 
+                linewidth=1.5, alpha=0.8, label='Resampled curve')
+        
+        # Add markers for resampled points
+        plt.scatter(resampled_indices, resampled_risk_values, 
+                    color='red', s=40, label='Resampled points', zorder=5)
+        
+        # Enhance the plot
+        plt.title('Comparison of Original and Resampled Action Values')
         plt.xlabel('Time Step')
-        plt.ylabel('Risk value')
+        plt.ylabel('Risk Value')
+        plt.grid(True, alpha=0.3)
         plt.legend()
-        plt.grid()
+        
+        # Add text annotation showing reduction
+        reduction = 100 * (1 - len(resampled_episode)/len(original_episode))
+        plt.annotate(f"Data reduction: {reduction:.1f}%\nOriginal: {len(original_episode)} points\nResampled: {len(resampled_episode)} points", 
+                    xy=(0.02, 0.96), xycoords='axes fraction',
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
         
         plt.tight_layout()
-        # plt.show()
-        plt.savefig('./demo/object_trajectory_episode{}.png'.format(episode_num))
+        plt.savefig(f'./demo/comparison_episode{episode_num}.png')
+        plt.close()
 
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene_complete.xml"
     traj_path = "./demo/traj.txt"  # Adjust path as needed
 
-    camera_related = False
+    camera_related = True
 
     sim = Projectile(xml_path, traj_path, initial_delay=2, display_camera=camera_related, enable_cameras=camera_related)
     sim.reset(RANDOM_EPISODE_TMP)

@@ -51,7 +51,7 @@ class RobotTrajectoryDataset(Dataset):
         # Extract window data
         window_data = episode_data[start_idx:end_idx]
         
-        # Get states sequence (shape: window_size x 16)
+        # Get states sequence (shape: window_size x 19)
         states = np.stack([frame['state'] for frame in window_data])        
         
         # Get the action for the last timestep
@@ -59,7 +59,7 @@ class RobotTrajectoryDataset(Dataset):
         action = np.array(window_data[-1]['action'], dtype=np.float32)
         
         return {
-            'states': torch.FloatTensor(states).transpose(0, 1),  # Transform to (16 x window_size) for 1D convolution
+            'states': torch.FloatTensor(states).transpose(0, 1),  # Transform to (19 x window_size) for 1D convolution
             'action': torch.FloatTensor(action)  # Convert numpy array to tensor
         }
 
@@ -242,14 +242,6 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
 
 def evaluate_model(model, test_loader, model_name):
     """Evaluate the model on test data with progress tracking and visualization."""
-    # Initialize wandb if not already done
-    # if wandb.run is None:
-    #     wandb.init(
-    #         project="robot-trajectory-prediction",
-    #         name=f"{model_name}_evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-    #         config={"architecture": model_name},
-    #         mode="disabled" if False else None
-    #     )
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
@@ -302,16 +294,26 @@ def visualize_predictions(predictions, ground_truth):
     # Create indices for x-axis
     indices = np.arange(len(predictions))
     
-    # Sample data points to avoid overcrowding the plot
-    sample_size = min(10000, len(predictions))
-    sample_step = len(predictions) // sample_size
-    sample_indices = indices[::sample_step]
+    # Use all data points since dataset is small
+    sample_indices = indices
     
-    # Create wandb plot
-    data = [[x, predictions[x][0], ground_truth[x][0]] for x in sample_indices]
+    # Make sure predictions and ground_truth are properly formatted
+    # Convert to float to ensure compatibility with wandb
+    pred_values = predictions.flatten().astype(float)
+    truth_values = ground_truth.flatten().astype(float)
+    
+    # Create wandb plot - make sure data is correctly formatted
+    data = []
+    for i in sample_indices:
+        # Ensure values are scalar and not arrays
+        pred_val = float(pred_values[i])
+        truth_val = float(truth_values[i])
+        data.append([int(i), pred_val, truth_val])
+    
+    # Create the table
     table = wandb.Table(data=data, columns=["index", "prediction", "ground_truth"])
     
-    # Create line plot without the xname parameter
+    # Log the plot
     wandb.log({"predictions_vs_ground_truth": wandb.plot.line(
         table, 
         "index", 
@@ -338,18 +340,20 @@ if __name__ == "__main__":
         
         # Example of using different ResNet architectures
         models = {
-            'ResNet18': resnet18(input_channels=16)
-            # 'ResNet34': resnet34(input_channels=16),
-            # 'ResNet50': resnet50(input_channels=16),
-            # 'ResNet101': resnet101(input_channels=16),
-            # 'ResNet152': resnet152(input_channels=16)
+            'ResNet18': resnet18(input_channels=19)
+            # 'ResNet34': resnet34(input_channels=19),
+            # 'ResNet50': resnet50(input_channels=19),
+            # 'ResNet101': resnet101(input_channels=19),
+            # 'ResNet152': resnet152(input_channels=19)
         }
+
+        wandb_disabled = False
         
         # Train and evaluate each model
         for name, model in models.items():
             print(f"\nTraining {name}")
             # Initialize wandb
-            num_epochs=10
+            num_epochs=1000
             warmup_epochs=10
             initial_lr=0.01
             min_lr=1e-6
@@ -366,7 +370,7 @@ if __name__ == "__main__":
                     "window_size": train_loader.dataset.window_size,
                     "stride": train_loader.dataset.stride
                 },
-                mode="disabled" if False else None
+                mode="disabled" if wandb_disabled else None
             )
             # Train the model
             train_model(model, train_loader, val_loader, name, num_epochs=num_epochs,
