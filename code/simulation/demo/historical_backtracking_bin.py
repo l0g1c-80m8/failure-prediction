@@ -14,32 +14,27 @@ import ast
 
 import cv2
 
-from common_functions import (linear_interpolation, sin_interpolation,
-    find_closest_points, calculate_transformation,
-    create_homogeneous_matrix, icp_2d, process_consecutive_frames,
+from common_functions import (linear_interpolation, process_consecutive_frames,
     extract_transform_features, process_camera_frame,
-    calculate_action, resample_data, plot_metrics
+    calculate_action, resample_data, plot_metrics,
+    read_config
     )
 
-N_TRAIN_EPISODES = 20
-N_VAL_EPISODES = 25
-EPISODE_LENGTH = 350  # Number of points in trajectory
-
-RANDOM_EPISODE_TMP = random.randint(0, EPISODE_LENGTH) # 67 86 #  109 282 731 344
-
 class Projectile(MuJoCoBase):
-    def __init__(self, xml_path, traj_file, initial_delay=3.0, display_camera=False, enable_cameras=True, dataset_type="train"):
-        super().__init__(xml_path)
+    def __init__(self, config, ramdom_episode):
+        super().__init__(config.get('xml_path', 'N/A'))
+        self.config = config
+        self.ramdom_episode = ramdom_episode
         
         # Simulation parameters
-        self.initial_delay = initial_delay  # Delay before starting movement
-        self.display_camera = display_camera
+        self.initial_delay = self.config.get('initial_delay', 'N/A')  # Delay before starting movement
+        self.display_camera = self.config.get('camera_related', {}).get('display_camera', 'N/A')
         self.episode = [] # To store the episode data
         # self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
         # self.is_high_threshold_step_set = False
 
         # Trajectory loading
-        self.traj_file = traj_file
+        self.traj_file = self.config.get('traj_path', 'N/A')
         self.trajectory = self.load_trajectory()
 
         # Simulation state
@@ -55,9 +50,9 @@ class Projectile(MuJoCoBase):
         self.cam_position_read = [False] * self.ncam  # Initialize all as unread
 
         # New camera control flag
-        self.enable_cameras = enable_cameras
+        self.enable_cameras = self.config.get('camera_related', {}).get('enable_cameras', 'N/A')
 
-        self.dataset_type = dataset_type
+        self.dataset_type = self.config.get('dataset_type', "train")
         # self.speed_scale = random.uniform(2.5, 3.5)  # New parameter to control joint speed
         # self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
 
@@ -109,9 +104,9 @@ class Projectile(MuJoCoBase):
         random.seed(seed)
 
         # Set camera configuration
-        self.cam.azimuth = 300 # -216 random.uniform(-225, -315)
-        self.cam.distance = 2.5 # random.uniform(2, 3)
-        self.cam.elevation = -40 # random.uniform(-16, -30)
+        self.cam.azimuth = self.config.get('camera_related', {}).get('azimuth', 'N/A') # -216 random.uniform(-225, -315)
+        self.cam.distance = self.config.get('camera_related', {}).get('distance', 'N/A') # random.uniform(2, 3)
+        self.cam.elevation = self.config.get('camera_related', {}).get('elevation', 'N/A') # random.uniform(-16, -30)
         # print("self.cam", self.cam.azimuth, self.cam.distance, self.cam.elevation)
 
         # Randomize camera positions
@@ -550,18 +545,18 @@ class Projectile(MuJoCoBase):
 
         # while not glfw.window_should_close(self.window):
         if self.dataset_type == "train":
-            N_EPISODES = N_TRAIN_EPISODES
+            n_episodes = self.config.get('trajectories', {}).get('n_train_episodes', 'N/A')
         elif self.dataset_type == "val":
-            N_EPISODES = N_VAL_EPISODES
+            n_episodes = self.config.get('trajectories', {}).get('n_val_episodes', 'N/A')
         else:
             print(f"Unknown dataset type: {self.dataset_type}")
             return
 
 
-        for episode_num in range(N_EPISODES):
+        for episode_num in range(n_episodes):
             
-            random_seed_tmp = random.randint(0, EPISODE_LENGTH)
-            print(f"Episode {episode_num+1}/{N_EPISODES}, random seed: {random_seed_tmp}")
+            random_seed_tmp = random.randint(0, self.config.get('trajectories', {}).get('episode_length', 'N/A'))
+            print(f"Episode {episode_num+1}/{n_episodes}, random seed: {random_seed_tmp}")
 
             # Initialize episode variables
             failure_time_step = -1
@@ -583,7 +578,7 @@ class Projectile(MuJoCoBase):
             dummy_contour = np.array([[[0, 0]], [[0, 10]], [[10, 10]], [[10, 0]]], dtype=np.int32)
 
             # Main simulation loop for backtracking
-            for overal_step_num in range(EPISODE_LENGTH):
+            for overal_step_num in range(self.config.get('trajectories', {}).get('episode_length', 'N/A')):
                 episode_failed_tag = False
                 backtracking_steps = 5
 
@@ -599,17 +594,17 @@ class Projectile(MuJoCoBase):
 
                 mj.mj_forward(self.model, self.data)
                 
-                self.reset(RANDOM_EPISODE_TMP if episode_num == 0 else random_seed_tmp)  # Reset simulation
+                self.reset(self.ramdom_episode if episode_num == 0 else random_seed_tmp)  # Reset simulation
 
                 # Inner simulation loop
-                for step_num in range(EPISODE_LENGTH):
+                for step_num in range(self.config.get('trajectories', {}).get('episode_length', 'N/A')):
                     simstart = self.data.time
                     while (self.data.time - simstart < 1.0/60.0):
                         # Step simulation environment
                         mj.mj_step(self.model, self.data)
 
                         # Record the object's position
-                        object_pos = self.data.qpos[mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'stanford_bunny')]
+                        object_pos = self.data.qpos[mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'cube')]
 
                     # get framebuffer viewport
                     viewport_width, viewport_height = glfw.get_framebuffer_size(self.window)
@@ -711,7 +706,7 @@ class Projectile(MuJoCoBase):
                                 episode_failed_tag = True
                                 failure_time_step = step_num
                                 # object_drop_time is for avoid counting in the initial falling of the object
-                                first_failure_time_step = step_num - object_drop_time - window # + episode_num * (EPISODE_LENGTH - object_drop_time)
+                                first_failure_time_step = step_num - object_drop_time - window # + episode_num * (self.config.get('trajectories', {}).get('episode_length', 'N/A') - object_drop_time)
 
                             top_camera_object_contours.append(top_object_contour)
                             top_camera_panel_contours.append(top_panel_contour)
@@ -771,7 +766,7 @@ class Projectile(MuJoCoBase):
                                 # 'language_instruction': 'dummy instruction',
                                     })
                                 # For plot     
-                                print("action_value!!!!!!!!!!!!step_num - object_drop_time", step_num - object_drop_time - window, action_value) # + episode_num * (EPISODE_LENGTH - object_drop_time), action_value)
+                                print("action_value!!!!!!!!!!!!step_num - object_drop_time", step_num - object_drop_time - window, action_value) # + episode_num * (self.config.get('trajectories', {}).get('episode_length', 'N/A') - object_drop_time), action_value)
                                 # action_values.append(action_value) # Action value
 
                 # After a round of simulation: 
@@ -780,9 +775,9 @@ class Projectile(MuJoCoBase):
 
                 failure_time_step -= backtracking_steps
                 # object_drop_time is for avoid counting in the initial falling of the object
-                failure_time_step_trim = failure_time_step - object_drop_time - window #  + episode_num * (EPISODE_LENGTH - object_drop_time)
+                failure_time_step_trim = failure_time_step - object_drop_time - window #  + episode_num * (self.config.get('trajectories', {}).get('episode_length', 'N/A') - object_drop_time)
                 # print("episode_num", episode_num)
-                # print("N_EPISODES", N_EPISODES)
+                # print("n_episodes", n_episodes)
                 print("first_failure_time_step", first_failure_time_step)
                 print("failure_time_step_trim", failure_time_step_trim)
 
@@ -823,14 +818,10 @@ class Projectile(MuJoCoBase):
             episode_resampled = resample_data(self.episode)
             
             # Plot after simulation
-            plot_metrics(self.episode, episode_resampled, episode_num)
+            plot_metrics(self.episode, episode_resampled, episode_num, self.dataset_type)
 
-            if self.dataset_type == "train":
-                print("Generating train examples...")
-                np.save(f'demo/data/train/episode_{episode_num}.npy', episode_resampled)
-            elif self.dataset_type == "val":
-                print("Generating val examples...")
-                np.save(f'demo/data/val/episode_{episode_num}.npy', episode_resampled)
+            print(f"Generating {self.dataset_type} examples...")
+            # np.save(f'demo/data/{self.dataset_type}/episode_{episode_num}.npy', episode_resampled)
 
         # writer.close()
         if self.display_camera:
@@ -840,17 +831,14 @@ class Projectile(MuJoCoBase):
             front_object_writer.close()
         glfw.terminate()
 
-def main():
-    xml_path = "./model/universal_robots_ur5e/test_scene_complete.xml"
-    traj_path = "./demo/traj_20250218.txt"  # Adjust path as needed
-
-    camera_related = True
-    dataset_type = "train"
-
-    sim = Projectile(xml_path, traj_path, initial_delay=2, display_camera=camera_related, enable_cameras=camera_related, dataset_type=dataset_type)
-    sim.reset(RANDOM_EPISODE_TMP)
-    sim.simulate()
-
-
 if __name__ == "__main__":
-    main()
+    config = read_config("./demo/simulation_config.json")
+    if not config:  # Check if config is not None before trying to access values
+        print("Could not load configuration. Using default values.")
+    
+
+    ramdom_episode = random.randint(0, config.get('trajectories', {}).get('episode_length', 'N/A')) # 67 86 #  109 282 731 344
+
+    sim = Projectile(config, ramdom_episode)
+    sim.reset(ramdom_episode)
+    sim.simulate()

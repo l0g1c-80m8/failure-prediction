@@ -1,9 +1,5 @@
-import os
 import numpy as np
 
-import imageio
-
-# from scipy.interpolate import CubicSpline
 import ast
 import matplotlib
 matplotlib.use('Agg')
@@ -11,6 +7,8 @@ import matplotlib.pyplot as plt
 
 import cv2
 from scipy.spatial.distance import cdist
+
+import json
 
 
 # Define different interpolation methods
@@ -312,7 +310,7 @@ def resample_data(episode):
     return episode_resampled
                     
 
-def plot_metrics(original_episode, resampled_episode, episode_num):
+def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type):
     """
     Visualize original and resampled action curves in a single plot.
     
@@ -370,5 +368,29 @@ def plot_metrics(original_episode, resampled_episode, episode_num):
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
     
     plt.tight_layout()
-    plt.savefig(f'demo/data/train/comparison_episode{episode_num}_{self.dataset_type}.png')
+    plt.savefig(f'demo/data/{dataset_type}/comparison_episode{episode_num}_{dataset_type}.png')
     plt.close()
+
+def read_config(file_path):
+    """
+    Read and parse a JSON configuration file.
+    
+    Args:
+        file_path (str): Path to the JSON config file
+        
+    Returns:
+        dict: The parsed configuration as a dictionary
+    """
+    try:
+        with open(file_path, 'r') as config_file:
+            config = json.load(config_file)
+        return config
+    except FileNotFoundError:
+        print(f"Error: Config file '{file_path}' not found.")
+        return None
+    except json.JSONDecodeError:
+        print(f"Error: '{file_path}' contains invalid JSON.")
+        return None
+    except Exception as e:
+        print(f"Error reading config file: {e}")
+        return None
