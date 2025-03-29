@@ -250,10 +250,13 @@ class Projectile(MuJoCoBase):
         
         # Define ranges for camera randomization
         # Wider ranges for more noticeable variation
+        x_offset = self.config.get('camera_related', {}).get('x_offset', 'N/A')
+        y_offset = self.config.get('camera_related', {}).get('y_offset', 'N/A')
+        z_offset = self.config.get('camera_related', {}).get('z_offset', 'N/A')
         pos_ranges = {
-            'x': (self.cam_position_init[cam_id][0]-0.1, self.cam_position_init[cam_id][0]+0.1),    # Wider range for x offset
-            'y': (self.cam_position_init[cam_id][1]-0.1, self.cam_position_init[cam_id][1]+0.1),    # Wider range for y offset
-            'z': (self.cam_position_init[cam_id][2]-0.1, self.cam_position_init[cam_id][2]+0.1),     # Height variation
+            'x': (self.cam_position_init[cam_id][0]-x_offset, self.cam_position_init[cam_id][0]+x_offset),    # Wider range for x offset
+            'y': (self.cam_position_init[cam_id][1]-y_offset, self.cam_position_init[cam_id][1]+y_offset),    # Wider range for y offset
+            'z': (self.cam_position_init[cam_id][2]-z_offset, self.cam_position_init[cam_id][2]+z_offset),     # Height variation
         }
         
         # Randomly sample camera parameters

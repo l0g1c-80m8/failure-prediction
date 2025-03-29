@@ -1,4 +1,9 @@
 {
+
+    "dataset_type": "val",
+    "xml_path": "./model/universal_robots_ur5e/test_scene_complete.xml",
+    "traj_path": "./demo/traj_20250218.txt",
+    "initial_delay": 2.0,
     "trajectories": {
         "n_train_episodes": 80,
         "n_val_episodes": 20,
@@ -9,11 +14,9 @@
         "enable_cameras": true,
         "azimuth": 300,
         "distance": 2.5,
-        "elevation": -40
-        
-    },
-    "dataset_type": "val",
-    "xml_path": "./model/universal_robots_ur5e/test_scene_complete.xml",
-    "traj_path": "./demo/traj_20250218.txt",
-    "initial_delay": 2.0
+        "elevation": -40,
+        "x_offset": 0.1,
+        "y_offset": 0.1,
+        "z_offset": 0.1
+    }
 }
