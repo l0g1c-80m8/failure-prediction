@@ -36,8 +36,8 @@
     <material class="ur5e" name="jointgray" rgba="0.278 0.278 0.278 1"/>
     <material class="ur5e" name="linkgray" rgba="0.82 0.82 0.82 1"/>
     <material class="ur5e" name="urblue" rgba="0.49 0.678 0.8 1"/>
-    <material class="ur5e" name="bunny_red" rgba="0.49 0.0 0.0 1"/>
-    <material class="ur5e" name="panel_blue" rgba="0.615686 0.811765 0.929412 1"/>
+    <material class="ur5e" name="bunny_material" rgba="0.49 0.0 0.0 1"/>
+    <material class="ur5e" name="panel_material" rgba="0.615686 0.811765 0.929412 1"/>
 
     <mesh file="base_0.obj"/>
     <mesh file="base_1.obj"/>
@@ -128,8 +128,8 @@
                   <body name="fixed_panel" pos="0 0.20 0" quat="0 0 1 1">
                     <joint name="box_rotation" type="hinge" axis="0 0 1" limited="true" range="-0.1 0.1"/>
                     <!-- Replace box geometry with mesh -->
-                    <!-- <geom name="panel_visual" type="mesh" mesh="panel_0" material="panel_blue" group="1"/> -->
-                    <geom name="panel_collision" type="mesh" mesh="panel_0" material="panel_blue" group="1" contype="1" conaffinity="1"/>
+                    <!-- <geom name="panel_visual" type="mesh" mesh="panel_0" material="panel_material" group="1"/> -->
+                    <geom name="panel_collision" type="mesh" mesh="panel_0" material="panel_material" group="1" contype="1" conaffinity="1"/>
                     <inertial mass="0.5" pos="0 0 0" diaginertia="0.001 0.001 0.001"/>
                   </body>
                 </body>

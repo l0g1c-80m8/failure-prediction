@@ -22,19 +22,19 @@ from common_functions import (linear_interpolation, process_consecutive_frames,
 
 class Projectile(MuJoCoBase):
     def __init__(self, config, ramdom_episode):
-        super().__init__(config.get('xml_path', 'N/A'))
+        super().__init__(config.get('simulation_related', {}).get('xml_path', 'N/A'))
         self.config = config
         self.ramdom_episode = ramdom_episode
         
         # Simulation parameters
-        self.initial_delay = self.config.get('initial_delay', 'N/A')  # Delay before starting movement
+        self.initial_delay = self.config.get('simulation_related', {}).get('initial_delay', 'N/A')  # Delay before starting movement
         self.display_camera = self.config.get('camera_related', {}).get('display_camera', 'N/A')
         self.episode = [] # To store the episode data
         # self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
         # self.is_high_threshold_step_set = False
 
         # Trajectory loading
-        self.traj_file = self.config.get('traj_path', 'N/A')
+        self.traj_file = self.config.get('simulation_related', {}).get('traj_path', 'N/A')
         self.trajectory = self.load_trajectory()
 
         # Simulation state
@@ -52,7 +52,7 @@ class Projectile(MuJoCoBase):
         # New camera control flag
         self.enable_cameras = self.config.get('camera_related', {}).get('enable_cameras', 'N/A')
 
-        self.dataset_type = self.config.get('dataset_type', "train")
+        self.dataset_type = self.config.get('simulation_related', {}).get('dataset_type', "train")
         # self.speed_scale = random.uniform(2.5, 3.5)  # New parameter to control joint speed
         # self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
 
@@ -76,13 +76,19 @@ class Projectile(MuJoCoBase):
                     if randomize:
                         # Define randomization ranges for each joint (in radians)
                         # These values can be adjusted based on how much variation you want
+                        joint1_range = self.config.get('input_trajectory_related', {}).get('joint_1', 'N/A')
+                        joint2_range = self.config.get('input_trajectory_related', {}).get('joint_2', 'N/A')
+                        joint3_range = self.config.get('input_trajectory_related', {}).get('joint_3', 'N/A')
+                        joint4_range = self.config.get('input_trajectory_related', {}).get('joint_4', 'N/A')
+                        joint5_range = self.config.get('input_trajectory_related', {}).get('joint_5', 'N/A')
+                        joint6_range = self.config.get('input_trajectory_related', {}).get('joint_6', 'N/A')
                         variation_ranges = [
-                            (-0.05, 0.05),  # Joint 1: ±0.05 radians
-                            (-0.03, 0.03),  # Joint 2: ±0.03 radians
-                            (-0.04, 0.04),  # Joint 3: ±0.04 radians
-                            (-0.03, 0.03),  # Joint 4: ±0.03 radians
-                            (-0.05, 0.05),  # Joint 5: ±0.05 radians
-                            (-0.02, 0.02),  # Joint 6: ±0.02 radians
+                            (joint1_range[0], joint1_range[1]),  # Joint 1: ±0.05 radians
+                            (joint2_range[0], joint2_range[1]),  # Joint 2: ±0.03 radians
+                            (joint3_range[0], joint3_range[1]),  # Joint 3: ±0.04 radians
+                            (joint4_range[0], joint4_range[1]),  # Joint 4: ±0.03 radians
+                            (joint5_range[0], joint5_range[1]),  # Joint 5: ±0.05 radians
+                            (joint6_range[0], joint6_range[1]),  # Joint 6: ±0.02 radians
                         ]
                         
                         # Apply random variation to each joint
@@ -114,8 +120,8 @@ class Projectile(MuJoCoBase):
         self.randomize_camera_position('front_camera')
 
         # Set random rotation parameters
-        self.rotation_speed = random.uniform(-0.01, 0.01)  # Slower random speed between 0.2 and 0.5 rad/s
-        self.target_angle = random.uniform(-0.03, 0.03)   # Small random angle between -0.3 and 0.3 rad (about ±17 degrees)
+        self.rotation_speed = random.uniform(self.config.get('panel_related', {}).get('rotation_speed', 'N/A')[0], self.config.get('panel_related', {}).get('rotation_speed', 'N/A')[1])  # Slower random speed between 0.2 and 0.5 rad/s
+        self.target_angle = random.uniform(self.config.get('panel_related', {}).get('target_angle', 'N/A')[0], self.config.get('panel_related', {}).get('target_angle', 'N/A')[1])   # Small random angle between -0.3 and 0.3 rad (about ±17 degrees)
         self.reverse_on_target = random.choice([True, False])  # Randomly decide to stop or reverse
         self.reached_target = False  # Track if we've reached target
         # print(f"New rotation parameters - Speed: {self.rotation_speed:.2f} rad/s, Target angle: {self.target_angle:.2f} rad, Reverse: {self.reverse_on_target}")
@@ -128,8 +134,8 @@ class Projectile(MuJoCoBase):
         self.current_target = None
         self.next_target = None
         self.transition_start_time = None
-        self.speed_scale = random.uniform(2.5, 3.5)  # New parameter to control joint speed
-        self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
+        self.speed_scale = random.uniform(self.config.get('robot_related', {}).get('speed_scale', 'N/A')[0], self.config.get('robot_related', {}).get('speed_scale', 'N/A')[1])  # New parameter to control joint speed
+        self.joint_pause = random.uniform(self.config.get('simulation_related', {}).get('joint_pause', 'N/A')[0], self.config.get('simulation_related', {}).get('joint_pause', 'N/A')[1])  # Duration of pause between movements
 
         # Emergency stop settings
         self.emergency_stop = False  # Flag to trigger the emergency stop
@@ -138,7 +144,7 @@ class Projectile(MuJoCoBase):
 
         # Randomize environment
         self.randomize_floor()
-        self.randomize_object_colors("object_collision")
+        self.randomize_scene_colors("panel_collision", "object_collision")
         self.randomize_object('object_body', 'object_collision')
 
         mj.set_mjcb_control(self.controller)
@@ -158,14 +164,14 @@ class Projectile(MuJoCoBase):
         
         # Randomly adjust floor parameters
         # Random scale for texture repeat
-        texture_scale = random.uniform(3, 7)
+        texture_scale = random.uniform(self.config.get('background_related', {}).get('texture_scale', 'N/A')[0], self.config.get('background_related', {}).get('texture_scale', 'N/A')[1])
         self.model.mat_texrepeat[material_id] = [texture_scale, texture_scale]
         
         # Random reflectance
-        self.model.mat_reflectance[material_id] = random.uniform(0.1, 0.3)
+        self.model.mat_reflectance[material_id] = random.uniform(self.config.get('background_related', {}).get('mat_reflectance', 'N/A')[0], self.config.get('background_related', {}).get('mat_reflectance', 'N/A')[1])
         
         # Optional: Add some random noise to the floor color
-        rgb_noise = np.random.uniform(-0.1, 0.1, 3)
+        rgb_noise = np.random.uniform(self.config.get('background_related', {}).get('rgb_noise', 'N/A')[0], self.config.get('background_related', {}).get('rgb_noise', 'N/A')[1], self.config.get('background_related', {}).get('rgb_noise', 'N/A')[2])
         self.model.mat_rgba[material_id][:3] += rgb_noise
         self.model.mat_rgba[material_id][:3] = np.clip(self.model.mat_rgba[material_id][:3], 0, 1)
 
@@ -174,20 +180,21 @@ class Projectile(MuJoCoBase):
         # Get object body and geom IDs
         object_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, object_body_id)
         object_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, object_geom_id)
+        current_object_name = self.config.get('object_related', {}).get('current_object', 'N/A')
 
         fixed_panel_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_panel')
         fixed_panel_pos = self.data.xpos[fixed_panel_body_id]
         # print("fixed_panel_pos", fixed_panel_pos)
         
         # Randomize object size (within reasonable bounds)
-        base_size = 0.015  # Original size
-        size_variation = random.uniform(1.0, 3)  # n% variation
+        base_size = self.config.get('object_related', {}).get(current_object_name, {}).get('base_size', 'N/A') # Original size
+        size_variation = random.uniform(self.config.get('object_related', {}).get(current_object_name, {}).get('size_variation', 'N/A')[0], self.config.get('object_related', {}).get(current_object_name, {}).get('size_variation', 'N/A')[1])  # n% variation
         new_size = base_size * size_variation
         self.model.geom_size[object_geom_id] = [new_size, new_size, new_size]
         
         # Randomize mass (scaled with size)
-        base_mass = 0.2  # Original mass
-        mass_variation = random.uniform(0.8, 1.2)  # ±20% variation
+        base_mass = self.config.get('object_related', {}).get(current_object_name, {}).get('base_mass', 'N/A') # Original mass
+        mass_variation = random.uniform(self.config.get('object_related', {}).get(current_object_name, {}).get('mass_variation', 'N/A')[0], self.config.get('object_related', {}).get(current_object_name, {}).get('mass_variation', 'N/A')[1])  # ±20% variation
         new_mass = base_mass * mass_variation  # base_mass * size_variation * mass_variation  # Scale mass with size
         self.model.body_mass[object_body_id] = new_mass
         
@@ -196,7 +203,7 @@ class Projectile(MuJoCoBase):
         self.model.body_inertia[object_body_id] = [new_inertia, new_inertia, new_inertia]
         
         # Randomize friction properties
-        friction_variation = random.uniform(0.25, 0.35)  # Base friction is 0.2
+        friction_variation = random.uniform(self.config.get('object_related', {}).get(current_object_name, {}).get('friction_variation', 'N/A')[0], self.config.get('object_related', {}).get(current_object_name, {}).get('friction_variation', 'N/A')[1])  # Base friction is 0.2
         # Find the contact pair involving the sliding object
         for i in range(self.model.npair):
             if (self.model.pair_geom1[i] == object_geom_id or 
@@ -206,9 +213,12 @@ class Projectile(MuJoCoBase):
                 self.model.pair_friction[i, 2] = friction_variation * 0.005  # Torsional friction
         
         # Randomize initial position (within reasonable bounds)
-        x_pos = random.uniform(fixed_panel_pos[0]-0.04, fixed_panel_pos[0]+0.04) # random.uniform(0.35, 0.42)
-        y_pos = random.uniform(fixed_panel_pos[1]-0.04, fixed_panel_pos[1]+0.04) # random.uniform(-0.5, -0.35)
-        z_pos = random.uniform(fixed_panel_pos[2]+0.05, fixed_panel_pos[2]+0.06)
+        x_offset = self.config.get('object_related', {}).get(current_object_name, {}).get('x_offset', 'N/A')
+        y_offset = self.config.get('object_related', {}).get(current_object_name, {}).get('y_offset', 'N/A')
+        z_offset = self.config.get('object_related', {}).get(current_object_name, {}).get('z_offset', 'N/A')
+        x_pos = random.uniform(fixed_panel_pos[0]+x_offset[0], fixed_panel_pos[0]+x_offset[1])
+        y_pos = random.uniform(fixed_panel_pos[1]+y_offset[0], fixed_panel_pos[1]+y_offset[1])
+        z_pos = random.uniform(fixed_panel_pos[2]+z_offset[0], fixed_panel_pos[2]+z_offset[1])
         self.data.qpos[self.model.body_jntadr[object_body_id]:self.model.body_jntadr[object_body_id]+3] = [x_pos, y_pos, z_pos]
         
         # Randomize initial orientation (uncomment when needed)
@@ -216,11 +226,11 @@ class Projectile(MuJoCoBase):
         # quat = quat / np.linalg.norm(quat)  # Normalize quaternion
         # self.data.qpos[self.model.body_jntadr[object_body_id]+3:self.model.body_jntadr[object_body_id]+7] = quat
 
-    def randomize_object_colors(self, object_geom_name):
+    def randomize_scene_colors(self, panel_geom_name, object_geom_name):
         """Randomize colors for fixed panel and free object"""
         # Zeyu: need to be revised, since combined object and the panel, should be decoupled
         # Get geom IDs
-        fixed_panel_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, "panel")
+        fixed_panel_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, panel_geom_name)
         free_object_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, object_geom_name)
         
         # Generate new colors
@@ -254,9 +264,9 @@ class Projectile(MuJoCoBase):
         y_offset = self.config.get('camera_related', {}).get('y_offset', 'N/A')
         z_offset = self.config.get('camera_related', {}).get('z_offset', 'N/A')
         pos_ranges = {
-            'x': (self.cam_position_init[cam_id][0]-x_offset, self.cam_position_init[cam_id][0]+x_offset),    # Wider range for x offset
-            'y': (self.cam_position_init[cam_id][1]-y_offset, self.cam_position_init[cam_id][1]+y_offset),    # Wider range for y offset
-            'z': (self.cam_position_init[cam_id][2]-z_offset, self.cam_position_init[cam_id][2]+z_offset),     # Height variation
+            'x': (self.cam_position_init[cam_id][0]-x_offset[0], self.cam_position_init[cam_id][0]+x_offset[1]),    # Wider range for x offset
+            'y': (self.cam_position_init[cam_id][1]-y_offset[0], self.cam_position_init[cam_id][1]+y_offset[1]),    # Wider range for y offset
+            'z': (self.cam_position_init[cam_id][2]-z_offset[0], self.cam_position_init[cam_id][2]+z_offset[1]),     # Height variation
         }
         
         # Randomly sample camera parameters
@@ -312,9 +322,9 @@ class Projectile(MuJoCoBase):
         angle_diff = self.target_angle - current_angle
         
         # Check if we're close to target
-        ANGLE_THRESHOLD = 0.005  # About 0.6 degrees threshold
+        angle_rad_threshold = self.config.get('panel_related', {}).get('angle_rad_threshold', 'N/A')  # About 0.6 degrees threshold
         
-        if abs(angle_diff) < ANGLE_THRESHOLD:
+        if abs(angle_diff) < angle_rad_threshold:
             if not self.reached_target:
                 self.reached_target = True
                 if self.reverse_on_target:
@@ -474,12 +484,11 @@ class Projectile(MuJoCoBase):
             raise ValueError(f"Camera '{camera_name}' not found in model")
         
         # Get image dimensions
-        width = 640
-        height = 640
+        image_size = self.config.get('camera_related', {}).get('camera_image_size', 'N/A')
         
         # Initialize image arrays for both fixed panel and object
-        fixed_panel_img = np.zeros((height, width, 3), dtype=np.uint8)
-        object_img = np.zeros((height, width, 3), dtype=np.uint8)
+        fixed_panel_img = np.zeros((image_size[0], image_size[1], 3), dtype=np.uint8)
+        object_img = np.zeros((image_size[0], image_size[1], 3), dtype=np.uint8)
         
         # Create camera instance
         cam = mj.MjvCamera()
@@ -492,7 +501,7 @@ class Projectile(MuJoCoBase):
         
         if camera_name in ['top_camera', 'front_camera']:
             # Set up viewport
-            viewport = mj.MjrRect(0, 0, width, height)
+            viewport = mj.MjrRect(0, 0, image_size[1], image_size[0])
             
             # First render - fixed panel only
             self.opt.geomgroup[:] = 0  # Hide all groups
@@ -533,10 +542,11 @@ class Projectile(MuJoCoBase):
             front_camera_video_filename = os.path.join(video_dir, 'front_camera_video.mp4')
 
             # writer = imageio.get_writer(video_filename, fps=60)
-            top_panel_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
-            top_object_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
-            front_panel_writer = imageio.get_writer(front_camera_video_filename, fps=60, macro_block_size=16)
-            front_object_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
+            fps = self.config.get('simulation_related', {}).get('video_writer_fps', 'N/A')
+            top_panel_writer = imageio.get_writer(top_camera_video_filename, fps=fps, macro_block_size=16)
+            top_object_writer = imageio.get_writer(top_camera_video_filename, fps=fps, macro_block_size=16)
+            front_panel_writer = imageio.get_writer(front_camera_video_filename, fps=fps, macro_block_size=16)
+            front_object_writer = imageio.get_writer(top_camera_video_filename, fps=fps, macro_block_size=16)
 
         # Create data directories
         os.makedirs('demo/data/train', exist_ok=True)
@@ -564,7 +574,7 @@ class Projectile(MuJoCoBase):
             # Initialize episode variables
             failure_time_step = -1
             first_failure_time_step = -1
-            object_drop_time = 16  # Steps to ignore while object is initially falling
+            object_drop_time = self.config.get('simulation_related', {}).get('object_drop_time', 'N/A')  # Steps to ignore while object is initially falling
             window = 30
             episode_filled_tag = False
 
@@ -824,7 +834,9 @@ class Projectile(MuJoCoBase):
             plot_metrics(self.episode, episode_resampled, episode_num, self.dataset_type)
 
             print(f"Generating {self.dataset_type} examples...")
-            # np.save(f'demo/data/{self.dataset_type}/episode_{episode_num}.npy', episode_resampled)
+
+            if self.config.get('simulation_related', {}).get('save_data', 'N/A'):
+                np.save(f'demo/data/{self.dataset_type}/episode_{episode_num}.npy', episode_resampled)
 
         # writer.close()
         if self.display_camera:

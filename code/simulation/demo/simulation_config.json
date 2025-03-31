@@ -1,9 +1,4 @@
 {
-
-    "dataset_type": "val",
-    "xml_path": "./model/universal_robots_ur5e/test_scene_complete.xml",
-    "traj_path": "./demo/traj_20250218.txt",
-    "initial_delay": 2.0,
     "trajectories": {
         "n_train_episodes": 80,
         "n_val_episodes": 20,
@@ -15,8 +10,63 @@
         "azimuth": 300,
         "distance": 2.5,
         "elevation": -40,
-        "x_offset": 0.1,
-        "y_offset": 0.1,
-        "z_offset": 0.1
+        "x_offset": [0.1, 0.1],
+        "y_offset": [0.1, 0.1],
+        "z_offset": [0.1, 0.1],
+        "camera_image_size": [640, 640]
+    },
+    "object_related": {
+        "current_object": "cube",
+        "cube": {
+            "base_mass": 0.2,
+            "mass_variation": [0.8, 1.2],
+            "base_size": 0.015,
+            "size_variation": [1.0, 3],
+            "friction_variation": [0.25, 0.35],
+            "x_offset": [-0.04, 0.04],
+            "y_offset": [-0.04, 0.04],
+            "z_offset": [0.05, 0.06]
+        },
+        "stanford_bunny": {
+            "base_mass": 0.2,
+            "mass_variation": [0.8, 1.2],
+            "base_size": 0.015,
+            "size_variation": [1.0, 3],
+            "friction_variation": [0.25, 0.35],
+            "x_offset": [-0.04, 0.04],
+            "y_offset": [-0.04, 0.04],
+            "z_offset": [0.05, 0.06]
+        }
+    },
+    "panel_related": {
+        "angle_rad_threshold": 0.005,
+        "rotation_speed": [-0.01, 0.01],
+        "target_angle": [-0.03, 0.03]
+    },
+    "background_related": {
+        "texture_scale": [3, 7],
+        "rgb_noise": [-0.1, 0.1, 3],
+        "mat_reflectance": [0.1, 0.3]
+    },
+    "simulation_related": {
+        "object_drop_time": 16,
+        "video_writer_fps": 60,
+        "joint_pause": [0.2, 0.8],
+        "save_data": false,
+        "dataset_type": "val",
+        "xml_path": "./model/universal_robots_ur5e/test_scene_complete.xml",
+        "traj_path": "./demo/traj_20250218.txt",
+        "initial_delay": 2.0
+    },
+    "input_trajectory_related": {
+        "joint_1": [-0.05, 0.05],
+        "joint_2": [-0.03, 0.03],
+        "joint_3": [-0.04, 0.04],
+        "joint_4": [-0.03, 0.03],
+        "joint_5": [-0.05, 0.05],
+        "joint_6": [-0.02, 0.02]
+    },
+    "robot_related": {
+        "speed_scale": [2.5, 3.5]
     }
 }
