@@ -54,13 +54,13 @@ class RobotTrajectoryDataset(Dataset):
         # Get states sequence (shape: window_size x 19)
         states = np.stack([frame['state'] for frame in window_data])        
         
-        # Get the action for the last timestep
+        # Get the risk for the last timestep
         # Convert to numpy array first, then to tensor
-        action = np.array(window_data[-1]['action'], dtype=np.float32)
+        risk = np.array(window_data[-1]['risk'], dtype=np.float32)
         
         return {
             'states': torch.FloatTensor(states).transpose(0, 1),  # Transform to (19 x window_size) for 1D convolution
-            'action': torch.FloatTensor(action)  # Convert numpy array to tensor
+            'risk': torch.FloatTensor(risk)  # Convert numpy array to tensor
         }
 
 def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size=32, num_workers=4):
@@ -151,7 +151,7 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
         
         for batch in train_pbar:
             states = batch['states'].to(device)
-            actions = batch['action'].to(device)
+            risks = batch['risk'].to(device)
             
             # Update learning rate
             current_lr = get_lr(global_step)
@@ -160,14 +160,14 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
 
             optimizer.zero_grad()
             outputs = model(states)
-            loss = criterion(outputs, actions)
+            loss = criterion(outputs, risks)
             
             loss.backward()
             optimizer.step()
             # scheduler.step()  # Step the scheduler after each optimization step
             
             # Compute batch metrics
-            batch_metrics = compute_metrics(outputs, actions)
+            batch_metrics = compute_metrics(outputs, risks)
             
             # Update running metrics
             train_metrics['loss'] += loss.item()
@@ -198,13 +198,13 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
         with torch.no_grad():
             for batch in val_pbar:
                 states = batch['states'].to(device)
-                actions = batch['action'].to(device)
+                risks = batch['risk'].to(device)
                 
                 outputs = model(states)
-                loss = criterion(outputs, actions)
+                loss = criterion(outputs, risks)
 
                 # Compute batch metrics
-                batch_metrics = compute_metrics(outputs, actions)
+                batch_metrics = compute_metrics(outputs, risks)
                 
                 # Update running metrics
                 val_metrics['loss'] += loss.item()
@@ -259,15 +259,15 @@ def evaluate_model(model, test_loader, model_name):
     with torch.no_grad():
         for batch_idx, batch in enumerate(eval_pbar):
             states = batch['states'].to(device)
-            actions = batch['action'].to(device)
+            risks = batch['risk'].to(device)
             
             outputs = model(states)
-            mse = nn.MSELoss()(outputs, actions).item()
+            mse = nn.MSELoss()(outputs, risks).item()
             total_mse += mse
             
             # Store predictions and ground truth
             all_predictions.append(outputs.cpu().numpy())
-            all_ground_truth.append(actions.cpu().numpy())
+            all_ground_truth.append(risks.cpu().numpy())
             all_mse_values.append(mse)
             sample_indices.extend([batch_idx * test_loader.batch_size + i for i in range(len(outputs))])
             
@@ -332,7 +332,7 @@ if __name__ == "__main__":
         train_loader, val_loader = create_data_loaders(
             train_dir='data/train',
             val_dir='data/val',
-            window_size=10,
+            window_size=1,
             stride=1,
             batch_size=1016,
             num_workers=8

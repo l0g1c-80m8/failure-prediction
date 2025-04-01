@@ -67,7 +67,13 @@ class Projectile(MuJoCoBase):
         """
         with open(self.traj_file, "r") as file:
             trajectory = []
-            for line in file:
+            lines = file.readlines()
+    
+            # Randomize the order of lines if requested
+            random.shuffle(lines)
+
+            for line in lines:
+
                 try:
                     joint_positions = np.array(ast.literal_eval(line.strip()))
                     
@@ -145,6 +151,8 @@ class Projectile(MuJoCoBase):
         self.randomize_floor()
         self.randomize_scene_colors("panel_collision", "object_collision")
         self.randomize_object('object_body', 'object_collision')
+
+        self.trajectory = self.load_trajectory()
 
         mj.set_mjcb_control(self.controller)
 

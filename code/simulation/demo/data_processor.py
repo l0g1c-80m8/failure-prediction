@@ -20,7 +20,7 @@ def main(data_dir, interpolate_type = "linear"):
         top_camera_panel_contours = []
         front_camera_object_contours = []
         front_camera_panel_contours = []
-        window = 1
+        window = 30
         
         # 1. Interpolate the data
         for data_idx in range(len(episodes[file_idx])):
@@ -94,6 +94,8 @@ def main(data_dir, interpolate_type = "linear"):
                     raise ValueError(f"Error: combined_features shape {combined_features.shape} != 19")
                 
                 episodes[file_idx][data_idx]['state'] = np.asarray(combined_features, dtype=np.float32)
+            else:
+                episodes[file_idx][data_idx]['state'] = np.ones(19, dtype=np.float32)
 
         # After processing the episode, report if any values weren't found
         if episode_failure_phase_start == -1 or episode_failure_phase_reach == -1:
@@ -119,5 +121,5 @@ def main(data_dir, interpolate_type = "linear"):
 
 
 if __name__ == "__main__":
-    data_dir = "demo/data/val_raw"
+    data_dir = "demo/data/train_raw"
     main(data_dir, interpolate_type = "linear")
