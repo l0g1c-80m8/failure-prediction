@@ -1,6 +1,5 @@
 import numpy as np
 
-import ast
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -12,6 +11,12 @@ import json
 
 
 # Define different interpolation methods
+def flat_interpolation(first_failure_time_step, failure_time_step_trim):
+    # Calculate number of points needed
+    num_points = first_failure_time_step - failure_time_step_trim + 1
+    # Return array of constant value 0.5 with the required length
+    return np.full(num_points, 0.5)
+
 def linear_interpolation(first_failure_time_step, failure_time_step_trim):
     return np.linspace(0, 1, first_failure_time_step - failure_time_step_trim + 1)
 
@@ -268,10 +273,10 @@ def process_camera_frame(frame):
     return mask, contours, filtered_image
 
 
-# Function to calculate action value based on displacement, linear speed, and angular speed
-def calculate_action(displacement, object_pos, panel_pos):
+# Function to calculate failure phase based on displacement, linear speed, and angular speed
+def calculate_failure_phase(displacement, object_pos, panel_pos):
     """
-    Calculate action value based on object position relative to panel.
+    Calculate failure phase based on object position relative to panel.
     
     Args:
         displacement: Current displacement vector between object and panel
@@ -279,7 +284,7 @@ def calculate_action(displacement, object_pos, panel_pos):
         panel_pos: 3D position of the panel
         
     Returns:
-        float: Action value (0.0 = safe on panel, 1.0 = fallen off panel)
+        float: failure phase (0.0 = safe on panel, 1.0 = fallen off panel)
     """
     # print("displacement", displacement)
     # Check if object is below the panel surface (has fallen)
@@ -300,19 +305,18 @@ def resample_data(episode):
     episode_resampled = []
     scale=15
     for item_idx in range(len(episode)):
-        print(episode[item_idx]['action'][0])
-        if episode[item_idx]['action'][0] == 0.0 and item_idx%scale==0:
+        # print(episode[item_idx]['failure_phase_value'][0])
+        if episode[item_idx]['failure_phase_value'][0] == 0.0 and item_idx%scale==0:
             episode_resampled.append(episode[item_idx])
-        elif episode[item_idx]['action'][0] > 0.0 and episode[item_idx]['action'][0] < 1.0:
+        elif episode[item_idx]['failure_phase_value'][0] > 0.0 and episode[item_idx]['failure_phase_value'][0] < 1.0:
             episode_resampled.append(episode[item_idx])
-        elif episode[item_idx]['action'][0] == 1.0 and item_idx%scale==0:
+        elif episode[item_idx]['failure_phase_value'][0] == 1.0 and item_idx%scale==0:
             episode_resampled.append(episode[item_idx])
     return episode_resampled
                     
-
-def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type):
+def plot_raw_metrics(original_episode, episode_num, dataset_type, save_path):
     """
-    Visualize original and resampled action curves in a single plot.
+    Visualize original and resampled failure phase curves in a single plot.
     
     Parameters:
     -----------
@@ -325,19 +329,54 @@ def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type)
     """
     # Extract original data
     original_time_steps = range(len(original_episode))
-    original_risk_values = [item['action'][0] for item in original_episode]
+    original_risk_values = [item['failure_phase_value'][0] for item in original_episode]
+    
+    # Create figure and plot
+    plt.figure(figsize=(12, 6))
+    
+    # Plot original data as a continuous line
+    plt.plot(original_time_steps, original_risk_values, 'b-', 
+            linewidth=2, alpha=0.6, label='Original data')
+    
+    # Enhance the plot
+    plt.title('Original failure phases')
+    plt.xlabel('Time Step')
+    plt.ylabel('Risk Value')
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.savefig(f'{save_path}/comparison_episode{episode_num}_{dataset_type}.png')
+    plt.close()
+
+def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type, save_path):
+    """
+    Visualize original and resampled failure phase curves in a single plot.
+    
+    Parameters:
+    -----------
+    original_episode : list
+        Original episode data
+    resampled_episode : list
+        Resampled episode data
+    episode_num : int
+        Episode number for the filename
+    """
+    # Extract original data
+    original_time_steps = range(len(original_episode))
+    original_risk_values = [item['failure_phase_value'][0] for item in original_episode]
     
     # Map resampled points to their original indices
     resampled_indices = []
     for r_item in resampled_episode:
         # Find matching item in original episode
         for i, o_item in enumerate(original_episode):
-            if np.array_equal(r_item['state'], o_item['state']) and r_item['action'][0] == o_item['action'][0]:
+            if np.array_equal(r_item['time_step'], o_item['time_step']) and r_item['failure_phase_value'][0] == o_item['failure_phase_value'][0]:
                 resampled_indices.append(i)
                 break
     
     # Extract resampled values
-    resampled_risk_values = [item['action'][0] for item in resampled_episode]
+    resampled_risk_values = [item['failure_phase_value'][0] for item in resampled_episode]
     
     # Create figure and plot
     plt.figure(figsize=(12, 6))
@@ -355,7 +394,7 @@ def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type)
                 color='red', s=40, label='Resampled points', zorder=5)
     
     # Enhance the plot
-    plt.title('Comparison of Original and Resampled Action Values')
+    plt.title('Comparison of Original and Resampled failure phases')
     plt.xlabel('Time Step')
     plt.ylabel('Risk Value')
     plt.grid(True, alpha=0.3)
@@ -368,7 +407,7 @@ def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type)
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
     
     plt.tight_layout()
-    plt.savefig(f'demo/data/{dataset_type}/comparison_episode{episode_num}_{dataset_type}.png')
+    plt.savefig(f'{save_path}/comparison_episode{episode_num}_{dataset_type}.png')
     plt.close()
 
 def read_config(file_path):
