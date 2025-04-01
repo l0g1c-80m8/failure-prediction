@@ -346,7 +346,7 @@ def plot_raw_metrics(original_episode, episode_num, dataset_type, save_path):
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig(f'{save_path}/comparison_episode{episode_num}_{dataset_type}.png')
+    plt.savefig(f'{save_path}/episode{episode_num}_{dataset_type}.png')
     plt.close()
 
 def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type, save_path):
@@ -364,19 +364,19 @@ def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type,
     """
     # Extract original data
     original_time_steps = range(len(original_episode))
-    original_risk_values = [item['failure_phase_value'][0] for item in original_episode]
+    original_risk_values = [item['risk'][0] for item in original_episode]
     
     # Map resampled points to their original indices
     resampled_indices = []
     for r_item in resampled_episode:
         # Find matching item in original episode
         for i, o_item in enumerate(original_episode):
-            if np.array_equal(r_item['time_step'], o_item['time_step']) and r_item['failure_phase_value'][0] == o_item['failure_phase_value'][0]:
+            if np.array_equal(r_item['time_step'], o_item['time_step']) and r_item['risk'][0] == o_item['risk'][0]:
                 resampled_indices.append(i)
                 break
     
     # Extract resampled values
-    resampled_risk_values = [item['failure_phase_value'][0] for item in resampled_episode]
+    resampled_risk_values = [item['risk'][0] for item in resampled_episode]
     
     # Create figure and plot
     plt.figure(figsize=(12, 6))
@@ -407,7 +407,7 @@ def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type,
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
     
     plt.tight_layout()
-    plt.savefig(f'{save_path}/comparison_episode{episode_num}_{dataset_type}.png')
+    plt.savefig(f'{save_path}/new/comparison_episode{episode_num}_{dataset_type}.png')
     plt.close()
 
 def read_config(file_path):

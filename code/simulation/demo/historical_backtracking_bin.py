@@ -14,9 +14,8 @@ import ast
 
 import cv2
 
-from common_functions import (linear_interpolation, flat_interpolation,
-                        process_consecutive_frames, extract_transform_features, process_camera_frame,
-                        calculate_failure_phase, resample_data, plot_raw_metrics,
+from common_functions import (flat_interpolation, process_camera_frame,
+                        calculate_failure_phase, plot_raw_metrics,
                         read_config
                         )
 
@@ -732,6 +731,7 @@ class Projectile(MuJoCoBase):
                             'object_front_contour': np.asarray(front_object_contour, dtype=np.float32),
                             'gripper_top_contour': np.asarray(top_panel_contour, dtype=np.float32),
                             'gripper_front_contour': np.asarray(front_panel_contour, dtype=np.float32),
+                            'end_effector_pos': np.asarray(end_effector_pos, dtype=np.float32),
                             'failure_phase_value': np.asarray([failure_phase_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
                             # 'language_instruction': 'dummy instruction',
                                 })
@@ -768,7 +768,7 @@ class Projectile(MuJoCoBase):
             plot_raw_metrics(self.episode, episode_num, self.dataset_type, save_path)
 
             if self.config.get('simulation_related', {}).get('save_data', 'N/A'):
-                print(f"Generating {self.dataset_type} examples...")
+                print(f"Generating {self.dataset_type} raw examples...")
                 np.save(f"{save_path}/episode_{episode_num}_raw.npy", self.episode)
 
         # writer.close()
