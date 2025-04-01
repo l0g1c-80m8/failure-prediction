@@ -3,7 +3,7 @@
         "object_drop_time": 16,
         "video_writer_fps": 60,
         "joint_pause": [0.2, 0.8],
-        "save_data": true,
+        "save_data": false,
         "save_path": "./demo",
         "dataset_type": "train",
         "xml_path": "./model/universal_robots_ur5e/test_scene_complete.xml",
@@ -21,14 +21,15 @@
         "joint_3": [-0.04, 0.04],
         "joint_4": [-0.03, 0.03],
         "joint_5": [-0.05, 0.05],
-        "joint_6": [-0.02, 0.02]
+        "joint_6": [-0.02, 0.02],
+        "shuffle": false
     },
     "robot_related": {
         "speed_scale": [2.5, 3.5]
     },
     "camera_related": {
-        "display_camera": true,
-        "enable_cameras": true,
+        "display_camera": false,
+        "enable_cameras": false,
         "azimuth": 300,
         "distance": 2.5,
         "elevation": -40,
@@ -38,7 +39,7 @@
         "camera_image_size": [640, 640]
     },
     "object_related": {
-        "current_object": "cube",
+        "current_object": "teamug",
         "cube": {
             "base_mass": 0.2,
             "mass_variation": [0.8, 1.2],
@@ -50,6 +51,16 @@
             "z_offset": [0.05, 0.06]
         },
         "stanford_bunny": {
+            "base_mass": 0.2,
+            "mass_variation": [0.8, 1.2],
+            "base_size": 0.015,
+            "size_variation": [1.0, 3],
+            "friction_variation": [0.25, 0.35],
+            "x_offset": [-0.04, 0.04],
+            "y_offset": [-0.04, 0.04],
+            "z_offset": [0.05, 0.06]
+        },
+        "teamug": {
             "base_mass": 0.2,
             "mass_variation": [0.8, 1.2],
             "base_size": 0.015,

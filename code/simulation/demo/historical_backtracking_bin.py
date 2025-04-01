@@ -70,7 +70,8 @@ class Projectile(MuJoCoBase):
             lines = file.readlines()
     
             # Randomize the order of lines if requested
-            random.shuffle(lines)
+            if self.config.get('input_trajectory_related', {}).get('shuffle', 'N/A'):
+                random.shuffle(lines)
 
             for line in lines:
 
@@ -617,7 +618,7 @@ class Projectile(MuJoCoBase):
                         mj.mj_step(self.model, self.data)
 
                         # Record the object's position
-                        object_pos = self.data.qpos[mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'cube')]
+                        object_pos = self.data.qpos[mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, self.config.get('object_related', {}).get('current_object', 'N/A'))]
 
                     # get framebuffer viewport
                     viewport_width, viewport_height = glfw.get_framebuffer_size(self.window)

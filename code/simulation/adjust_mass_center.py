@@ -58,16 +58,86 @@ def parse_obj(file_path):
     return np.array(vertices), faces, other_lines, vertex_lines
 
 
-def calculate_center_of_mass(vertices):
-    """Calculate the center of mass for a set of vertices (assuming uniform density)."""
-    if len(vertices) == 0:
-        return np.array([0.0, 0.0, 0.0])
-    return np.mean(vertices, axis=0)
+def calculate_volume_weighted_center_of_mass(vertices, faces):
+    """
+    Calculate the center of mass using volume-weighted tetrahedra.
+    This accounts for hollow regions in the mesh.
+    
+    Args:
+        vertices: np.array of vertex coordinates
+        faces: list of face definitions (using vertex indices)
+    
+    Returns:
+        np.array: Center of mass coordinates [x, y, z]
+    """
+    import numpy as np
+    
+    # Extract the vertex indices from the face data structure
+    triangles = []
+    for face_indices, _ in faces:
+        if len(face_indices) == 3:
+            # Already a triangle
+            triangles.append([face_indices[0]-1, face_indices[1]-1, face_indices[2]-1])  # Convert to 0-indexed
+        elif len(face_indices) > 3:
+            # Triangulate the face (simple fan triangulation)
+            for i in range(1, len(face_indices)-1):
+                triangles.append([face_indices[0]-1, face_indices[i]-1, face_indices[i+1]-1])  # Convert to 0-indexed
+    
+    # Choose an arbitrary interior point (e.g., the average of all vertices)
+    interior_point = np.mean(vertices, axis=0)
+    
+    # Initialize variables for weighted sum calculation
+    total_volume = 0.0
+    weighted_position = np.zeros(3)
+    
+    # Process each triangle
+    for triangle in triangles:
+        # Get vertices of the triangle
+        v1 = vertices[triangle[0]]
+        v2 = vertices[triangle[1]]
+        v3 = vertices[triangle[2]]
+        
+        # Form a tetrahedron with the interior point
+        tetra_volume = calculate_tetrahedron_volume(interior_point, v1, v2, v3)
+        
+        # Calculate centroid of the tetrahedron
+        tetra_centroid = (interior_point + v1 + v2 + v3) / 4.0
+        
+        # Add weighted contribution
+        weighted_position += tetra_volume * tetra_centroid
+        total_volume += tetra_volume
+    
+    # Guard against division by zero
+    if total_volume < 1e-10:
+        return np.mean(vertices, axis=0)  # Fall back to simple averaging
+    
+    # Return the volume-weighted center of mass
+    return weighted_position / total_volume
 
+def calculate_tetrahedron_volume(p1, p2, p3, p4):
+    """
+    Calculate the volume of a tetrahedron defined by four points.
+    
+    Args:
+        p1, p2, p3, p4: np.arrays with coordinates [x, y, z]
+    
+    Returns:
+        float: Volume of the tetrahedron
+    """
+    import numpy as np
+    
+    # Calculate vectors from p1 to other points
+    v1 = p2 - p1
+    v2 = p3 - p1
+    v3 = p4 - p1
+    
+    # Calculate volume using triple product
+    volume = abs(np.dot(np.cross(v1, v2), v3)) / 6.0
+    return volume
 
-def translate_vertices(vertices, translation_vector):
-    """Translate vertices by a given vector."""
-    return vertices - translation_vector
+# def translate_vertices(vertices, translation_vector):
+#     """Translate vertices by a given vector."""
+#     return vertices - translation_vector
 
 
 def write_obj(file_path, vertices, faces, other_lines=None, original_file_path=None, center_of_mass=None):
@@ -99,7 +169,8 @@ def write_obj(file_path, vertices, faces, other_lines=None, original_file_path=N
 
 
 def process_obj_file(input_path, output_path=None, verbose=True):
-    """Process an OBJ file to center its mass at the origin."""
+    """Process an OBJ file to center its mass at the origin using volume-weighted calculation."""
+    
     # Determine output path if not provided
     if output_path is None:
         base, ext = os.path.splitext(input_path)
@@ -115,17 +186,21 @@ def process_obj_file(input_path, output_path=None, verbose=True):
     if verbose:
         print(f"Found {len(vertices)} vertices and {len(faces)} faces")
     
-    # Calculate center of mass
-    center_of_mass = calculate_center_of_mass(vertices)
+    # Calculate center of mass using the improved method
+    center_of_mass = calculate_volume_weighted_center_of_mass(vertices, faces)
+    
+    # For comparison, also calculate using the simple method
+    simple_center = np.mean(vertices, axis=0)
     
     if verbose:
-        print(f"Original center of mass: {center_of_mass}")
+        print(f"Original center of mass (simple average): {simple_center}")
+        print(f"Original center of mass (volume-weighted): {center_of_mass}")
     
     # Translate vertices to place center of mass at origin
-    centered_vertices = translate_vertices(vertices, center_of_mass)
+    centered_vertices = vertices - center_of_mass
     
     # Verify the new center of mass is at origin
-    new_center = calculate_center_of_mass(centered_vertices)
+    new_center = calculate_volume_weighted_center_of_mass(centered_vertices, faces)
     
     if verbose:
         print(f"New center of mass: {new_center} (should be close to [0, 0, 0])")
@@ -153,8 +228,8 @@ def main():
     # parser.add_argument("-q", "--quiet", action="store_true", help="Suppress verbose output")
     
     # args = parser.parse_args()
-    input = "model/universal_robots_ur5e/assets/stanford_bunny.obj"
-    output = "model/universal_robots_ur5e/assets/stanford_bunny_new.obj"
+    input = "model/universal_robots_ur5e/assets/teamug_old.obj"
+    output = "model/universal_robots_ur5e/assets/teamug.obj"
     quiet = True
     
     try:
