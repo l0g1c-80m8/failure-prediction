@@ -759,9 +759,19 @@ class Projectile(MuJoCoBase):
                 print("first_failure_time_step", first_failure_time_step)
                 print("failure_time_step_trim", failure_time_step_trim)
 
+                # If no failure occurred at all during the first attempt
+                if first_failure_time_step <= -1:
+                    print("No failure occurred at all")
+                    break
+                
+                # There is failure occurred
                 if episode_failed_tag:
-                    continue
-                # If backtracking was successful (no failure after applying e-stop)
+                    # The initial condition will lead to failure itself
+                    if failure_time_step_trim <= -1:
+                        break
+                    else:
+                        continue
+                # After a few rounds of backtracking (no failure after applying e-stop)
                 elif first_failure_time_step != -1: # if not failed after backtracking, the time step to apply e-stop is safe, backtracking over
                     interpolated_values = flat_interpolation(first_failure_time_step, failure_time_step_trim)
                     # Update the 'failure_phase_value' key for the dictionaries between i and k
@@ -769,9 +779,7 @@ class Projectile(MuJoCoBase):
                         # print("value", value)
                         self.episode[idx]['failure_phase_value'] = np.asarray([value], dtype=np.float32)
                     break
-                # If no failure occurred at all during the episode
-                elif first_failure_time_step == -1:
-                    break
+                
             
             # Plot after simulation
             plot_raw_metrics(self.episode, episode_num, self.dataset_type, save_path)
