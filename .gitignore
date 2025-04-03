@@ -184,3 +184,6 @@ code/simple_model/wandb/
 code/simple_model/data/*
 code/octo/exp/*
 code/octo/tests/*
+code/octo/wandb/
+code/octo/rlds_dataset_builder-main/zeyu_example_dataset/
+code/rlds_dataset_builder-main/zeyu_example_dataset/
