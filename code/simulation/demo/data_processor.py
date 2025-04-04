@@ -49,53 +49,54 @@ def main(data_dir, interpolate_type = "linear"):
             front_camera_panel_contours.append(front_panel_contour)
 
             if len(top_camera_object_contours) >= window:
-                top_object_transforms = process_consecutive_frames(top_camera_object_contours[-window], top_object_contour)
-                # print("top_object_transforms", top_object_transforms)
-                top_panel_transforms = process_consecutive_frames(top_camera_panel_contours[-window], top_panel_contour)
-                # print("top_panel_transforms", top_panel_transforms)
-                front_object_transforms = process_consecutive_frames(front_camera_object_contours[-window], front_object_contour)
-                # print("front_object_transforms", front_object_transforms)
-                front_panel_transforms = process_consecutive_frames(front_camera_panel_contours[-window], front_panel_contour)
-                # print("front_panel_transforms", front_panel_transforms)
-
                 try:
-                    # Check for empty transforms
-                    if len(top_object_transforms) == 0 and len(top_panel_transforms) == 0 and \
-                    len(front_object_transforms) == 0 and len(front_panel_transforms) == 0:
-                        raise Exception("All transforms are empty")
+                    top_object_transforms = process_consecutive_frames(top_camera_object_contours[-window], top_object_contour)
+                    # print("top_object_transforms", top_object_transforms)
+                    top_panel_transforms = process_consecutive_frames(top_camera_panel_contours[-window], top_panel_contour)
+                    # print("top_panel_transforms", top_panel_transforms)
+                    front_object_transforms = process_consecutive_frames(front_camera_object_contours[-window], front_object_contour)
+                    # print("front_object_transforms", front_object_transforms)
+                    front_panel_transforms = process_consecutive_frames(front_camera_panel_contours[-window], front_panel_contour)
+                    # print("front_panel_transforms", front_panel_transforms)
+
+                    try:
+                        # Check for empty transforms
+                        if len(top_object_transforms) == 0 and len(top_panel_transforms) == 0 and \
+                        len(front_object_transforms) == 0 and len(front_panel_transforms) == 0:
+                            raise Exception("All transforms are empty")
+                    except Exception as e:
+                        print(f"Error in contour processing: {e}")
+                        continue
+
+                    # Extract features from each transform set
+                    top_object_features = extract_transform_features(top_object_transforms)
+                    top_panel_features = extract_transform_features(top_panel_transforms)
+                    front_object_features = extract_transform_features(front_object_transforms)
+                    front_panel_features = extract_transform_features(front_panel_transforms)
+                    # print("top_object_transforms",top_object_transforms)
+                    # print("top_object_features",top_object_features)
+
+                    # Combine all features
+                    combined_features = np.concatenate([
+                        top_object_features,
+                        top_panel_features,
+                        front_object_features,
+                        front_panel_features,
+                        end_effector_pos
+                    ])
+
+                    print("top_object_features", np.asarray(top_object_features).shape) # (4,)
+                    print("top_panel_features", np.asarray(top_panel_features).shape) # (4,)
+                    print("front_object_features", np.asarray(front_object_features).shape) # (4,)
+                    print("front_panel_features", np.asarray(front_panel_features).shape) # (4,)
+                    print("end_effector_pos", np.asarray(end_effector_pos).shape) # (3,)
+                    print("combined_features", combined_features.shape) # (19,)
+                    if combined_features.shape[0]!=19:
+                        raise ValueError(f"Error: combined_features shape {combined_features.shape} != 19")
+                    
+                    episodes[file_idx][data_idx]['state'] = np.asarray(combined_features, dtype=np.float32)
                 except Exception as e:
-                    print(f"Error in contour processing: {e}")
-                    continue
-
-                # Extract features from each transform set
-                top_object_features = extract_transform_features(top_object_transforms)
-                top_panel_features = extract_transform_features(top_panel_transforms)
-                front_object_features = extract_transform_features(front_object_transforms)
-                front_panel_features = extract_transform_features(front_panel_transforms)
-                # print("top_object_transforms",top_object_transforms)
-                # print("top_object_features",top_object_features)
-
-                # Combine all features
-                combined_features = np.concatenate([
-                    top_object_features,
-                    top_panel_features,
-                    front_object_features,
-                    front_panel_features,
-                    end_effector_pos
-                ])
-
-                print("top_object_features", np.asarray(top_object_features).shape) # (4,)
-                print("top_panel_features", np.asarray(top_panel_features).shape) # (4,)
-                print("front_object_features", np.asarray(front_object_features).shape) # (4,)
-                print("front_panel_features", np.asarray(front_panel_features).shape) # (4,)
-                print("end_effector_pos", np.asarray(end_effector_pos).shape) # (3,)
-                print("combined_features", combined_features.shape) # (19,)
-                if combined_features.shape[0]!=19:
-                    raise ValueError(f"Error: combined_features shape {combined_features.shape} != 19")
-                
-                episodes[file_idx][data_idx]['state'] = np.asarray(combined_features, dtype=np.float32)
-            else:
-                episodes[file_idx][data_idx]['state'] = np.ones(19, dtype=np.float32)
+                    print(f"Error in contour processing for frame {data_idx}: {e}")
 
         # After processing the episode, report if any values weren't found
         if episode_failure_phase_start == -1 or episode_failure_phase_reach == -1:
@@ -111,15 +112,36 @@ def main(data_dir, interpolate_type = "linear"):
         
         # 2. Resample the data
         episode_resampled = resample_data(episodes[file_idx])
+
+        # 3. Verify all resampled frames have state data
+        for frame_idx in range(len(episode_resampled)):
+            if 'state' not in episode_resampled[frame_idx]:
+                print(f"Adding missing state to resampled frame {frame_idx} in episode {file_idx}")
+                episode_resampled[frame_idx]['state'] = np.ones(19, dtype=np.float32)
+        
         # Plot after simulation
         dataset_type = "train" if "train" in episode_path else "val"
         plot_metrics(episodes[file_idx], episode_resampled, file_idx, dataset_type, episode_folder_path)
 
-        # 3. Save the resampled data
+        # 4. Verify all frames have 'state' and 'risk' fields before saving
+        missing_states = 0
+        for frame_idx in range(len(episode_resampled)):
+            if 'state' not in episode_resampled[frame_idx]:
+                missing_states += 1
+                episode_resampled[frame_idx]['state'] = np.ones(19, dtype=np.float32)
+            
+            # Ensure risk is also present
+            if 'risk' not in episode_resampled[frame_idx]:
+                episode_resampled[frame_idx]['risk'] = np.array(0.0, dtype=np.float32)
+        
+        if missing_states > 0:
+            print(f"WARNING: Added missing 'state' to {missing_states} frames in resampled episode {file_idx}")
+
+        # 5. Save the resampled data
         print(f"Generating {dataset_type} resampled examples...")
         np.save(f"{episode_folder_path}/new/episode_{file_idx}.npy", episode_resampled)
 
 
 if __name__ == "__main__":
-    data_dir = "demo/data/val_raw"
+    data_dir = "demo/data/train/bunny"
     main(data_dir, interpolate_type = "linear")
