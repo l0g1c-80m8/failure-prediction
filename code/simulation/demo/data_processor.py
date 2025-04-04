@@ -84,12 +84,12 @@ def main(data_dir, interpolate_type = "linear"):
                     end_effector_pos
                 ])
 
-                # print("top_object_features", np.asarray(top_object_features).shape) # (4,)
-                # print("top_panel_features", np.asarray(top_panel_features).shape) # (4,)
-                # print("front_object_features", np.asarray(front_object_features).shape) # (4,)
-                # print("front_panel_features", np.asarray(front_panel_features).shape) # (4,)
-                # print("end_effector_pos", np.asarray(end_effector_pos).shape) # (3,)
-                # print("combined_features", combined_features.shape) # (19,)
+                print("top_object_features", np.asarray(top_object_features).shape) # (4,)
+                print("top_panel_features", np.asarray(top_panel_features).shape) # (4,)
+                print("front_object_features", np.asarray(front_object_features).shape) # (4,)
+                print("front_panel_features", np.asarray(front_panel_features).shape) # (4,)
+                print("end_effector_pos", np.asarray(end_effector_pos).shape) # (3,)
+                print("combined_features", combined_features.shape) # (19,)
                 if combined_features.shape[0]!=19:
                     raise ValueError(f"Error: combined_features shape {combined_features.shape} != 19")
                 
@@ -121,5 +121,5 @@ def main(data_dir, interpolate_type = "linear"):
 
 
 if __name__ == "__main__":
-    data_dir = "demo/data/train_raw"
+    data_dir = "demo/data/val_raw"
     main(data_dir, interpolate_type = "linear")

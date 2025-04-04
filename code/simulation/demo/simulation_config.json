@@ -5,7 +5,7 @@
         "joint_pause": [0.2, 0.8],
         "save_data": true,
         "save_path": "./demo",
-        "dataset_type": "train",
+        "dataset_type": "val",
         "xml_path": "./model/universal_robots_ur5e/test_scene_complete.xml",
         "traj_path": "./demo/traj_20250218.txt",
         "initial_delay": 2.0,
@@ -39,7 +39,7 @@
         "camera_image_size": [640, 640]
     },
     "object_related": {
-        "current_object": "stanford_bunny",
+        "current_object": "cube",
         "cube": {
             "base_mass": 0.2,
             "mass_variation": [0.8, 1.2],

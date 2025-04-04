@@ -61,7 +61,8 @@
     <mesh file="wrist2_2.obj"/>
     <mesh file="wrist3.obj"/>
 
-    <mesh file="stanford_bunny.obj" scale="0.8 0.8 0.8"/>
+    <mesh file="cube.obj" scale="0.8 0.8 0.8"/>
+    <mesh file="teamug.obj" scale="0.8 0.8 0.8"/>
     <mesh file="panel_0.obj" scale="1.0 1.0 1.0"/>
   </asset>
 
@@ -144,7 +145,7 @@
     <!-- New Customized Body -->
     <body name="object_body" pos="0.0 0.5 0.1">
       <joint type="free"/>
-      <geom name="object_collision" type="mesh" mesh="stanford_bunny" rgba="0.7 0.5 0.3 1" group="2" contype="1" conaffinity="1"/>
+      <geom name="object_collision" type="mesh" mesh="cube" rgba="0.7 0.5 0.3 1" group="2" contype="1" conaffinity="1"/>
       <inertial pos="0 0 0" mass="0.8" diaginertia="0.01 0.01 0.01"/>
     </body>
                   
