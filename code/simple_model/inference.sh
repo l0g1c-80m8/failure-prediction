@@ -1,2 +1,0 @@
-# python3.10 inference.py --model_path ./best_model_ResNet18.pth --model_type ResNet18 --window_size 1 --output_dir ./results --single_window
-python3.10 inference.py --model_path ./best_model_ResNet18.pth --model_type ResNet18 --window_size 1 --output_dir ./results --input_file ./data/val/episode_0.npy
