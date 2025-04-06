@@ -1,4 +1,4 @@
-<mujoco model="ur5e">
+<mujoco model="ur5e scene">
   <compiler angle="radian" meshdir="assets" autolimits="true"/>
 
   <option integrator="implicitfast" gravity="0 0 -9.81"/>
@@ -19,7 +19,7 @@
         <general gainprm="500" biasprm="0 -500 -100" forcerange="-28 28"/>
       </default>
       <default class="visual">
-        <geom type="mesh" contype="0" conaffinity="0" group="2"/>
+        <geom type="mesh" contype="0" conaffinity="0"/>
       </default>
       <default class="collision">
         <geom type="capsule" group="3"/>
@@ -27,7 +27,7 @@
           <geom type="cylinder"/>
         </default>
       </default>
-      <site size="0.001" rgba="0.5 0.5 0.5 0.3" group="4"/>
+      <site size="0.001" rgba="0.5 0.5 0.5 0.3"/>
     </default>
   </default>
 
@@ -36,6 +36,9 @@
     <material class="ur5e" name="jointgray" rgba="0.278 0.278 0.278 1"/>
     <material class="ur5e" name="linkgray" rgba="0.82 0.82 0.82 1"/>
     <material class="ur5e" name="urblue" rgba="0.49 0.678 0.8 1"/>
+    <material class="ur5e" name="bunny_material" rgba="0.49 0.0 0.0 1"/>
+    <material class="ur5e" name="teamugobj_material" rgba="0.49 0.0 0.0 1"/>
+    <material class="ur5e" name="panel_material" rgba="0.615686 0.811765 0.929412 1"/>
 
     <mesh file="base_0.obj"/>
     <mesh file="base_1.obj"/>
@@ -57,17 +60,21 @@
     <mesh file="wrist2_1.obj"/>
     <mesh file="wrist2_2.obj"/>
     <mesh file="wrist3.obj"/>
+
+    <mesh file="cube.obj" scale="0.8 0.8 0.8"/>
+    <mesh file="teamug.obj" scale="0.8 0.8 0.8"/>
+    <mesh file="panel_0.obj" scale="1.0 1.0 1.0"/>
   </asset>
 
   <contact>
-    <pair geom1="sliding_cube" geom2="panel" friction="0.2 0.5 0.001"/>
+    <pair geom1="object_collision" geom2="panel_collision" friction="0.1 0.25 0.001"/>
   </contact>
 
   <worldbody>
     <!-- Add camera definition -->
-    <camera name="top_camera" mode="fixed" pos="0 0 2.0" euler="0 0 0"  fovy="45"/>
-    <camera name="side_camera" mode="fixed" pos="1.5 0 0.8" euler="0 -30 0" fovy="45"/>
-    <camera name="front_camera" mode="fixed" pos="0 -2.0 1.2" euler="45 0 0" fovy="45"/>
+    <camera name="top_camera" mode="fixed" pos="0 0 3.0" euler="0 0 0"  fovy="45"/>
+    <!-- <camera name="side_camera" mode="fixed" pos="1.5 0 0.8" euler="0 -30 0" fovy="45"/> -->
+    <camera name="front_camera" mode="fixed" pos="3.0 0 2" euler="0 45 0" fovy="45"/>
     <light name="spotlight" mode="targetbodycom" target="wrist_2_link" pos="0 -1 2"/>
     <body name="base" quat="1 0 0 1" childclass="ur5e">
       <inertial mass="4.0" pos="0 0 0" diaginertia="0.00443333156 0.00443333156 0.0072"/>
@@ -120,9 +127,11 @@
                   <geom material="linkgray" mesh="wrist3" class="visual"/>
                   <geom class="eef_collision" pos="0 0.08 0" quat="1 1 0 0" size="0.04 0.02"/>
                   <site name="attachment_site" pos="0 0.1 0" quat="-1 1 0 0"/>
-                  <body name="fixed_box" pos="0 0.25 0" quat="0 0 0 1">
-                    <joint name="box_rotation" type="hinge" axis="0 1 0" limited="true" range="-0.1 0.1"/>
-                    <geom name="panel" type="box" size="0.075 0.15 0.01" rgba="0.8 0.2 0.2 1"/> <!-- Box dimensions and color -->
+                  <body name="fixed_panel" pos="0 0.20 0" quat="0 0 1 1">
+                    <joint name="box_rotation" type="hinge" axis="0 0 1" limited="true" range="-0.1 0.1"/>
+                    <!-- Replace box geometry with mesh -->
+                    <!-- <geom name="panel_visual" type="mesh" mesh="panel_0" material="panel_material" group="1"/> -->
+                    <geom name="panel_collision" type="mesh" mesh="panel_0" material="panel_material" group="1" contype="1" conaffinity="1"/>
                     <inertial mass="0.5" pos="0 0 0" diaginertia="0.001 0.001 0.001"/>
                   </body>
                 </body>
@@ -132,16 +141,13 @@
         </body>
       </body>
     </body>
-                      
-    <!-- New Cube Body -->
-    <body name="free_cube" pos="-0.4 0.8 0.2"> <!-- Slightly above the box -->
-      <!-- <joint name="free_cube" type="free" /> -->
-      <geom name="sliding_cube" type="box" size="0.015 0.015 0.015" rgba="0.2 0.8 0.2 1"/> <!-- Cube dimensions and color -->
-      <joint type="free"/>
-      <inertial mass="1" pos="0 0 0" quat="1 0 0 0" diaginertia="0.01 0.01 0.01"/>
-    </body>
 
-    
+    <!-- New Customized Body -->
+    <body name="object_body" pos="0.0 0.5 0.1">
+      <joint type="free"/>
+      <geom name="object_collision" type="mesh" mesh="cube" rgba="0.7 0.5 0.3 1" group="2" contype="1" conaffinity="1"/>
+      <inertial pos="0 0 0" mass="0.8" diaginertia="0.01 0.01 0.01"/>
+    </body>
                   
   </worldbody>
 
@@ -159,4 +165,51 @@
     <key name="home" qpos="1.3500753657730578 -1.865456836594901 -2.0400916711745514 -2.3380169136860096 -0.26860617161064493 3.0982337160377313 0 0 0 1 0 0 0 0" 
           ctrl="1.3500753657730578 -1.865456836594901 -2.0400916711745514 -2.3380169136860096 -0.26860617161064493 3.0982337160377313 0"/>
   </keyframe>
+
+  <statistic center="0.3 0 0.4" extent="0.8"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.1 0.1 0.1" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="120" elevation="-20"/>
+  </visual>
+
+  <asset>
+    <!-- <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/> -->
+    <!-- Define multiple floor textures -->
+    <texture type="2d" name="groundplane1" builtin="gradient" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane2" builtin="gradient" mark="cross" rgb1="0.4 0.2 0.3" rgb2="0.3 0.1 0.2"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane3" builtin="gradient" mark="random" rgb1="0.3 0.4 0.2" rgb2="0.2 0.3 0.1"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane4" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane5" builtin="checker" mark="cross" rgb1="0.4 0.2 0.3" rgb2="0.3 0.1 0.2"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane6" builtin="checker" mark="random" rgb1="0.3 0.4 0.2" rgb2="0.2 0.3 0.1"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane7" builtin="flat" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane8" builtin="flat" mark="cross" rgb1="0.4 0.2 0.3" rgb2="0.3 0.1 0.2"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <texture type="2d" name="groundplane9" builtin="flat" mark="random" rgb1="0.3 0.4 0.2" rgb2="0.2 0.3 0.1"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    
+    <!-- Define materials for each texture -->
+    <material name="groundplane1" texture="groundplane1" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane2" texture="groundplane2" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane3" texture="groundplane3" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane4" texture="groundplane4" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane5" texture="groundplane5" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane6" texture="groundplane6" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane7" texture="groundplane7" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane8" texture="groundplane8" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="groundplane9" texture="groundplane9" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane1"/>
+  </worldbody>
 </mujoco>

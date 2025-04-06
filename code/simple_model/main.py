@@ -8,6 +8,8 @@ import os
 from tqdm import tqdm
 import wandb
 from datetime import datetime
+import matplotlib
+matplotlib.use("TkAgg")  # or "Qt5Agg"
 import matplotlib.pyplot as plt
 
 from resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
@@ -49,16 +51,16 @@ class RobotTrajectoryDataset(Dataset):
         # Extract window data
         window_data = episode_data[start_idx:end_idx]
         
-        # Get states sequence (shape: window_size x 9)
-        states = np.stack([frame['state'] for frame in window_data])
+        # Get states sequence (shape: window_size x 19)
+        states = np.stack([frame['state'] for frame in window_data])        
         
-        # Get the action for the last timestep
+        # Get the risk for the last timestep
         # Convert to numpy array first, then to tensor
-        action = np.array(window_data[-1]['action'], dtype=np.float32)
+        risk = np.array(window_data[-1]['risk'], dtype=np.float32)
         
         return {
-            'states': torch.FloatTensor(states).transpose(0, 1),  # Transform to (9 x window_size) for 1D convolution
-            'action': torch.FloatTensor(action)  # Convert numpy array to tensor
+            'states': torch.FloatTensor(states).transpose(0, 1),  # Transform to (19 x window_size) for 1D convolution
+            'risk': torch.FloatTensor(risk)  # Convert numpy array to tensor
         }
 
 def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size=32, num_workers=4):
@@ -107,21 +109,6 @@ def compute_metrics(outputs, targets):
 def train_model(model, train_loader, val_loader, model_name, num_epochs=50, 
               warmup_epochs=10, initial_lr=0.01, min_lr=1e-6):
     """Train the model and validate periodically with progress tracking and logging."""
-    # Initialize wandb
-    wandb.init(
-        project="robot-trajectory-prediction",
-        name=f"{model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-        config={
-            "architecture": model_name,
-            "epochs": num_epochs,
-            "warmup_epochs": warmup_epochs,
-            "initial_lr": initial_lr,
-            "min_lr": min_lr,
-            "batch_size": train_loader.batch_size,
-            "window_size": train_loader.dataset.window_size,
-            "stride": train_loader.dataset.stride
-        }
-    )
     
     criterion = nn.MSELoss()
     optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
@@ -164,7 +151,7 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
         
         for batch in train_pbar:
             states = batch['states'].to(device)
-            actions = batch['action'].to(device)
+            risks = batch['risk'].to(device)
             
             # Update learning rate
             current_lr = get_lr(global_step)
@@ -173,14 +160,14 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
 
             optimizer.zero_grad()
             outputs = model(states)
-            loss = criterion(outputs, actions)
+            loss = criterion(outputs, risks)
             
             loss.backward()
             optimizer.step()
             # scheduler.step()  # Step the scheduler after each optimization step
             
             # Compute batch metrics
-            batch_metrics = compute_metrics(outputs, actions)
+            batch_metrics = compute_metrics(outputs, risks)
             
             # Update running metrics
             train_metrics['loss'] += loss.item()
@@ -211,13 +198,13 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
         with torch.no_grad():
             for batch in val_pbar:
                 states = batch['states'].to(device)
-                actions = batch['action'].to(device)
+                risks = batch['risk'].to(device)
                 
                 outputs = model(states)
-                loss = criterion(outputs, actions)
+                loss = criterion(outputs, risks)
 
                 # Compute batch metrics
-                batch_metrics = compute_metrics(outputs, actions)
+                batch_metrics = compute_metrics(outputs, risks)
                 
                 # Update running metrics
                 val_metrics['loss'] += loss.item()
@@ -252,10 +239,10 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
             'lr': f"{current_lr:.6f}"
         })
     
-    wandb.finish()
 
 def evaluate_model(model, test_loader, model_name):
-    """Evaluate the model on test data with progress tracking."""
+    """Evaluate the model on test data with progress tracking and visualization."""
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
     total_mse = 0
@@ -263,53 +250,137 @@ def evaluate_model(model, test_loader, model_name):
     # Create progress bar for evaluation
     eval_pbar = tqdm(test_loader, desc=f"Evaluating {model_name}")
     
+    # Store predictions and ground truth for visualization
+    all_predictions = []
+    all_ground_truth = []
+    all_mse_values = []
+    sample_indices = []
+    
     with torch.no_grad():
-        for batch in eval_pbar:
+        for batch_idx, batch in enumerate(eval_pbar):
             states = batch['states'].to(device)
-            actions = batch['action'].to(device)
+            risks = batch['risk'].to(device)
             
             outputs = model(states)
-            mse = nn.MSELoss()(outputs, actions).item()
+            mse = nn.MSELoss()(outputs, risks).item()
             total_mse += mse
+            
+            # Store predictions and ground truth
+            all_predictions.append(outputs.cpu().numpy())
+            all_ground_truth.append(risks.cpu().numpy())
+            all_mse_values.append(mse)
+            sample_indices.extend([batch_idx * test_loader.batch_size + i for i in range(len(outputs))])
             
             # Update progress bar
             eval_pbar.set_postfix({'mse': f'{mse:.4f}'})
     
     avg_mse = total_mse / len(test_loader)
+    
+    # Concatenate all data for visualization
+    predictions = np.concatenate(all_predictions, axis=0)
+    ground_truth = np.concatenate(all_ground_truth, axis=0)
+    
+    # Create visualizations for wandb
+    visualize_predictions(predictions, ground_truth)
+    
     return avg_mse
 
+def visualize_predictions(predictions, ground_truth):
+    """Create visualizations comparing predictions to ground truth."""
+    # Print shapes for verification
+    print("predictions", predictions.shape)
+    print("ground_truth", ground_truth.shape)
+    
+    # Create indices for x-axis
+    indices = np.arange(len(predictions))
+    
+    # Use all data points since dataset is small
+    sample_indices = indices
+    
+    # Make sure predictions and ground_truth are properly formatted
+    # Convert to float to ensure compatibility with wandb
+    pred_values = predictions.flatten().astype(float)
+    truth_values = ground_truth.flatten().astype(float)
+    
+    # Create wandb plot - make sure data is correctly formatted
+    data = []
+    for i in sample_indices:
+        # Ensure values are scalar and not arrays
+        pred_val = float(pred_values[i])
+        truth_val = float(truth_values[i])
+        data.append([int(i), pred_val, truth_val])
+    
+    # Create the table
+    table = wandb.Table(data=data, columns=["index", "prediction", "ground_truth"])
+    
+    # Log the plot
+    wandb.log({"predictions_vs_ground_truth": wandb.plot.line(
+        table, 
+        "index", 
+        ["prediction", "ground_truth"],
+        title="Model Predictions vs Ground Truth"
+    )})
+
+
 if __name__ == "__main__":
-    # Initialize wandb
-    wandb.login()
-    
-    # Create data loaders
-    train_loader, val_loader = create_data_loaders(
-        train_dir='data/train',
-        val_dir='data/val',
-        window_size=10,
-        stride=1,
-        batch_size=1024,
-        num_workers=8
-    )
-    
-    # Example of using different ResNet architectures
-    models = {
-        'ResNet18': resnet18(input_channels=9)
-        # 'ResNet34': resnet34(input_channels=9),
-        # 'ResNet50': resnet50(input_channels=9),
-        # 'ResNet101': resnet101(input_channels=9),
-        # 'ResNet152': resnet152(input_channels=9)
-    }
-    
-    # Train and evaluate each model
-    for name, model in models.items():
-        print(f"\nTraining {name}")
-        # Train the model
-        train_model(model, train_loader, val_loader, name, num_epochs=1000,
-                    warmup_epochs=10,
-                    initial_lr=0.01,
-                    min_lr=1e-6)
+    try:
+        os.environ['QT_X11_NO_MITSHM'] = '1'
+        # Initialize wandb
+        wandb.login()
         
-        # Evaluate on validation set
-        val_mse = evaluate_model(model, val_loader, name)
-        print(f"Validation MSE for {name}: {val_mse:.4f}")
+        # Create data loaders
+        train_loader, val_loader = create_data_loaders(
+            train_dir='data/train',
+            val_dir='data/val',
+            window_size=1,
+            stride=1,
+            batch_size=1016,
+            num_workers=8
+        )
+        
+        # Example of using different ResNet architectures
+        models = {
+            'ResNet18': resnet18(input_channels=19)
+            # 'ResNet34': resnet34(input_channels=19),
+            # 'ResNet50': resnet50(input_channels=19),
+            # 'ResNet101': resnet101(input_channels=19),
+            # 'ResNet152': resnet152(input_channels=19)
+        }
+
+        wandb_disabled = False
+        
+        # Train and evaluate each model
+        for name, model in models.items():
+            print(f"\nTraining {name}")
+            # Initialize wandb
+            num_epochs=1000
+            warmup_epochs=10
+            initial_lr=0.01
+            min_lr=1e-6
+            wandb.init(
+                project="robot-trajectory-prediction",
+                name=f"{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                config={
+                    "architecture": name,
+                    "epochs": num_epochs,
+                    "warmup_epochs": warmup_epochs,
+                    "initial_lr": initial_lr,
+                    "min_lr": min_lr,
+                    "batch_size": train_loader.batch_size,
+                    "window_size": train_loader.dataset.window_size,
+                    "stride": train_loader.dataset.stride
+                },
+                mode="disabled" if wandb_disabled else None
+            )
+            # Train the model
+            train_model(model, train_loader, val_loader, name, num_epochs=num_epochs,
+                        warmup_epochs=warmup_epochs,
+                        initial_lr=initial_lr,
+                        min_lr=min_lr)
+            
+            # Evaluate on validation set
+            val_mse = evaluate_model(model, val_loader, name)
+            print(f"Validation MSE for {name}: {val_mse:.4f}")
+            wandb.finish()
+    except Exception as e:
+        print(f"An error occurred: {e}")

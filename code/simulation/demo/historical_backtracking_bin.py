@@ -11,160 +11,149 @@ import random
 import tqdm
 # from scipy.interpolate import CubicSpline
 import ast
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
+import cv2
 
-N_TRAIN_EPISODES = 1
-N_VAL_EPISODES = 10
-EPISODE_LENGTH = 1200  # Number of points in trajectory
-
-# Thresholds for action calculation
-DISPLACEMENT_THRESHOLD_HIGH = 0.01
-DISPLACEMENT_THRESHOLD_LOW = 0
-
-RANDOM_EPISODE_TMP = random.randint(0, EPISODE_LENGTH) # 67 86 #  109
-
-# Define different interpolation methods
-def linear_interpolation(first_failure_time_step, failure_time_step_trim):
-    return np.linspace(0, 1, first_failure_time_step - failure_time_step_trim + 1)
-
-def sin_interpolation(first_failure_time_step, failure_time_step_trim):
-    x = np.linspace(0, 1, first_failure_time_step - failure_time_step_trim + 1)
-    return np.sin(x)
+from common_functions import (flat_interpolation, process_camera_frame,
+                        calculate_failure_phase, plot_raw_metrics,
+                        read_config
+                        )
 
 class Projectile(MuJoCoBase):
-    def __init__(self, xml_path, traj_file, initial_delay=3.0):
-        super().__init__(xml_path)
-        # self.init_angular_speed = 1.0  # Angular speed in radians per second
-        self.initial_delay = initial_delay  # Delay before starting movement
-        self.speed_scale = random.uniform(0.5, 1.0)  # New parameter to control joint speed
-        self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
-        self.start_time = None  # To track the start time
-        self.positions = []  # To store the position data
-        self.episode = [] # To store the episode data
-        # self.human_intervene = False  # New attribute to track cube drop
-        # self.intervene_step = 0  # Step when human intervention occurs
-        # self.is_intervene_step_set = False
-        self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
-        self.is_high_threshold_step_set = False
+    def __init__(self, config, ramdom_episode):
+        super().__init__(config.get('simulation_related', {}).get('xml_path', 'N/A'))
+        self.config = config
+        self.ramdom_episode = ramdom_episode
         
-        self.traj_file = traj_file
+        # Simulation parameters
+        self.initial_delay = self.config.get('simulation_related', {}).get('initial_delay', 'N/A')  # Delay before starting movement
+        self.display_camera = self.config.get('camera_related', {}).get('display_camera', 'N/A')
+        self.episode = [] # To store the episode data
+        # self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
+        # self.is_high_threshold_step_set = False
+
+        # Trajectory loading
+        self.traj_file = self.config.get('simulation_related', {}).get('traj_path', 'N/A')
         self.trajectory = self.load_trajectory()
+
+        # Simulation state
         self.current_step = 0
         self.current_target = None
         self.next_target = None
         self.transition_start_time = None
+        self.start_time = None  # To track the start time
 
-        # Add visualization markers# Marker appearance settings
-        self.marker_size = 0.005  # Increased size - adjust this value as needed
-        self.marker_positions = []  # Store positions and colors
-        self.max_markers = 100  # Maximum number of position markers to show
+        # Camera settings
+        self.ncam = self.model.ncam  # Get number of cameras in the model
+        self.cam_position_init = [None] * self.ncam  # Initialize with None for each camera
+        self.cam_position_read = [False] * self.ncam  # Initialize all as unread
+
+        # New camera control flag
+        self.enable_cameras = self.config.get('camera_related', {}).get('enable_cameras', 'N/A')
+
+        self.dataset_type = self.config.get('simulation_related', {}).get('dataset_type', "train")
+        # self.speed_scale = random.uniform(2.5, 3.5)  # New parameter to control joint speed
+        # self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
+
+    def load_trajectory(self, randomize=True):
+        """
+        Load trajectory from a text file containing lists of joint positions.
         
-        # Initialize marker colors
-        self.cube_marker_color = [1, 0, 0, 0.8]  # Red for cube
-        self.box_marker_color = [0, 1, 0, 0.8]   # Green for fixed box
-
-    def add_position_markers(self, cube_pos, box_pos):
-        """Add markers for both cube and fixed box positions"""
-        # Add new positions and colors
-        self.marker_positions.append((cube_pos, self.cube_marker_color))
-        self.marker_positions.append((box_pos, self.box_marker_color))
-        
-        # Keep only the most recent markers
-        while len(self.marker_positions) > self.max_markers * 2:  # *2 because we add two markers at a time
-            self.marker_positions.pop(0)
-
-    def add_markers_to_scene(self):
-        """Add all stored markers to the scene"""
-        if not self.marker_positions:
-            return
+        Args:
+            randomize (bool): Whether to add random variations to the joint positions
             
-        for pos, color in self.marker_positions:
-            self.scene.ngeom += 1
-            g = self.scene.geoms[self.scene.ngeom - 1]
-            
-            # Set geometry properties
-            g.type = mj.mjtGeom.mjGEOM_SPHERE
-            g.size[:] = [self.marker_size, self.marker_size, self.marker_size]  # Use the configurable size
-            g.pos[:] = pos
-            g.mat[:,:] = np.eye(3)
-            g.rgba[:] = color
-            g.dataid = -1
-            g.objtype = mj.mjtObj.mjOBJ_UNKNOWN
-            g.objid = -1
-
-    def load_trajectory(self):
-        """Load trajectory from a text file containing lists of joint positions"""
+        Returns:
+            list: List of joint position arrays with optional randomization
+        """
         with open(self.traj_file, "r") as file:
             trajectory = []
-            for line in file:
+            lines = file.readlines()
+    
+            # Randomize the order of lines if requested
+            if self.config.get('input_trajectory_related', {}).get('shuffle', 'N/A'):
+                random.shuffle(lines)
+
+            for line in lines:
+
                 try:
-                    # Strip whitespace and convert string representation of list to numpy array
                     joint_positions = np.array(ast.literal_eval(line.strip()))
+                    
+                    # Apply randomization if enabled
+                    if randomize:
+                        # Define randomization ranges for each joint (in radians)
+                        # These values can be adjusted based on how much variation you want
+                        joint1_range = self.config.get('input_trajectory_related', {}).get('joint_1', 'N/A')
+                        joint2_range = self.config.get('input_trajectory_related', {}).get('joint_2', 'N/A')
+                        joint3_range = self.config.get('input_trajectory_related', {}).get('joint_3', 'N/A')
+                        joint4_range = self.config.get('input_trajectory_related', {}).get('joint_4', 'N/A')
+                        joint5_range = self.config.get('input_trajectory_related', {}).get('joint_5', 'N/A')
+                        joint6_range = self.config.get('input_trajectory_related', {}).get('joint_6', 'N/A')
+                        variation_ranges = [
+                            (joint1_range[0], joint1_range[1]),  # Joint 1: ±0.05 radians
+                            (joint2_range[0], joint2_range[1]),  # Joint 2: ±0.03 radians
+                            (joint3_range[0], joint3_range[1]),  # Joint 3: ±0.04 radians
+                            (joint4_range[0], joint4_range[1]),  # Joint 4: ±0.03 radians
+                            (joint5_range[0], joint5_range[1]),  # Joint 5: ±0.05 radians
+                            (joint6_range[0], joint6_range[1]),  # Joint 6: ±0.02 radians
+                        ]
+                        
+                        # Apply random variation to each joint
+                        for i in range(min(len(joint_positions), len(variation_ranges))):
+                            min_var, max_var = variation_ranges[i]
+                            variation = random.uniform(min_var, max_var)
+                            joint_positions[i] += variation
+                    
                     trajectory.append(joint_positions)
                 except Exception as e:
                     print(f"Error parsing line: {line.strip()}. Error: {e}")
                     continue
-                    
-            print(f"Loaded {len(trajectory)} waypoints")
+            
+            print(f"Loaded {len(trajectory)} waypoints{' with randomization' if randomize else ''}")
             return trajectory
 
     def reset(self, seed):
+        """Reset the simulation environment with the given seed."""
         random.seed(seed)
 
-
         # Set camera configuration
-        self.cam.azimuth = 300 # -250 random.uniform(-225, -315)
-        self.cam.distance = 2.5 # random.uniform(2, 3)
-        self.cam.elevation = -40 # random.uniform(-50, -30)
+        self.cam.azimuth = self.config.get('camera_related', {}).get('azimuth', 'N/A') # -216 random.uniform(-225, -315)
+        self.cam.distance = self.config.get('camera_related', {}).get('distance', 'N/A') # random.uniform(2, 3)
+        self.cam.elevation = self.config.get('camera_related', {}).get('elevation', 'N/A') # random.uniform(-16, -30)
         # print("self.cam", self.cam.azimuth, self.cam.distance, self.cam.elevation)
 
-        self.randomize_camera_position()
+        # Randomize camera positions
+        self.randomize_camera_position('top_camera')
+        self.randomize_camera_position('front_camera')
 
-        # Add random rotation parameters
-        # Subtle random rotation parameters
-        self.rotation_speed = random.uniform(-0.01, 0.01)  # Slower random speed between 0.2 and 0.5 rad/s
-        self.target_angle = random.uniform(-0.03, 0.03)   # Small random angle between -0.3 and 0.3 rad (about ±17 degrees)
+        # Set random rotation parameters
+        self.rotation_speed = random.uniform(self.config.get('panel_related', {}).get('rotation_speed', 'N/A')[0], self.config.get('panel_related', {}).get('rotation_speed', 'N/A')[1])  # Slower random speed between 0.2 and 0.5 rad/s
+        self.target_angle = random.uniform(self.config.get('panel_related', {}).get('target_angle', 'N/A')[0], self.config.get('panel_related', {}).get('target_angle', 'N/A')[1])   # Small random angle between -0.3 and 0.3 rad (about ±17 degrees)
         self.reverse_on_target = random.choice([True, False])  # Randomly decide to stop or reverse
         self.reached_target = False  # Track if we've reached target
         # print(f"New rotation parameters - Speed: {self.rotation_speed:.2f} rad/s, Target angle: {self.target_angle:.2f} rad, Reverse: {self.reverse_on_target}")
 
-        # self.angular_speed = self.init_angular_speed
-        # self.human_intervene = False  # New attribute to track cube drop
-        # self.intervene_step = 0  # Step when human intervention occurs
-        # self.is_intervene_step_set = False
-        self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
-        self.is_high_threshold_step_set = False
-
-        # Initialize start time
+        # Reset simulation state
+        # self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
+        # self.is_high_threshold_step_set = False
         self.start_time = None
-
         self.current_step = 0
         self.current_target = None
         self.next_target = None
         self.transition_start_time = None
-        self.speed_scale = random.uniform(0.5, 1.0)  # New parameter to control joint speed
-        self.joint_pause = random.uniform(0.2, 0.8)  # Duration of pause between movements
+        self.speed_scale = random.uniform(self.config.get('robot_related', {}).get('speed_scale', 'N/A')[0], self.config.get('robot_related', {}).get('speed_scale', 'N/A')[1])  # New parameter to control joint speed
+        self.joint_pause = random.uniform(self.config.get('simulation_related', {}).get('joint_pause', 'N/A')[0], self.config.get('simulation_related', {}).get('joint_pause', 'N/A')[1])  # Duration of pause between movements
 
+        # Emergency stop settings
         self.emergency_stop = False  # Flag to trigger the emergency stop
         self.emergency_stop_pos_first_set = False  # Flag to first set the emergency stop pose
         self.current_qpos = None
 
-        # Add floor randomization
+        # Randomize environment
         self.randomize_floor()
-        # Randomize fixed_box and free_cube
-        self.randomize_object_colors()
+        self.randomize_scene_colors("panel_collision", "object_collision")
+        self.randomize_object('object_body', 'object_collision')
 
-        # cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
-        # fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
-        # self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [random.uniform(0.35, 0.42), random.uniform(-0.5, -0.35), random.uniform(0.2, 0.35)]
-        self.randomize_free_cube()
-
-        # Clear markers when resetting
-        self.marker_geoms = []
-        self.marker_counter = 0
+        self.trajectory = self.load_trajectory()
 
         mj.set_mjcb_control(self.controller)
 
@@ -183,76 +172,126 @@ class Projectile(MuJoCoBase):
         
         # Randomly adjust floor parameters
         # Random scale for texture repeat
-        texture_scale = random.uniform(3, 7)
+        texture_scale = random.uniform(self.config.get('background_related', {}).get('texture_scale', 'N/A')[0], self.config.get('background_related', {}).get('texture_scale', 'N/A')[1])
         self.model.mat_texrepeat[material_id] = [texture_scale, texture_scale]
         
         # Random reflectance
-        self.model.mat_reflectance[material_id] = random.uniform(0.1, 0.3)
+        self.model.mat_reflectance[material_id] = random.uniform(self.config.get('background_related', {}).get('mat_reflectance', 'N/A')[0], self.config.get('background_related', {}).get('mat_reflectance', 'N/A')[1])
         
         # Optional: Add some random noise to the floor color
-        rgb_noise = np.random.uniform(-0.1, 0.1, 3)
+        rgb_noise = np.random.uniform(self.config.get('background_related', {}).get('rgb_noise', 'N/A')[0], self.config.get('background_related', {}).get('rgb_noise', 'N/A')[1], self.config.get('background_related', {}).get('rgb_noise', 'N/A')[2])
         self.model.mat_rgba[material_id][:3] += rgb_noise
         self.model.mat_rgba[material_id][:3] = np.clip(self.model.mat_rgba[material_id][:3], 0, 1)
 
+    def randomize_object(self, object_body_id, object_geom_id):
+        """Randomize the object's size, mass, friction, and other physical properties."""
+        # Get object body and geom IDs
+        object_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, object_body_id)
+        object_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, object_geom_id)
+        current_object_name = self.config.get('object_related', {}).get('current_object', 'N/A')
 
-    def randomize_free_cube(self):
-        """Randomize the free cube's size, mass, friction, and other physical properties."""
-        # Get cube body and geom IDs
-        cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
-        cube_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, 'sliding_cube')
+        fixed_panel_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_panel')
+        fixed_panel_pos = self.data.xpos[fixed_panel_body_id]
+        # print("fixed_panel_pos", fixed_panel_pos)
         
-        # Randomize cube size (within reasonable bounds)
-        base_size = 0.015  # Original size
-        size_variation = random.uniform(0.8, 3)  # n% variation
+        # Randomize object size (within reasonable bounds)
+        base_size = self.config.get('object_related', {}).get(current_object_name, {}).get('base_size', 'N/A') # Original size
+        size_variation = random.uniform(self.config.get('object_related', {}).get(current_object_name, {}).get('size_variation', 'N/A')[0], self.config.get('object_related', {}).get(current_object_name, {}).get('size_variation', 'N/A')[1])  # n% variation
         new_size = base_size * size_variation
-        self.model.geom_size[cube_geom_id] = [new_size, new_size, new_size]
+        self.model.geom_size[object_geom_id] = [new_size, new_size, new_size]
         
         # Randomize mass (scaled with size)
-        base_mass = 0.5  # Original mass
-        mass_variation = random.uniform(0.8, 1.2)  # ±20% variation
+        base_mass = self.config.get('object_related', {}).get(current_object_name, {}).get('base_mass', 'N/A') # Original mass
+        mass_variation = random.uniform(self.config.get('object_related', {}).get(current_object_name, {}).get('mass_variation', 'N/A')[0], self.config.get('object_related', {}).get(current_object_name, {}).get('mass_variation', 'N/A')[1])  # ±20% variation
         new_mass = base_mass * mass_variation  # base_mass * size_variation * mass_variation  # Scale mass with size
-        self.model.body_mass[cube_body_id] = new_mass
+        self.model.body_mass[object_body_id] = new_mass
         
         # Adjust inertia based on new mass and size
-        new_inertia = (new_mass * new_size**2) / 6  # Simple box inertia approximation
-        self.model.body_inertia[cube_body_id] = [new_inertia, new_inertia, new_inertia]
+        new_inertia = (new_mass * new_size**2) / 6  # Simple panel inertia approximation
+        self.model.body_inertia[object_body_id] = [new_inertia, new_inertia, new_inertia]
         
         # Randomize friction properties
-        friction_variation = random.uniform(0.25, 0.35)  # Base friction is 0.2
-        # Find the contact pair involving the sliding cube
+        friction_variation = random.uniform(self.config.get('object_related', {}).get(current_object_name, {}).get('friction_variation', 'N/A')[0], self.config.get('object_related', {}).get(current_object_name, {}).get('friction_variation', 'N/A')[1])  # Base friction is 0.2
+        # Find the contact pair involving the sliding object
         for i in range(self.model.npair):
-            if (self.model.pair_geom1[i] == cube_geom_id or 
-                self.model.pair_geom2[i] == cube_geom_id):
+            if (self.model.pair_geom1[i] == object_geom_id or 
+                self.model.pair_geom2[i] == object_geom_id):
                 self.model.pair_friction[i, 0] = friction_variation  # Sliding friction
                 self.model.pair_friction[i, 1] = friction_variation * 2.5  # Rolling friction
                 self.model.pair_friction[i, 2] = friction_variation * 0.005  # Torsional friction
         
         # Randomize initial position (within reasonable bounds)
-        x_pos = random.uniform(0.35, 0.35) # random.uniform(0.35, 0.42)
-        y_pos = random.uniform(0.65, 0.65) # random.uniform(-0.5, -0.35)
-        z_pos = random.uniform(0.3, 0.4)
-        self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [x_pos, y_pos, z_pos]
+        x_offset = self.config.get('object_related', {}).get(current_object_name, {}).get('x_offset', 'N/A')
+        y_offset = self.config.get('object_related', {}).get(current_object_name, {}).get('y_offset', 'N/A')
+        z_offset = self.config.get('object_related', {}).get(current_object_name, {}).get('z_offset', 'N/A')
+        x_pos = random.uniform(fixed_panel_pos[0]+x_offset[0], fixed_panel_pos[0]+x_offset[1])
+        y_pos = random.uniform(fixed_panel_pos[1]+y_offset[0], fixed_panel_pos[1]+y_offset[1])
+        z_pos = random.uniform(fixed_panel_pos[2]+z_offset[0], fixed_panel_pos[2]+z_offset[1])
+        self.data.qpos[self.model.body_jntadr[object_body_id]:self.model.body_jntadr[object_body_id]+3] = [x_pos, y_pos, z_pos]
         
         # Randomize initial orientation (uncomment when needed)
         # quat = [random.uniform(-1, 1) for _ in range(4)]
         # quat = quat / np.linalg.norm(quat)  # Normalize quaternion
-        # self.data.qpos[self.model.body_jntadr[cube_body_id]+3:self.model.body_jntadr[cube_body_id]+7] = quat
+        # self.data.qpos[self.model.body_jntadr[object_body_id]+3:self.model.body_jntadr[object_body_id]+7] = quat
 
-    def randomize_object_colors(self):
-        """Randomize colors for fixed box and free cube"""
+    def randomize_scene_colors(self, panel_geom_name, object_geom_name):
+        """Randomize colors for fixed panel and free object"""
+        # Zeyu: need to be revised, since combined object and the panel, should be decoupled
         # Get geom IDs
-        fixed_box_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, "panel")
-        free_cube_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, "sliding_cube")
+        fixed_panel_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, panel_geom_name)
+        free_object_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, object_geom_name)
         
         # Generate new colors
-        box_color = [random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), 1.0]
-        cube_color = np.array([1.0, 1.0, 1.0, 2.0]) - box_color  # [random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), 1.0]
+        panel_color = [random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), 1.0]
+        object_color = np.array([1.0, 1.0, 1.0, 2.0]) - panel_color  # [random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), random.uniform(0.01, 1.0), 1.0]
         
         # Set new colors
-        self.model.geom_rgba[fixed_box_geom_id] = box_color
-        self.model.geom_rgba[free_cube_geom_id] = cube_color
+        self.model.geom_rgba[fixed_panel_geom_id] = panel_color
+        self.model.geom_rgba[free_object_geom_id] = object_color
+
+    def randomize_camera_position(self, camera_name='top_camera'):
+        """
+        Improved camera position randomization with proper orientation handling
+        and direct camera parameter updates.
+        """
+        # Get camera id
+        cam_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_CAMERA, camera_name)
+
+        # print("self.cam_position_read[cam_id]", cam_id, self.cam_position_read[cam_id])
+
+        if not self.cam_position_read[cam_id]:
+            self.cam_position_init[cam_id] = self.model.cam_pos[cam_id].copy()
+            # print(self.cam_position_init[cam_id])
+            self.cam_position_read[cam_id] = True
+        
+        # print("self.cam_position_init[cam_id]", cam_id, self.cam_position_init[cam_id])
+        
+        # Define ranges for camera randomization
+        # Wider ranges for more noticeable variation
+        x_offset = self.config.get('camera_related', {}).get('x_offset', 'N/A')
+        y_offset = self.config.get('camera_related', {}).get('y_offset', 'N/A')
+        z_offset = self.config.get('camera_related', {}).get('z_offset', 'N/A')
+        pos_ranges = {
+            'x': (self.cam_position_init[cam_id][0]-x_offset[0], self.cam_position_init[cam_id][0]+x_offset[1]),    # Wider range for x offset
+            'y': (self.cam_position_init[cam_id][1]-y_offset[0], self.cam_position_init[cam_id][1]+y_offset[1]),    # Wider range for y offset
+            'z': (self.cam_position_init[cam_id][2]-z_offset[0], self.cam_position_init[cam_id][2]+z_offset[1]),     # Height variation
+        }
+        
+        # Randomly sample camera parameters
+        pos_x = random.uniform(*pos_ranges['x'])
+        pos_y = random.uniform(*pos_ranges['y'])
+        pos_z = random.uniform(*pos_ranges['z'])
+        
+        # Update camera self.cam_position
+        self.model.cam_pos[cam_id] = np.array([pos_x, pos_y, pos_z])
+        
+        # Force update scene
+        mj.mj_forward(self.model, self.data)
 
     def activate_emergency_stop(self):
+        """
+        Active the e-stop, robot pose hold
+        """
         self.emergency_stop = True
         # self.emergency_stop_first_set = True
 
@@ -266,9 +305,7 @@ class Projectile(MuJoCoBase):
         if self.emergency_stop:
             data.ctrl = self.current_qpos
             # print("Emergency Stop Activated! Robot is holding position.")
-                
             return
-
 
         if self.start_time is None:
             self.start_time = data.time
@@ -276,7 +313,6 @@ class Projectile(MuJoCoBase):
             self.transition_start_time = data.time
             self.current_target = self.trajectory[0]
             self.next_target = self.trajectory[1] if len(self.trajectory) > 1 else None
-            # self.joint_pause = 0.5  # Duration of pause at each key pose in seconds
             self.is_pausing = True  # Start with a pause at the first pose
             self.pause_start_time = data.time
             return
@@ -294,9 +330,9 @@ class Projectile(MuJoCoBase):
         angle_diff = self.target_angle - current_angle
         
         # Check if we're close to target
-        ANGLE_THRESHOLD = 0.005  # About 0.6 degrees threshold
+        angle_rad_threshold = self.config.get('panel_related', {}).get('angle_rad_threshold', 'N/A')  # About 0.6 degrees threshold
         
-        if abs(angle_diff) < ANGLE_THRESHOLD:
+        if abs(angle_diff) < angle_rad_threshold:
             if not self.reached_target:
                 self.reached_target = True
                 if self.reverse_on_target:
@@ -309,13 +345,9 @@ class Projectile(MuJoCoBase):
         
         # Apply rotation with smoothed speed near target
         smoothing_factor = min(1.0, abs(angle_diff) / 0.05)  # Smooth speed when within 0.1 rad of target
-        box_rotation = self.rotation_speed * np.sign(angle_diff) * smoothing_factor
-        
-        # Set the box rotation control
-        data.ctrl[6] = box_rotation
-        # if int(elapsed_time * 10) % 10 == 0:  # Print every 0.1 seconds
-        #     print(f"Time: {elapsed_time:.2f}, Current angle: {current_angle:.2f}, Target: {self.target_angle:.2f}, Speed: {self.rotation_speed:.2f}, Reverse: {self.reverse_on_target}")
-
+        panel_rotation = self.rotation_speed * np.sign(angle_diff) * smoothing_factor
+        # Set the panel rotation control
+        data.ctrl[6] = panel_rotation
 
         # Handle pausing at key poses
         if self.is_pausing:
@@ -364,28 +396,30 @@ class Projectile(MuJoCoBase):
         elif self.current_target is not None:
             for joint_idx, position in enumerate(self.current_target):
                 data.ctrl[joint_idx] = position
-
-
-    def data_collection(self, cube_body_id, fixed_box_body_id):
+        
+    def data_collection(self, object_body_id, fixed_panel_body_id):
         """
         Collect transformation data between adjacent timesteps for both objects.
         Returns positions, rotations, and relative transforms between timesteps.
         """
         # Get current positions and orientations
-        cube_pos = self.data.xpos[cube_body_id].copy()  # 3D position
-        cube_quat = self.data.xquat[cube_body_id].copy()  # Quaternion orientation
-        fixed_box_pos = self.data.xpos[fixed_box_body_id].copy()
-        fixed_box_quat = self.data.xquat[fixed_box_body_id].copy()
+        object_pos = self.data.xpos[object_body_id].copy()  # 3D position
+        object_quat = self.data.xquat[object_body_id].copy()  # Quaternion orientation
+        fixed_panel_pos = self.data.xpos[fixed_panel_body_id].copy()
+        fixed_panel_quat = self.data.xquat[fixed_panel_body_id].copy()
+
+        # print("object_pos", object_pos)
+        # print("fixed_panel_pos", fixed_panel_pos)
         
-
-        # Add position markers
-        self.add_position_markers(cube_pos, fixed_box_pos)
-
+        # Get end effector position (wrist_3_link)
+        wrist_3_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'wrist_3_link')
+        end_effector_pos = self.data.xpos[wrist_3_body_id].copy()
+        # print("end_effector_pos", end_effector_pos)
 
         # Store velocities
-        cube_lin_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3].copy()
-        cube_ang_vel = self.data.qvel[self.model.body_jntadr[cube_body_id]+3:self.model.body_jntadr[cube_body_id]+6].copy()
-        fixed_box_lin_vel = self.data.cvel[fixed_box_body_id].reshape((6,))[:3].copy()
+        object_lin_vel = self.data.qvel[self.model.body_jntadr[object_body_id]:self.model.body_jntadr[object_body_id]+3].copy()
+        object_ang_vel = self.data.qvel[self.model.body_jntadr[object_body_id]+3:self.model.body_jntadr[object_body_id]+6].copy()
+        # fixed_panel_lin_vel = self.data.cvel[fixed_panel_body_id].reshape((6,))[:3].copy()
         
         # Convert quaternions to rotation matrices (3x3)
         def quat_to_mat(quat):
@@ -396,346 +430,169 @@ class Projectile(MuJoCoBase):
                 [2*x*z - 2*w*y, 2*y*z + 2*w*x, 1 - 2*x*x - 2*y*y]
             ])
         
-        cube_rot = quat_to_mat(cube_quat)
-        fixed_box_rot = quat_to_mat(fixed_box_quat)
+        object_rot = quat_to_mat(object_quat)
+        fixed_panel_rot = quat_to_mat(fixed_panel_quat)
         
         # If this is not the first frame, calculate transforms between frames
-        if hasattr(self, 'prev_cube_pos'):
+        if hasattr(self, 'prev_object_pos'):
             # Calculate translation vectors (movement since last frame)
-            cube_translation = cube_pos - self.prev_cube_pos
-            fixed_box_translation = fixed_box_pos - self.prev_fixed_box_pos
+            object_translation = object_pos - self.prev_object_pos
+            fixed_panel_translation = fixed_panel_pos - self.prev_fixed_panel_pos
             
             # Calculate rotation matrices between frames
             # R2 = dR * R1 -> dR = R2 * R1^T
-            cube_rot_delta = cube_rot @ self.prev_cube_rot.T
-            fixed_box_rot_delta = fixed_box_rot @ self.prev_fixed_box_rot.T
+            object_rot_delta = object_rot @ self.prev_object_rot.T
+            fixed_panel_rot_delta = fixed_panel_rot @ self.prev_fixed_panel_rot.T
             
-            # Calculate relative transform between cube and fixed box
-            relative_pos = fixed_box_pos - cube_pos
-            relative_rot = fixed_box_rot @ cube_rot.T
+            # Calculate relative transform between object and fixed panel
+            relative_pos = fixed_panel_pos - object_pos
             
-            transform_data = {
-                'cube_translation': cube_translation,
-                'cube_rotation_delta': cube_rot_delta,
-                'fixed_box_translation': fixed_box_translation,
-                'fixed_box_rotation_delta': fixed_box_rot_delta,
-                'relative_position': relative_pos,
-                'relative_rotation': relative_rot
+            transform_data_3D = {
+                'object_translation': object_translation,
+                'object_rotation_delta': object_rot_delta,
+                'fixed_panel_translation': fixed_panel_translation,
+                'fixed_panel_rotation_delta': fixed_panel_rot_delta,
+                'relative_position': relative_pos
             }
         else:
             # For first frame, set deltas to identity/zero
-            transform_data = {
-                'cube_translation': np.zeros(3),
-                'cube_rotation_delta': np.eye(3),
-                'fixed_box_translation': np.zeros(3),
-                'fixed_box_rotation_delta': np.eye(3),
-                'relative_position': fixed_box_pos - cube_pos,
-                'relative_rotation': fixed_box_rot @ cube_rot.T
+            transform_data_3D = {
+                'object_translation': np.zeros(3),
+                'object_rotation_delta': np.eye(3),
+                'fixed_panel_translation': np.zeros(3),
+                'fixed_panel_rotation_delta': np.eye(3),
+                'relative_position': fixed_panel_pos - object_pos
             }
         
         # Store current transforms for next frame
-        self.prev_cube_pos = cube_pos
-        self.prev_cube_rot = cube_rot
-        self.prev_fixed_box_pos = fixed_box_pos
-        self.prev_fixed_box_rot = fixed_box_rot
+        self.prev_object_pos = object_pos
+        self.prev_object_rot = object_rot
+        self.prev_fixed_panel_pos = fixed_panel_pos
+        self.prev_fixed_panel_rot = fixed_panel_rot
         
-        # Combine state information (keeping existing format)
-        state = np.hstack([
-            transform_data['relative_position'],  # 3 values
-            cube_lin_vel,                        # 3 values
-            cube_ang_vel                         # 3 values
-        ])
-        
-        return state, fixed_box_lin_vel, transform_data
-
-
-    # Function to calculate action value based on displacement, linear speed, and angular speed
-    def calculate_action(self, displacement, linear_speed, angular_speed):
-        # Check if all values are in the lower range
-        # print("DISPLACEMENT_THRESHOLD_LOW:", DISPLACEMENT_THRESHOLD_LOW, "displacement:", displacement, "DISPLACEMENT_THRESHOLD_HIGH", DISPLACEMENT_THRESHOLD_HIGH)
-        # print("LINEAR_SPEED_THRESHOLD_LOW:", LINEAR_SPEED_THRESHOLD_LOW, "linear_speed:", linear_speed, "LINEAR_SPEED_THRESHOLD_HIGH", LINEAR_SPEED_THRESHOLD_HIGH)
-        # print("ANGULAR_SPEED_THRESHOLD_LOW:", ANGULAR_SPEED_THRESHOLD_LOW, "angular_speed:", abs(angular_speed), "ANGULAR_SPEED_THRESHOLD_HIGH", ANGULAR_SPEED_THRESHOLD_HIGH)
-
-
-        # if displacement < DISPLACEMENT_THRESHOLD_LOW and \
-        # linear_speed < LINEAR_SPEED_THRESHOLD_LOW and \
-        # abs(angular_speed) < ANGULAR_SPEED_THRESHOLD_LOW:
-        if displacement[2] < DISPLACEMENT_THRESHOLD_LOW:
-            # print("Safe")
-            return 0.0  # Set action to 0
-
-        # Check if any value exceeds the higher thresholds
-        # if displacement > DISPLACEMENT_THRESHOLD_HIGH or \
-        # linear_speed > LINEAR_SPEED_THRESHOLD_HIGH or \
-        # abs(angular_speed) > ANGULAR_SPEED_THRESHOLD_HIGH:
-        if displacement[2] > DISPLACEMENT_THRESHOLD_HIGH:
-            # print("Failure")
-            return 1.0  # Set action to 1
-
-        # If the values fall between thresholds, interpolate a reasonable action
-        # Normalize between 0 and 1 based on distance from the lower to upper threshold
-        # displacement_factor = (displacement - DISPLACEMENT_THRESHOLD_LOW) / \
-        #                     (DISPLACEMENT_THRESHOLD_HIGH - DISPLACEMENT_THRESHOLD_LOW)
-        # linear_speed_factor = (linear_speed - LINEAR_SPEED_THRESHOLD_LOW) / \
-        #                     (LINEAR_SPEED_THRESHOLD_HIGH - LINEAR_SPEED_THRESHOLD_LOW)
-        # angular_speed_factor = (abs(angular_speed) - ANGULAR_SPEED_THRESHOLD_LOW) / \
-        #                     (ANGULAR_SPEED_THRESHOLD_HIGH - ANGULAR_SPEED_THRESHOLD_LOW)
-
-        # Combine the factors with an average, assuming equal importance
-        # action_value = (displacement_factor + linear_speed_factor + angular_speed_factor) / 3.0
-        # print("Risk")
-        # return action_value
-        
-        # Just for debugging
-        return 0.5
-
-    def randomize_camera_position(self):
-        """
-        Improved camera position randomization with proper orientation handling
-        and direct camera parameter updates.
-        """
-        # Get camera id
-        cam_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_CAMERA, 'top_camera')
-        
-        # Define ranges for camera randomization
-        # Wider ranges for more noticeable variation
-        pos_ranges = {
-            'x': (-0.3, 0.3),    # Wider range for x offset
-            'y': (-0.5, -0.3),    # Wider range for y offset
-            'z': (2.0, 2.5),     # Height variation
-            'azimuth': (-15, 15),  # Degrees of rotation around vertical axis
-            'elevation': (-1, 0), # Degrees of tilt
-        }
-        
-        # Randomly sample camera parameters
-        pos_x = random.uniform(*pos_ranges['x'])
-        pos_y = random.uniform(*pos_ranges['y'])
-        pos_z = random.uniform(*pos_ranges['z'])
-        
-        # Convert angles to radians for rotation calculation
-        azimuth = np.radians(random.uniform(*pos_ranges['azimuth']))
-        elevation = np.radians(random.uniform(*pos_ranges['elevation']))
-        
-        # Update camera position
-        self.model.cam_pos[cam_id] = np.array([pos_x, pos_y, pos_z])
-        
-        # Calculate rotation matrix
-        # First rotate around Y axis (elevation)
-        Ry = np.array([
-            [np.cos(elevation), 0, np.sin(elevation)],
-            [0, 1, 0],
-            [-np.sin(elevation), 0, np.cos(elevation)]
-        ])
-        
-        # Then rotate around Z axis (azimuth)
-        Rz = np.array([
-            [np.cos(azimuth), -np.sin(azimuth), 0],
-            [np.sin(azimuth), np.cos(azimuth), 0],
-            [0, 0, 1]
-        ])
-        
-        # Combine rotations
-        R = Rz @ Ry
-        
-        # Convert rotation matrix to quaternion
-        # Using simplified method since we know R is orthogonal
-        trace = np.trace(R)
-        if trace > 0:
-            S = np.sqrt(trace + 1.0) * 2
-            qw = 0.25 * S
-            qx = (R[2, 1] - R[1, 2]) / S
-            qy = (R[0, 2] - R[2, 0]) / S
-            qz = (R[1, 0] - R[0, 1]) / S
-        else:
-            if R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
-                S = np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]) * 2
-                qw = (R[2, 1] - R[1, 2]) / S
-                qx = 0.25 * S
-                qy = (R[0, 1] + R[1, 0]) / S
-                qz = (R[0, 2] + R[2, 0]) / S
-            elif R[1, 1] > R[2, 2]:
-                S = np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]) * 2
-                qw = (R[0, 2] - R[2, 0]) / S
-                qx = (R[0, 1] + R[1, 0]) / S
-                qy = 0.25 * S
-                qz = (R[1, 2] + R[2, 1]) / S
-            else:
-                S = np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]) * 2
-                qw = (R[1, 0] - R[0, 1]) / S
-                qx = (R[0, 2] + R[2, 0]) / S
-                qy = (R[1, 2] + R[2, 1]) / S
-                qz = 0.25 * S
-        
-        # Update camera quaternion
-        self.model.cam_quat[cam_id] = np.array([qw, qx, qy, qz])
-        
-        # Make sure camera is looking at the scene center
-        target_pos = np.array([0, 0, 0])  # Scene center
-        cam_pos = self.model.cam_pos[cam_id]
-        forward = target_pos - cam_pos
-        forward = forward / np.linalg.norm(forward)
-        
-        # Update camera orientation to look at target
-        self.model.cam_pos[cam_id] = cam_pos
-        
-        # Force update scene
-        mj.mj_forward(self.model, self.data)
+        return end_effector_pos, transform_data_3D
 
     def get_camera_image(self, camera_name):
         """
-        Get image from the specified camera with proper handling of randomized parameters.
+        Get two images from the specified camera - one for fixed panel and one for object.
         
         Args:
             camera_name (str): Name of the camera to capture from
             
         Returns:
-            np.ndarray: RGB image array of shape (height, width, 3)
+            tuple: Two RGB image arrays (fixed_panel_img, object_img) each of shape (height, width, 3)
         """
+        # Skip if cameras are disabled
+        if not self.enable_cameras:
+            return None, None
+    
         # Get camera id
         cam_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_CAMERA, camera_name)
         if cam_id < 0:
             raise ValueError(f"Camera '{camera_name}' not found in model")
         
         # Get image dimensions
-        width = 224 #640  # Set to be divisible by 16
-        height = 224 #640  # Set to be divisible by 16
+        image_size = self.config.get('camera_related', {}).get('camera_image_size', 'N/A')
         
-        # Initialize image array
-        img = np.zeros((height, width, 3), dtype=np.uint8)
+        # Initialize image arrays for both fixed panel and object
+        fixed_panel_img = np.zeros((image_size[0], image_size[1], 3), dtype=np.uint8)
+        object_img = np.zeros((image_size[0], image_size[1], 3), dtype=np.uint8)
         
         # Create camera instance
         cam = mj.MjvCamera()
-        
         # Copy camera configuration from model to camera instance
         cam.type = mj.mjtCamera.mjCAMERA_FIXED
         cam.fixedcamid = cam_id
         
-        # Ensure camera parameters are properly set
-        cam.distance = np.linalg.norm(self.model.cam_pos[cam_id])  # Distance from target
-        cam.azimuth = np.degrees(np.arctan2(self.model.cam_pos[cam_id][1], 
-                                        self.model.cam_pos[cam_id][0]))  # Rotation around z-axis
-        cam.elevation = -np.degrees(np.arctan2(self.model.cam_pos[cam_id][2], 
-                                            np.sqrt(np.sum(self.model.cam_pos[cam_id][:2]**2))))  # Angle from xy-plane
+        # Save current geom groups visibility
+        original_geomgroup = self.opt.geomgroup.copy()
         
-        # Update scene with camera
-        mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
-                        mj.mjtCatBit.mjCAT_ALL.value, self.scene)
+        if camera_name in ['top_camera', 'front_camera']:
+            # Set up viewport
+            viewport = mj.MjrRect(0, 0, image_size[1], image_size[0])
+            
+            # First render - fixed panel only
+            self.opt.geomgroup[:] = 0  # Hide all groups
+            self.opt.geomgroup[1] = 1  # Show only fixed panel
+            
+            # Update and render scene for fixed panel
+            mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
+                            mj.mjtCatBit.mjCAT_ALL.value, self.scene)
+            mj.mjr_render(viewport, self.scene, self.context)
+            
+            # Read pixels for fixed panel image
+            mj.mjr_readPixels(fixed_panel_img, None, viewport, self.context)
+            
+            # Second render - object only
+            self.opt.geomgroup[:] = 0  # Hide all groups
+            self.opt.geomgroup[2] = 1  # Show only object
+            
+            # Update and render scene for object
+            mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
+                            mj.mjtCatBit.mjCAT_ALL.value, self.scene)
+            mj.mjr_render(viewport, self.scene, self.context)
+            
+            # Read pixels for object image
+            mj.mjr_readPixels(object_img, None, viewport, self.context)
+            
+            # Restore original visibility settings
+            self.opt.geomgroup[:] = original_geomgroup
+            
+            return fixed_panel_img, object_img
         
-        # Set up viewport
-        viewport = mj.MjrRect(0, 0, width, height)
-        
-        # Render scene
-        mj.mjr_render(viewport, self.scene, self.context)
-        
-        # Read pixels from framebuffer
-        mj.mjr_readPixels(img, None, viewport, self.context)
-        
-        # Flip image vertically (MuJoCo returns image upside down)
-        img = img[::-1, :, :]
-        
-        # Optional: Add debug information to verify camera parameters
-        if False:  # Set to True when debugging
-            print(f"Camera {camera_name} parameters:")
-            print(f"Position: {self.model.cam_pos[cam_id]}")
-            print(f"Quaternion: {self.model.cam_quat[cam_id]}")
-            print(f"Distance: {cam.distance}")
-            print(f"Azimuth: {cam.azimuth}")
-            print(f"Elevation: {cam.elevation}")
-        
-        return img
+        return None, None  # Return None for both images if camera name not recognized
 
-
-    def validate_episode(self, episode):
-        required_keys = ['image', 'state', 'action', 'language_instruction']
-        
-        for i, item in enumerate(episode):
-            # Check if all required keys are present
-            for key in required_keys:
-                if key not in item:
-                    print(f"Episode {i} is missing key: {key}")
-                    return False
-                
-                # Check if the value is not None or empty
-                value = item[key]
-                if value is None:
-                    print(f"Episode {i} has None value for key: {key}")
-                    return False
-                
-                # Additional checks for specific keys
-                if key == 'image' and not isinstance(value, (np.ndarray, list)):
-                    print(f"Episode {i} has invalid type for 'image': {type(value)}")
-                    return False
-                
-                if key == 'state' and (not isinstance(value, np.ndarray) or value.size == 0):
-                    print(f"Episode {i} has invalid or empty 'state': {value}")
-                    return False
-                
-                # if i == 124:
-                # if key == 'action':
-                #     print("isinstance(value, np.ndarray)", isinstance(value, np.ndarray))
-                #     print("value.shape", value.shape)
-                if key == 'action' and (not isinstance(value, np.ndarray) or value.shape != (1,)):
-                    print(f"Episode {i} has invalid 'action': {value}")
-                    return False
-                
-                if key == 'language_instruction' and not isinstance(value, str):
-                    print(f"Episode {i} has invalid 'language_instruction': {value}")
-                    return False
-
-        print("All episodes are valid.")
-        return True
-
-    def simulate(self, dataset="train"):
+    def simulate(self):
         video_dir = './demo'
-        video_filename = os.path.join(video_dir, 'simulation_video.mp4')
-        top_camera_video_filename = os.path.join(video_dir, 'top_camera_video.mp4')
-
-        writer = imageio.get_writer(video_filename, fps=60)
-        top_camera_writer = imageio.get_writer(top_camera_video_filename, fps=60, macro_block_size=16)
-
-        # Create directory if it does not exist
         os.makedirs(video_dir, exist_ok=True)
+        if self.enable_cameras:
+            top_camera_video_filename = os.path.join(video_dir, 'top_camera_video.mp4')
+            front_camera_video_filename = os.path.join(video_dir, 'front_camera_video.mp4')
 
-        # Transition to the 'start' joint pose from traj.txt
-        start_pose = self.trajectory[0]  # 'start' joint pose from traj.txt
-        print(f"Moving to the 'start' pose: {start_pose}")
-        # for joint_idx, position in enumerate(start_pose):
-        #     self.data.qpos[joint_idx] = position  # Directly set the joint positions
+            # writer = imageio.get_writer(video_filename, fps=60)
+            fps = self.config.get('simulation_related', {}).get('video_writer_fps', 'N/A')
+            top_panel_writer = imageio.get_writer(top_camera_video_filename, fps=fps, macro_block_size=16)
+            top_object_writer = imageio.get_writer(top_camera_video_filename, fps=fps, macro_block_size=16)
+            front_panel_writer = imageio.get_writer(front_camera_video_filename, fps=fps, macro_block_size=16)
+            front_object_writer = imageio.get_writer(top_camera_video_filename, fps=fps, macro_block_size=16)
 
-        # mj.mj_forward(self.model, self.data)  # Forward dynamics to update the simulation state
+        # Create data directories
+        os.makedirs(f"{self.config.get('simulation_related', {}).get('save_path', 'N/A')}/data/{self.dataset_type}_raw", exist_ok=True)
+        save_path = f"{self.config.get('simulation_related', {}).get('save_path', 'N/A')}/data/{self.dataset_type}_raw"
 
-        cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')
-        fixed_box_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_box')
-        # self.data.qpos[self.model.body_jntadr[cube_body_id]:self.model.body_jntadr[cube_body_id]+3] = [0.4, 0.45, 0.6]
-
-        self.positions = []
-        self.episode = []  # Reset episode data for each new episode
+        # Get object IDs
+        object_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'object_body')
+        fixed_panel_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_panel')
 
         # while not glfw.window_should_close(self.window):
-        if dataset == "train":
-            N_EPISODES = N_TRAIN_EPISODES
-        elif dataset == "val":
-            N_EPISODES = N_VAL_EPISODES
+        if self.dataset_type == "train":
+            n_episodes = self.config.get('simulation_related', {}).get('trajectories', {}).get('n_train_episodes', 'N/A')
+        elif self.dataset_type == "val":
+            n_episodes = self.config.get('simulation_related', {}).get('trajectories', {}).get('n_val_episodes', 'N/A')
+        else:
+            print(f"Unknown dataset type: {self.dataset_type}")
+            return
 
-        for episode_num in range(N_EPISODES):
+        episode_length = self.config.get('simulation_related', {}).get('trajectories', {}).get('episode_length', 'N/A')
+
+        for episode_num in range(n_episodes):
             
-            random_seed_tmp = random.randint(0, EPISODE_LENGTH)
-            print("random_seed_tmp", random_seed_tmp)
+            random_seed_tmp = random.randint(0, episode_length)
+            print(f"Episode {episode_num+1}/{n_episodes}, random seed: {random_seed_tmp}")
+
+            # Initialize episode variables
             failure_time_step = -1
             first_failure_time_step = -1
-            cube_drop_time = 50
-            # Clear position data
+            object_drop_time = self.config.get('simulation_related', {}).get('object_drop_time', 'N/A')  # Steps to ignore while object is initially falling
             episode_filled_tag = False
 
-            # Initialize lists to store metrics
-            linear_velocities = []
-            angular_velocities = []
-            displacements = []
-            action_values = []
-            fixed_box_velocities = []
+            self.episode = []  # Reset episode data for each new episode
+        
+            # Initialize dummy contours for use when cameras are disabled
+            dummy_contour = np.array([[[0, 0]], [[0, 10]], [[10, 10]], [[10, 0]]], dtype=np.int32)
 
-            for overal_step_num in range(EPISODE_LENGTH):
-
+            # Main simulation loop for backtracking
+            for overal_step_num in range(episode_length):
                 episode_failed_tag = False
                 backtracking_steps = 5
 
@@ -743,58 +600,98 @@ class Projectile(MuJoCoBase):
                 keyframe_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_KEY, 'home')
                 if keyframe_id >= 0:
                     mj.mj_resetDataKeyframe(self.model, self.data, keyframe_id)
+
                 # Reset to start pose again at the beginning of each episode
+                start_pose = self.trajectory[0]  # 'start' joint pose from traj.txt
                 for joint_idx, position in enumerate(start_pose):
                     self.data.qpos[joint_idx] = position
 
                 mj.mj_forward(self.model, self.data)
                 
-                # random_seed_tmp = RANDOM_EPISODE_TMP
-                # if overal_step_num > 0:
-                #     random_seed_tmp = random.randint(0, EPISODE_LENGTH)
+                self.reset(self.ramdom_episode if episode_num == 0 else random_seed_tmp)  # Reset simulation
 
-                self.reset(RANDOM_EPISODE_TMP if episode_num == 0 else random_seed_tmp)  # Reset simulation
-                # DEBUG
-                # self.reset(RANDOM_EPISODE_TMP[1])
-
-                for step_num in range(EPISODE_LENGTH):
-
+                # Inner simulation loop
+                for step_num in range(episode_length):
                     simstart = self.data.time
-
                     while (self.data.time - simstart < 1.0/60.0):
                         # Step simulation environment
                         mj.mj_step(self.model, self.data)
 
-                        # Record the cube's position
-                        cube_pos = self.data.qpos[mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'free_cube')]
-                        self.positions.append(cube_pos.copy())
+                        # Record the object's position
+                        object_pos = self.data.qpos[mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, self.config.get('object_related', {}).get('current_object', 'N/A'))]
 
                     # get framebuffer viewport
                     viewport_width, viewport_height = glfw.get_framebuffer_size(self.window)
                     viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
-
                     # Update scene
                     mj.mjv_updateScene(self.model, self.data, self.opt, None, self.cam,
                                     mj.mjtCatBit.mjCAT_ALL.value, self.scene)
-                    
-                    # Add markers to scene
-                    self.add_markers_to_scene()
-                    
-                    # get framebuffer viewport
-                    viewport_width, viewport_height = glfw.get_framebuffer_size(self.window)
-                    viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
-
+                    # Render scene
                     mj.mjr_render(viewport, self.scene, self.context)
+                    
+                    # Create an array to store the rendered image
+                    viewport_img = np.zeros((viewport_height, viewport_width, 3), dtype=np.uint8)
 
-                    # Capture the current frame
-                    framebuffer = np.zeros((viewport_height, viewport_width, 3), dtype=np.uint8)
-                    mj.mjr_readPixels(framebuffer, None, viewport, self.context)
-                    framebuffer = framebuffer[::-1, :, :]  # Reverse the order of rows
-                    writer.append_data(framebuffer)
+                    # Read pixels from the framebuffer into the array
+                    mj.mjr_readPixels(viewport_img, None, viewport, self.context)
 
-                    # Get top camera frame
-                    top_camera_frame = self.get_camera_image('top_camera')
-                    top_camera_writer.append_data(top_camera_frame)
+                    # Convert from OpenGL format (bottom-origin) to OpenCV format (top-origin)
+                    viewport_img = viewport_img[::-1, :, :]
+
+                    # Convert from RGB to BGR for OpenCV
+                    viewport_img_bgr = cv2.cvtColor(viewport_img, cv2.COLOR_RGB2BGR)
+
+                    # Initialize contour variables with default values
+                    top_panel_contour = dummy_contour
+                    top_object_contour = dummy_contour
+                    front_panel_contour = dummy_contour
+                    front_object_contour = dummy_contour
+
+                    # Camera operations only if enabled
+                    if self.enable_cameras:
+                        # Get top camera frame
+                        top_panel_frame, top_object_frame = self.get_camera_image('top_camera')
+                        # top_camera_frame = top_camera_frame[::-1, :, :]
+                        if top_panel_frame is not None and top_object_frame is not None:
+                            # Process panel frame
+                            top_panel_writer.append_data(top_panel_frame)
+                            top_panel_view = cv2.cvtColor(top_panel_frame, cv2.COLOR_RGB2BGR)
+                            top_panel_mask, top_panel_contour, top_panel_filtered = process_camera_frame(top_panel_view)
+                            
+                            # Process object frame
+                            top_object_writer.append_data(top_object_frame)
+                            top_object_view = cv2.cvtColor(top_object_frame, cv2.COLOR_RGB2BGR)
+                            top_object_mask, top_object_contour, top_object_filtered = process_camera_frame(top_object_view)
+
+                        # Get front camera frames
+                        front_panel_frame, front_object_frame = self.get_camera_image('front_camera')
+                        if front_panel_frame is not None and front_object_frame is not None:
+                            # Rotate and process panel frame
+                            front_panel_frame = cv2.rotate(front_panel_frame, cv2.ROTATE_90_CLOCKWISE)
+                            front_panel_writer.append_data(front_panel_frame)
+                            front_panel_view = cv2.cvtColor(front_panel_frame, cv2.COLOR_RGB2BGR)
+                            front_panel_mask, front_panel_contour, front_panel_filtered = process_camera_frame(front_panel_view)
+                            
+                            # Rotate and process object frame
+                            front_object_frame = cv2.rotate(front_object_frame, cv2.ROTATE_90_CLOCKWISE)
+                            front_object_writer.append_data(front_object_frame)
+                            front_object_view = cv2.cvtColor(front_object_frame, cv2.COLOR_RGB2BGR)
+                        front_object_mask, front_object_contour, front_object_filtered = process_camera_frame(front_object_view)
+
+                    # Process both frames
+
+                    # Display images
+                    if self.display_camera:
+                        if self.display_camera:
+                            cv2.imshow('MuJoCo Main View', viewport_img_bgr)
+                            cv2.imshow('Top Camera Panel View', top_panel_filtered)
+                            cv2.imshow('Top Camera Object View', top_object_filtered)
+                            cv2.imshow('Front Camera Panel View', front_panel_filtered)
+                            cv2.imshow('Front Camera Object View', front_object_filtered)
+
+                        # Check for 'q' key press to quit
+                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                            break
 
                     # swap OpenGL buffers (blocking call due to v-sync)
                     glfw.swap_buffers(self.window)
@@ -802,271 +699,110 @@ class Projectile(MuJoCoBase):
                     # process pending GUI events, call GLFW callbacks
                     glfw.poll_events()
 
-                    # skip the first cube_drop_time steps because the cube is falling from the sky
-                    if step_num >= cube_drop_time:
+                    # skip the first object_drop_time steps because the object is falling from the sky
+                    if step_num >= object_drop_time:
                         # print("step_num", step_num)
+                        end_effector_pos, transform_data_3D = self.data_collection(object_body_id, fixed_panel_body_id)
+                        displacement = transform_data_3D['relative_position']
 
-                        state, fixed_box_linear_speed, transforms = self.data_collection(cube_body_id, fixed_box_body_id)
-                        displacement = [state[0], state[1], state[2]]
-                        linear_speed = [state[3], state[4], state[5]]
-                        angular_speed = [state[6], state[7], state[8]]
+                        # Get current positions
+                        object_pos = self.data.xpos[object_body_id].copy()
+                        panel_pos = self.data.xpos[fixed_panel_body_id].copy()
 
-                        if displacement[2] >= DISPLACEMENT_THRESHOLD_HIGH:
-                            if not self.is_high_threshold_step_set:
-                                self.high_threshold_step = step_num  # Mark the step for interpolation endpoint
-                                self.is_high_threshold_step_set = True
-
-                        action_value = self.calculate_action(displacement, linear_speed, angular_speed)
-
+                        failure_phase_value = calculate_failure_phase(displacement, object_pos, panel_pos)
 
                         # Historical backtracking for backtracking_steps time steps
                         # print("episode_filled_tag!!!!!!", episode_filled_tag)
                         if episode_filled_tag:
-                            if step_num < (failure_time_step - backtracking_steps):
+                            if step_num == (failure_time_step - backtracking_steps):
+                                self.activate_emergency_stop()  # manually active the e-stop, robot pose hold
                                 continue
-                            elif step_num == (failure_time_step - backtracking_steps):
-                                self.activate_emergency_stop()
-                            elif action_value == 1.0: # still failed enven e-stop in advance
+                            if step_num > (failure_time_step - backtracking_steps) and failure_phase_value == 1.0: # after e-stop, still failed enven e-stop in advance
                                 episode_failed_tag = True
-                                continue
+                            continue
+                        else:
+                            # Once if failure_phase_value == 1 for the first time, it will always == 1.
+                            # If failed, apply e-stop
+                            # print("failure_time_step!!!!!!", failure_time_step)
+                            if failure_phase_value == 1.0 and not self.emergency_stop and not self.emergency_stop_pos_first_set:
+                                # print("!!!!!!!!self.emergency_stop", self.emergency_stop)
+                                self.activate_emergency_stop()  # automatically active the e-stop, robot pose hold
+                                episode_failed_tag = True
+                                failure_time_step = step_num
+                                # object_drop_time is for avoid counting in the initial falling of the object
+                                first_failure_time_step = step_num - object_drop_time # + episode_num * (self.config.get('trajectories', {}).get('episode_length', 'N/A') - object_drop_time)
 
-                        # Once if action_value == 1 for the first time, it will always == 1.
-                        # If failed, apply e-stop
-                        # print("failure_time_step!!!!!!", failure_time_step)
-                        if action_value == 1.0 and not self.emergency_stop:
-                            # print("!!!!!!!!self.emergency_stop", self.emergency_stop)
-                            self.activate_emergency_stop()
-                            episode_failed_tag = True
-                            failure_time_step = step_num
-                            # cube_drop_time is for avoid counting in the initial falling of the cube
-                            first_failure_time_step = step_num - cube_drop_time # + episode_num * (EPISODE_LENGTH - cube_drop_time)
-
-                        if not episode_filled_tag:
                             self.episode.append({
-                            'image': top_camera_frame,
+                            # 'image': top_panel_frame,
                             # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
-                            'state': np.asarray(state, dtype=np.float32),  # Save the padded state
-                            'action': np.asarray([action_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
-                            'language_instruction': 'dummy instruction',
+                            'time_step': np.asarray(step_num, dtype=np.float32),
+                            'object_top_contour': np.asarray(top_object_contour, dtype=np.float32),
+                            'object_front_contour': np.asarray(front_object_contour, dtype=np.float32),
+                            'gripper_top_contour': np.asarray(top_panel_contour, dtype=np.float32),
+                            'gripper_front_contour': np.asarray(front_panel_contour, dtype=np.float32),
+                            'end_effector_pos': np.asarray(end_effector_pos, dtype=np.float32),
+                            'failure_phase_value': np.asarray([failure_phase_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
+                            # 'language_instruction': 'dummy instruction',
                                 })
                             # For plot     
-                            print("action_value!!!!!!!!!!!!step_num - cube_drop_time", step_num - cube_drop_time, action_value) # + episode_num * (EPISODE_LENGTH - cube_drop_time), action_value)
-                            displacements.append([state[0], state[1], state[2]])  # Displacement
-                            linear_velocities.append([state[3], state[4], state[5]])  # Linear velocity
-                            angular_velocities.append([state[6], state[7], state[8]])  # Angular velocity
-                            action_values.append(action_value) # Action value
-                            fixed_box_velocities.append(fixed_box_linear_speed)
+                            print("failure_phase_value!!!!!!!!!!!!step_num - object_drop_time", step_num - object_drop_time, failure_phase_value) # + episode_num * (self.config.get('trajectories', {}).get('episode_length', 'N/A') - object_drop_time), failure_phase_value)
+                            
+                # After a round of simulation: 
                 episode_filled_tag = True
                 print("len(self.episode)", len(self.episode), "episode_filled_tag", episode_filled_tag, "episode_failed_tag", episode_failed_tag, "failure_time_step", failure_time_step)
 
-                if episode_failed_tag:
-                    failure_time_step -= backtracking_steps
-                    # cube_drop_time is for avoid counting in the initial falling of the cube
-                    failure_time_step_trim = failure_time_step - cube_drop_time #  + episode_num * (EPISODE_LENGTH - cube_drop_time)
-                    # print("episode_num", episode_num)
-                    # print("N_EPISODES", N_EPISODES)
-                    print("first_failure_time_step", first_failure_time_step)
-                    print("failure_time_step_trim", failure_time_step_trim)
-                    print("self.episode[failure_time_step_trim-1]['action']", self.episode[failure_time_step_trim-1]['action'])
-                    print("self.episode[failure_time_step_trim]['action']", self.episode[failure_time_step_trim]['action'])
-                    self.episode[failure_time_step_trim]['action'] = np.asarray([1.0], dtype=np.float32)
-                    action_values[failure_time_step_trim] = 1
-                    for idx in range(failure_time_step_trim, first_failure_time_step):
-                        # print("idx", idx)
-                        self.episode[idx]['action'] = np.asarray([1.0], dtype=np.float32)
-                        action_values[idx] = 1  
-                elif episode_filled_tag and first_failure_time_step != -1: # if not failed after backtracking, the time step to apply e-stop is safe, backtracking over
-                    self.episode[failure_time_step_trim]['action'] = np.asarray([0.0], dtype=np.float32)
-                    action_values[failure_time_step_trim] = 0
+                failure_time_step -= backtracking_steps
+                # object_drop_time is for avoid counting in the initial falling of the object
+                failure_time_step_trim = failure_time_step - object_drop_time #  + episode_num * (self.config.get('trajectories', {}).get('episode_length', 'N/A') - object_drop_time)
+                # print("episode_num", episode_num)
+                # print("n_episodes", n_episodes)
+                print("first_failure_time_step", first_failure_time_step)
+                print("failure_time_step_trim", failure_time_step_trim)
 
-                    # Interpolate values from 0 to 1 for latest failure_time_step to first_failure_time_step
-                    interpolated_values = linear_interpolation(first_failure_time_step, failure_time_step_trim)
-                    # Update the "action" key for the dictionaries between i and k
+                # If no failure occurred at all during the first attempt
+                if first_failure_time_step <= -1:
+                    print("No failure occurred at all")
+                    break
+                
+                # There is failure occurred
+                if episode_failed_tag:
+                    # The initial condition will lead to failure itself
+                    if failure_time_step_trim <= -1:
+                        break
+                    else:
+                        continue
+                # After a few rounds of backtracking (no failure after applying e-stop)
+                elif first_failure_time_step != -1: # if not failed after backtracking, the time step to apply e-stop is safe, backtracking over
+                    interpolated_values = flat_interpolation(first_failure_time_step, failure_time_step_trim)
+                    # Update the 'failure_phase_value' key for the dictionaries between i and k
                     for idx, value in enumerate(interpolated_values, start=failure_time_step_trim):
                         # print("value", value)
-                        self.episode[idx]["action"] = np.asarray([value], dtype=np.float32)
-                        action_values[idx] = value
+                        self.episode[idx]['failure_phase_value'] = np.asarray([value], dtype=np.float32)
                     break
-                elif episode_filled_tag and first_failure_time_step == -1:
-                    break
+                
             
-            # Validate the completeness
-            self.validate_episode(self.episode)
-
-            # if dataset == "train":
-            #     print("Generating train examples...")
-            #     np.save(f'demo/data/train/episode_{episode_num}.npy', self.episode)
-            # elif dataset == "val":
-            #     print("Generating val examples...")
-            #     np.save(f'demo/data/val/episode_{episode_num}.npy', self.episode)
-
             # Plot after simulation
-            self.plot_metrics(linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities, episode_num)
+            plot_raw_metrics(self.episode, episode_num, self.dataset_type, save_path)
 
+            if self.config.get('simulation_related', {}).get('save_data', 'N/A'):
+                print(f"Generating {self.dataset_type} raw examples...")
+                np.save(f"{save_path}/episode_{episode_num}_raw.npy", self.episode)
 
-        writer.close()
-        top_camera_writer.close()
+        # writer.close()
+        if self.display_camera:
+            top_panel_writer.close()
+            top_object_writer.close()
+            front_panel_writer.close()
+            front_object_writer.close()
         glfw.terminate()
-        # self.save_trajectory()
-
-
-    def save_trajectory(self):
-        """
-        Save or plot the trajectory of the cube.
-        """
-        positions = np.array(self.positions)
-        if len(positions) > 0:
-            # Save to a file
-            np.savetxt('./demo/cube_trajectory.txt', positions)
-
-            # # Plot the trajectory
-            # plt.figure(figsize=(10, 6))
-            # plt.plot(positions[:, 0], positions[:, 1], label='Trajectory')
-            # plt.xlabel('X Position')
-            # plt.ylabel('Y Position')
-            # plt.title('Trajectory of the Cube')
-            # plt.legend()
-            # plt.grid(True)
-            # plt.savefig('cube_trajectory.png')
-            # plt.show()
-
-    def plot_metrics(self, linear_velocities, angular_velocities, displacements, action_values, fixed_box_velocities, episode_num):
-        """
-        Plot linear velocity, angular velocity, and displacement over time.
-        """
-        time_steps = range(len(linear_velocities))
-        print("range", range(len(linear_velocities)), range(len(angular_velocities)), range(len(displacements)), range(len(action_values)))  # 800
-
-        # Convert to NumPy array
-        linear_velocities = np.array(linear_velocities)
-        angular_velocities = np.array(angular_velocities)
-        displacements = np.array(displacements)
-        fixed_box_velocities = np.array(fixed_box_velocities)
-
-
-        pic_number = 13
-        pic_idx = 0
-        plt.figure(figsize=(pic_number*4, pic_number*4))
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, linear_velocities[:, 0], label='Linear Velocity X')
-        plt.xlabel('Time Step')
-        plt.ylabel('Linear Velocity X (m/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, linear_velocities[:, 1], label='Linear Velocity Y')
-        plt.xlabel('Time Step')
-        plt.ylabel('Linear Velocity Y (m/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, linear_velocities[:, 2], label='Linear Velocity Z')
-        plt.xlabel('Time Step')
-        plt.ylabel('Linear Velocity Z (m/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, angular_velocities[:, 0], label='Angular Velocity Theta', color='orange')
-        plt.xlabel('Time Step')
-        plt.ylabel('Angular Velocity Theta (rad/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, angular_velocities[:, 1], label='Angular Velocity Phi', color='orange')
-        plt.xlabel('Time Step')
-        plt.ylabel('Angular Velocity Phi (rad/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, angular_velocities[:, 2], label='Angular Velocity Psi', color='orange')
-        plt.xlabel('Time Step')
-        plt.ylabel('Angular Velocity Psi (rad/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, displacements[:, 0], label='Displacement X', color='green')
-        plt.xlabel('Time Step')
-        plt.ylabel('Displacement X (m)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, displacements[:, 1], label='Displacement Y', color='green')
-        plt.xlabel('Time Step')
-        plt.ylabel('Displacement Y (m)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, displacements[:, 2], label='Displacement Z', color='green')
-        plt.xlabel('Time Step')
-        plt.ylabel('Displacement Z (m)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, fixed_box_velocities[:, 0], label='Fixed_box_values X', color='blue')
-        plt.xlabel('Time Step')
-        plt.ylabel('Fixed_box_values X (m/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, fixed_box_velocities[:, 1], label='Fixed_box_values Y', color='blue')
-        plt.xlabel('Time Step')
-        plt.ylabel('Fixed_box_values Y (m/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, fixed_box_velocities[:, 2], label='Fixed_box_values Z', color='blue')
-        plt.xlabel('Time Step')
-        plt.ylabel('Fixed_box_values Z (m/s)')
-        plt.legend()
-        plt.grid()
-
-        pic_idx += 1
-        plt.subplot(pic_number, 1, pic_idx)
-        plt.plot(time_steps, action_values, label='Risk value', color='red')
-        plt.xlabel('Time Step')
-        plt.ylabel('Risk value')
-        plt.legend()
-        plt.grid()
-
-        plt.tight_layout()
-        # plt.show()
-        plt.savefig('./demo/cube_trajectory_{}.png'.format(episode_num))
-
-def main():
-    xml_path = "./model/universal_robots_ur5e/test_scene.xml"
-    traj_path = "../ur5-scripts/traj_20250209.txt"  # Adjust path as needed
-
-    os.makedirs('demo/data/train', exist_ok=True)
-    os.makedirs('demo/data/val', exist_ok=True)
-
-    sim = Projectile(xml_path, traj_path, initial_delay=2)
-    sim.reset(RANDOM_EPISODE_TMP)
-    sim.simulate(sys.argv[1])
-
 
 if __name__ == "__main__":
-    main()
+    config = read_config("./demo/simulation_config.json")
+    if not config:  # Check if config is not None before trying to access values
+        print("Could not load configuration. Using default values.")
+    
+    ramdom_episode = random.randint(0, config.get('simulation_related', {}).get('trajectories', {}).get('episode_length', 'N/A')) # 67 86 #  109 282 731 344
+
+    sim = Projectile(config, ramdom_episode)
+    sim.reset(ramdom_episode)
+    sim.simulate()
