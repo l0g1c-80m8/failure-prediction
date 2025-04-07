@@ -47,6 +47,19 @@ def find_closest_points(src_points, dst_points):
     
     return src_matched, dst_matched
 
+
+def extract_points_from_mask(mask, show=False):
+    """Extracts edge points from a binary mask."""
+    
+    mask = cv2.medianBlur(mask, 7)
+    edges = cv2.Canny(mask.astype(np.uint8) * 255, 50, 100, L2gradient = True)
+    if show:
+        cv2.imshow(f"{datetime.datetime.now()}", edges)
+    points = np.column_stack(np.where(edges > 0))
+
+    # print(len(points))
+    return points
+
 def calculate_transformation(src_points, dst_points):
     """
     Calculate rigid transformation (R, t) between matched point sets.
