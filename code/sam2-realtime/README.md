@@ -35,6 +35,11 @@ cd checkpoints
 ```
 export DISPLAY=:1
 python3.10 zeyu_sam2_video_inference.py -v /home/zeyu/Downloads/record_gray_cylinder_0324/record_gray_cylinder/color_video.avi
+python3.10 zeyu_sam2_video_inference.py --input_type video --video_path /home/zeyu/Downloads/record_gray_cylinder_0324/record_gray_cylinder/color_video.avi
+
+python3.10 zeyu_sam2_video_inference.py --list_cameras
+python3.10 zeyu_sam2_video_inference.py --input_type realsense --camera_index 0
+python3.10 zeyu_sam2_video_inference.py --input_type realsense --camera_serial 151322067992
 ```
 
 Then SAM-2-online can be used in a few lines as follows for image and video and **camera** prediction.
