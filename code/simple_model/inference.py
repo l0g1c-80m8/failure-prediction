@@ -7,7 +7,7 @@ import argparse
 import matplotlib.pyplot as plt
 
 # Import the ResNet models
-from resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
+from simple_model.resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
 
 def load_model(model_path, model_type='ResNet18', input_channels=19, device=None):
     """
@@ -278,7 +278,7 @@ def single_window_inference_example(model_path, model_type='ResNet18', input_cha
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
-    # Load model
+    # Load modelinference
     print(f"Loading model from {model_path}")
     model = load_model(model_path, model_type, input_channels, device)
     

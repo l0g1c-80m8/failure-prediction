@@ -11,12 +11,16 @@ import colorsys
 import time
 import sys
 
-# Add project root to path to ensure imports work correctly. Get the absolute path to the project root
+# Add project root to path to ensure imports work correctly
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, '../..'))
 if project_root not in sys.path:
     sys.path.append(project_root)
-    
+
+# Import risk prediction functions using the correct paths
+from simple_model.inference import load_model, predict_from_states
+from simple_model.resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
+
 from sam2.build_sam import build_sam2_camera_predictor
 from simulation.demo.common_functions import (process_consecutive_frames, extract_points_from_mask, extract_transform_features)
 
@@ -46,6 +50,16 @@ parser.add_argument("--out_dir", type=str, default="../videos/")
 parser.add_argument("--model", "--model_checkpoint_path", type=str, default="../checkpoints/sam2.1_hiera_tiny.pt")
 parser.add_argument("--cfg", "--model_config_path", type=str, default="configs/sam2.1/sam2.1_hiera_t_512")
 
+# Risk prediction model parameters
+parser.add_argument("--risk_model_path", type=str, help="Path to the saved risk model weights")
+parser.add_argument("--risk_model_type", type=str, default='ResNet18', 
+                    choices=['ResNet18', 'ResNet34', 'ResNet50', 'ResNet101', 'ResNet152'], 
+                    help="Type of ResNet model for risk prediction")
+parser.add_argument("--input_channels", type=int, default=8, 
+                    help="Number of input channels for the risk model")
+parser.add_argument("--window_size", type=int, default=10, 
+                    help="Number of frames to use for feature extraction")
+
 args = parser.parse_args()
 
 # Check for list_cameras first
@@ -56,18 +70,26 @@ if args.list_cameras:
 elif args.input_type == "video" and args.video_path is None:
     parser.error("--video_path is required when input_type is 'video'")
 
+# Validate risk_model_path if not just listing cameras
+if not args.list_cameras and args.risk_model_path is None:
+    parser.error("--risk_model_path is required for risk prediction")
+
 # CUDA setup
 print(f"CUDA available: {torch.cuda.is_available()}")
 print(f"Current device: {torch.cuda.current_device()}")
 print(f"Device name: {torch.cuda.get_device_name()}")
 
-# Use bfloat16 for the entire notebook
-torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
+# We'll manage autocast more carefully to avoid BFloat16 issues
+use_autocast = torch.cuda.is_available() and torch.cuda.get_device_properties(0).major >= 8
 
-if torch.cuda.get_device_properties(0).major >= 8:
-    # Turn on tfloat32 for Ampere GPUs
+# Only use autocast for the SAM2 model, not for risk prediction
+if use_autocast:
+    print("Using bfloat16 autocast for SAM2 model (will be disabled for risk prediction)")
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
+else:
+    print("Not using autocast (not supported on this hardware)")
+
 
 def list_realsense_cameras():
     """List all connected RealSense cameras and their details."""
@@ -231,17 +253,75 @@ def get_frame_from_realsense(pipeline, align):
         # Return None to indicate failure
         return None, None
 
+def combine_features(object_features, panel_features):
+    """
+    Combine object and panel features for risk prediction input.
+    
+    Args:
+        object_features: Features extracted from object tracking
+        panel_features: Features extracted from panel tracking
+    
+    Returns:
+        combined_features: Combined feature array for risk prediction
+    """
+    # Convert features to numpy arrays if they are not already
+    if not isinstance(object_features, np.ndarray):
+        object_features = np.array(object_features)
+    if not isinstance(panel_features, np.ndarray):
+        panel_features = np.array(panel_features)
+    
+    # Ensure features are flattened
+    object_features = object_features.flatten()
+    panel_features = panel_features.flatten()
+    
+    # Concatenate features
+    combined_features = np.concatenate([object_features, panel_features])
+    
+    # Pad or truncate to match the expected input_channels
+    if len(combined_features) < args.input_channels:
+        # Pad with zeros if too short
+        padding = np.zeros(args.input_channels - len(combined_features))
+        combined_features = np.concatenate([combined_features, padding])
+    elif len(combined_features) > args.input_channels:
+        # Truncate if too long
+        combined_features = combined_features[:args.input_channels]
+    
+    # Reshape for model input: (input_channels, 1)
+    combined_features = combined_features.reshape(args.input_channels, 1)
+    
+    return combined_features
+
 def main():
     # List cameras if requested
     if args.list_cameras:
         list_realsense_cameras()
         return
     
-    # Load SAM2 model
+    # Load SAM2 model with autocast context for bfloat16 if supported
     sam2_checkpoint = args.model
     model_cfg = args.cfg
-    predictor = build_sam2_camera_predictor(model_cfg, sam2_checkpoint)
+    
+    # Use autocast only for SAM2 model loading
+    if use_autocast:
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            predictor = build_sam2_camera_predictor(model_cfg, sam2_checkpoint)
+    else:
+        predictor = build_sam2_camera_predictor(model_cfg, sam2_checkpoint)
+        
     print(f"Predictor device: {predictor.device}")
+    
+    # Load risk prediction model - in fp32 precision to avoid bfloat16 issues
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Loading risk prediction model from {args.risk_model_path}")
+    
+    # Use direct function call to avoid import issues
+    risk_model = load_model(
+        args.risk_model_path,
+        args.risk_model_type,
+        input_channels=args.input_channels,
+        device=device
+    )
+    print(f"Risk model loaded on {device}")
     
     # Initialize input source
     if args.input_type == "video":
@@ -282,7 +362,12 @@ def main():
     fcount = 0
     top_camera_object_contours = []
     top_camera_panel_contours = []
-    window = 30
+    window = args.window_size
+    
+    # Initialize risk prediction variables
+    risk_values = []
+    risk_history = []  # To store recent risk values for visualization
+    max_history = 50   # Maximum number of risk values to keep in history
     
     while True:
         # Get frame from appropriate source
@@ -361,8 +446,13 @@ def main():
                     )
         
         else:
-            # Tracking mode
-            out_obj_ids, out_mask_logits = predictor.track(frame_rgb)
+            # Tracking mode - use autocast for SAM2 tracking
+            if use_autocast:
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                    out_obj_ids, out_mask_logits = predictor.track(frame_rgb)
+            else:
+                out_obj_ids, out_mask_logits = predictor.track(frame_rgb)
+                
             print("out_obj_ids", out_obj_ids)
             
             # Process masks for visualization and feature extraction
@@ -401,6 +491,22 @@ def main():
                         
                         print("object_features", top_camera_object_features)
                         print("panel_features", top_camera_panel_features)
+                        
+                        # Risk prediction using the combined features
+                        combined_features = combine_features(top_camera_object_features, top_camera_panel_features)
+                        risk_value = predict_from_states(
+                            risk_model, 
+                            combined_features, 
+                            device=device, 
+                            channel=args.input_channels
+                        )
+                        
+                        risk_values.append(risk_value)
+                        risk_history.append(risk_value)
+                        if len(risk_history) > max_history:
+                            risk_history = risk_history[-max_history:]
+                        
+                        print(f"Predicted risk: {risk_value:.4f}")
                     else:
                         print("Not enough points to calculate transforms")
                 
@@ -415,6 +521,69 @@ def main():
         
         # Convert back to BGR for display and saving
         frame_display = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+        
+        # Add risk visualization to frame if we have risk values
+        if risk_values:
+            # Calculate a risk color based on value (green to red gradient)
+            current_risk = float(risk_values[-1])  # Convert to Python float
+            risk_color = (0, int(255*(1-current_risk)), int(255*current_risk))  # Convert to integers
+            
+            # Add risk value text to frame
+            cv2.putText(
+                frame_display, 
+                f"Risk: {current_risk:.4f}", 
+                (50, 50), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                1, 
+                risk_color, 
+                2, 
+                cv2.LINE_AA
+            )
+            
+            # Draw risk history graph in bottom right corner
+            if len(risk_history) > 1:
+                # Define graph area
+                graph_width = 200
+                graph_height = 100
+                graph_x = frame_width - graph_width - 20
+                graph_y = frame_height - graph_height - 20
+                
+                # Draw graph background
+                cv2.rectangle(
+                    frame_display, 
+                    (graph_x, graph_y), 
+                    (graph_x + graph_width, graph_y + graph_height), 
+                    (0, 0, 0), 
+                    -1
+                )
+                
+                # Draw graph outline
+                cv2.rectangle(
+                    frame_display, 
+                    (graph_x, graph_y), 
+                    (graph_x + graph_width, graph_y + graph_height), 
+                    (255, 255, 255), 
+                    1
+                )
+                
+                # Draw risk history line
+                risk_points = []
+                for i, risk in enumerate(risk_history):
+                    x = graph_x + int((i / (len(risk_history) - 1)) * graph_width) if len(risk_history) > 1 else graph_x
+                    y = graph_y + graph_height - int(risk * graph_height)
+                    risk_points.append((x, y))
+                
+                # Draw risk line with dynamic color
+                for i in range(len(risk_points) - 1):
+                    risk_val = float(risk_history[i])
+                    line_color = (0, int(255*(1-risk_val)), int(255*risk_val))  # Convert to integers
+                    cv2.line(
+                        frame_display, 
+                        risk_points[i], 
+                        risk_points[i+1], 
+                        line_color, 
+                        2
+                    )
         
         # Display frame
         cv2.imshow("frame", frame_display)
@@ -435,6 +604,12 @@ def main():
     
     out.release()
     cv2.destroyAllWindows()
+    
+    # Save risk values to file if available
+    if risk_values and args.out_dir:
+        risk_file = os.path.join(args.out_dir, 'risk_values.npy')
+        np.save(risk_file, np.array(risk_values))
+        print(f"Saved risk values to {risk_file}")
 
 if __name__ == "__main__":
     main()

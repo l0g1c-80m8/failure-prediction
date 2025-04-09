@@ -39,7 +39,8 @@ python3.10 zeyu_sam2_video_inference.py --input_type video --video_path /home/ze
 
 python3.10 zeyu_sam2_video_inference.py --list_cameras
 python3.10 zeyu_sam2_video_inference.py --input_type realsense --camera_index 0
-python3.10 zeyu_sam2_video_inference.py --input_type realsense --camera_serial 151322067992
+python3.10 zeyu_sam2_video_inference.py --input_type realsense --camera_serial 217222067304
+python3.10 zeyu_sam2_video_risk_inference.py --input_type realsense --camera_serial 217222067304 --risk_model_path /home/zeyu/PHD_LAB/Material_handling_2024/zeyu-failure-prediction/code/simple_model/best_model_ResNet18.pth
 ```
 
 Then SAM-2-online can be used in a few lines as follows for image and video and **camera** prediction.
