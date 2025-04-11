@@ -11,13 +11,13 @@ sudo apt-get -y install cudnn-cuda-12
 
 # Python inference
 ```
-# python3.10 inference.py --model_path ./best_model_ResNet18.pth --model_type ResNet18 --window_size 1 --output_dir ./results --single_window
-python3.10 inference.py --model_path ./best_model_ResNet18.pth --model_type ResNet18 --window_size 1 --output_dir ./results --input_file ./data/val/episode_0.npy
+# python3.10 inference.py --model_path ./best_model_ResNet18.pth --model_type ResNet18 --input_channels 8 --window_size 1 --output_dir ./results --single_window
+python3.10 inference.py --model_path ./best_model_ResNet18.pth --model_type ResNet18 --input_channels 8 --window_size 1 --output_dir ./results --input_file ./data/val/episode_0.npy
 ```
 
 # Model transfer to onnx
 ```
-python3.10 model_transfer.py --model_path ./best_model_ResNet18.pth --model_type ResNet18 --input_channels 19 --window_size 1 --onnx_path ./onnx_model.onnx
+python3.10 model_transfer.py --model_path ./best_model_ResNet18.pth --model_type ResNet18 --input_channels 8 --window_size 1 --onnx_path ./onnx_model.onnx
 ```
 
 # Build C++ project
@@ -34,7 +34,7 @@ make
 
 ## Run w/ gpu
 ```
-./risk_inference --model /home/zeyu/PHD_LAB/Material_handling_2024/zeyu-failure-prediction/code/simple_model/onnx_model.onnx --channels 19 --window_size 1 --cuda --input /home/zeyu/PHD_LAB/Material_handling_2024/zeyu-failure-prediction/code/simple_model/data/val/episode_0.npy --numpy
+./risk_inference --model /home/zeyu/PHD_LAB/Material_handling_2024/zeyu-failure-prediction/code/simple_model/onnx_model.onnx --channels 8 --window_size 1 --cuda --input /home/zeyu/PHD_LAB/Material_handling_2024/zeyu-failure-prediction/code/simple_model/data/val/episode_0.npy --numpy
 ```
 
 ## Run w/o gpu

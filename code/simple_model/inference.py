@@ -7,7 +7,7 @@ import argparse
 import matplotlib.pyplot as plt
 
 # Import the ResNet models
-from resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
+from simple_model.resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
 
 def load_model(model_path, model_type='ResNet18', input_channels=19, device=None):
     """
@@ -65,6 +65,9 @@ def preprocess_trajectory(trajectory_data, window_size=1):
     
     # Get states sequence (shape: window_size x 19)
     states = np.stack([frame['state'] for frame in window_data])
+
+    # Take only the first 8 state values
+    states = states[:, :8]
     
     # Convert to tensor and transpose for 1D convolution (to 19 x window_size)
     states_tensor = torch.FloatTensor(states).transpose(0, 1)
@@ -101,13 +104,13 @@ def predict_risk(model, trajectory_data, window_size=1, device=None):
     # Return the predicted risk
     return outputs.cpu().numpy().flatten()[0]
 
-def predict_from_states(model, states, device=None):
+def predict_from_states(model, states, device=None, channel=19):
     """
     Predict risk directly from state data (single window).
     
     Args:
         model: Trained PyTorch model
-        states (np.ndarray or torch.Tensor): State data with shape (19, window_size) or (window_size, 19)
+        states (np.ndarray or torch.Tensor): State data with shape (channel, window_size) or (window_size, channel)
         device (torch.device): Device to run inference on
         
     Returns:
@@ -119,15 +122,15 @@ def predict_from_states(model, states, device=None):
     # Convert to tensor if numpy array
     if isinstance(states, np.ndarray):
         # Check if we need to transpose
-        if states.shape[0] != 19 and states.shape[1] == 19:
-            states = states.T  # Transpose to (19, window_size)
+        if states.shape[0] != channel and states.shape[1] == channel:
+            states = states.T  # Transpose to (channel, window_size)
         states_tensor = torch.FloatTensor(states)
     else:
         states_tensor = states
         
-    # Make sure shape is correct (19, window_size)
-    if states_tensor.shape[0] != 19:
-        raise ValueError(f"Expected first dimension to be 19, got {states_tensor.shape[0]}")
+    # Make sure shape is correct (channel, window_size)
+    if states_tensor.shape[0] != channel:
+        raise ValueError(f"Expected first dimension to be channel, got {states_tensor.shape[0]}")
         
     # Add batch dimension if not present
     if len(states_tensor.shape) == 2:
@@ -275,24 +278,24 @@ def single_window_inference_example(model_path, model_type='ResNet18', input_cha
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
-    # Load model
+    # Load modelinference
     print(f"Loading model from {model_path}")
     model = load_model(model_path, model_type, input_channels, device)
     
     # Create synthetic data for demonstration (19 features, window_size=1)
     # In a real scenario, this would come from your robot's sensors or a data source
     window_size = 1
-    synthetic_states = np.random.rand(19, window_size)
+    synthetic_states = np.random.rand(input_channels, window_size)
     
     # Run inference
     print("Running inference on single window...")
-    risk = predict_from_states(model, synthetic_states, device)
+    risk = predict_from_states(model, synthetic_states, device, input_channels)
     
     print(f"Predicted risk: {risk}")
     
     # For comparison, you could also use it with trajectory-like data structure
     # Create a synthetic trajectory with the same structure as your training data
-    synthetic_trajectory = [{'state': np.random.rand(19)} for _ in range(window_size)]
+    synthetic_trajectory = [{'state': np.random.rand(input_channels)} for _ in range(window_size)]
     
     # Run inference using the trajectory method
     risk_from_trajectory = predict_risk(model, synthetic_trajectory, window_size, device)
@@ -311,6 +314,7 @@ if __name__ == "__main__":
     parser.add_argument('--visualize', action='store_true', help='Visualize the results')
     parser.add_argument('--single_window', action='store_true', help='Run single window inference example instead of batch')
     parser.add_argument('--input_file', type=str, help='Path to a single trajectory file for inference')
+    parser.add_argument('--input_channels', type=int, default=19, help='Number of input channels for the model')
     args = parser.parse_args()
     
     # Create output directory if it doesn't exist
@@ -323,11 +327,11 @@ if __name__ == "__main__":
     
     # Load model
     print(f"Loading model from {args.model_path}")
-    model = load_model(args.model_path, args.model_type, device=device)
+    model = load_model(args.model_path, args.model_type, input_channels=args.input_channels, device=device)
     
     if args.single_window:
         # Run the single window inference example
-        single_window_inference_example(args.model_path, args.model_type)
+        single_window_inference_example(args.model_path, args.model_type, input_channels=args.input_channels)
     elif args.input_file:
         # Run inference on a single file
         print(f"Running inference on single file: {args.input_file}")
