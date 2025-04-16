@@ -115,7 +115,7 @@ def create_homogeneous_matrix(R, t):
     H[:2, 2] = t
     return H
 
-def icp_2d(src_contour, dst_contour, max_iterations=16, tolerance=1e-6):
+def icp_2d(src_contour, dst_contour, max_iterations=16, tolerance=1e-6, matrix=False):
     """
     Perform 2D ICP algorithm between two contours.
     
@@ -124,9 +124,11 @@ def icp_2d(src_contour, dst_contour, max_iterations=16, tolerance=1e-6):
         dst_contour: Destination contour points from OpenCV findContours
         max_iterations: Maximum number of iterations
         tolerance: Convergence threshold for mean squared error
+        matrix: return R matrix if true, otherwise return rotation angle
         
     Returns:
-        H: 3x3 homogeneous transformation matrix
+        rotation_angle: Rotation angle in radians
+        translation: 2D translation vector [tx, ty]
         error: Final mean squared error
     """
     # Convert contours to point arrays
@@ -138,6 +140,11 @@ def icp_2d(src_contour, dst_contour, max_iterations=16, tolerance=1e-6):
     t_total = np.zeros(2)
     
     prev_error = float('inf')
+    current_error = float('inf')  # Initialize current_error
+    
+    # Check if contours are empty or too small
+    if len(src_points) < 2 or len(dst_points) < 2:
+        return R_total if matrix else np.arctan2(R_total[1, 0], R_total[0, 0]), t_total, current_error
     
     for iteration in range(max_iterations):
         # Find closest point pairs
@@ -161,58 +168,82 @@ def icp_2d(src_contour, dst_contour, max_iterations=16, tolerance=1e-6):
             break
         
         prev_error = current_error
-    
-    # Apply log1p scaling to R_total and t_total
-    scale_factor = 1e5
-    R_total_scaled = np.sign(R_total) * np.log1p(np.abs(R_total) * scale_factor)
-    t_total_scaled = np.sign(t_total) * np.log1p(np.abs(t_total) * scale_factor)
-    
-    # print("Original R_total:", R_total)
-    # print("Scaled R_total:", R_total_scaled)
-    # print("Original t_total:", t_total)
-    # print("Scaled t_total:", t_total_scaled)
-    
-    # Create homogeneous transformation matrix with scaled values
-    H = create_homogeneous_matrix(R_total_scaled, t_total_scaled)
 
-    # print("H with scaled values:", H)
-    
-    return H, current_error
+    if matrix:
+        # Apply log1p scaling to R_total and t_total
+        scale_factor = 1e5
+        R_total_scaled = np.sign(R_total) * np.log1p(np.abs(R_total) * scale_factor)
+        t_total_scaled = np.sign(t_total) * np.log1p(np.abs(t_total) * scale_factor)
+        
+        # print("Original R_total:", R_total)
+        # print("Scaled R_total:", R_total_scaled)
+        # print("Original t_total:", t_total)
+        # print("Scaled t_total:", t_total_scaled)
+        
 
-def process_consecutive_frames(contours1, contours2):
+        # print("H with scaled values:", H)
+        
+        return R_total_scaled, t_total_scaled, current_error
+    else:
+        # Extract rotation angle from rotation matrix
+        # For a 2D rotation matrix R = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]
+        # The rotation angle can be calculated as θ = atan2(R[1,0], R[0,0])
+        rotation_angle = np.arctan2(R_total[1, 0], R_total[0, 0])  # radians
+        
+        # Apply the same log1p scaling if needed
+        # scale_factor = 1e5
+        # rotation_angle_scaled = np.sign(rotation_angle) * np.log1p(np.abs(rotation_angle) * scale_factor)
+        # t_total_scaled = np.sign(t_total) * np.log1p(np.abs(t_total) * scale_factor)
+        
+        # print ("rotation_angle, t_total", rotation_angle, t_total)
+
+        return rotation_angle, t_total, current_error
+
+def process_consecutive_frames(contours1, contours2, matrix=False):
     """
     Process consecutive frames and calculate transformations for each contour pair.
     
     Args:
         contours1: List of contours from first frame
         contours2: List of contours from second frame
+        matrix: return R matrix if true, otherwise return rotation angle
         
     Returns:
         List of (R, t, error) tuples for each matched contour pair
     """
     results = []
+    # print("contours1 shape", contours1.shape)
     
     # Match contours based on area similarity
-    areas1 = [cv2.contourArea(cnt) for cnt in contours1]
-    areas2 = [cv2.contourArea(cnt) for cnt in contours2]
+    areas1 = cv2.contourArea(contours1[0])
+    areas2 = cv2.contourArea(contours2[0])
+
+    # Find best matching contour in second frame
+    best_match = None
+    best_area_diff = float('inf')
     
-    for i, cnt1 in enumerate(contours1):
-        # Find best matching contour in second frame
-        best_match = None
-        best_area_diff = float('inf')
-        
-        for j, cnt2 in enumerate(contours2):
-            area_diff = abs(areas1[i] - areas2[j])
-            if area_diff < best_area_diff:
-                best_area_diff = area_diff
-                best_match = cnt2
-        
-        if best_match is not None:
-            # Calculate ICP between matched contours
-            H, error = icp_2d(cnt1, best_match)
-            results.append((H, error))
+    # Calculate ICP between matched contours
+    r_total, t_total, error = icp_2d(contours1[0], contours2[0], matrix)
+    if matrix:
+        # Create homogeneous transformation matrix with scaled values
+        H = create_homogeneous_matrix(r_total, t_total)
+        results=[H, error]
+    else:
+        results=[r_total, t_total[0], t_total[1]]
+
+    try:
+        # Check for empty transforms
+        if len(results) == 0:
+            raise Exception("All transforms are empty")
+    except Exception as e:
+        print(f"Error in contour processing: {e}")
     
-    return results
+    if matrix:
+        features = extract_transform_features(results)
+    else:
+        features = results
+
+    return features
 
 def extract_transform_features(transforms):
     if not transforms:
@@ -220,7 +251,7 @@ def extract_transform_features(transforms):
         return np.zeros(6)  # 4 for rotation matrix elements + 2 for translation
     
     # Take first transform if multiple are present
-    H, error = transforms[0]
+    H, error = transforms
     
     # Extract rotation matrix and translation vector
     R = H[:2, :2]  # 2x2 rotation matrix
