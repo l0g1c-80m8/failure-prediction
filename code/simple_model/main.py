@@ -55,7 +55,7 @@ class RobotTrajectoryDataset(Dataset):
         states = np.stack([frame['state'] for frame in window_data]) 
 
         # Only take the first 8 state values
-        states = states[:, :8]       
+        states = states[:, :6]       
         
         # Get the risk for the last timestep
         # Convert to numpy array first, then to tensor
@@ -343,7 +343,7 @@ if __name__ == "__main__":
         
         # Example of using different ResNet architectures
         models = {
-            'ResNet18': resnet18(input_channels=8)
+            'ResNet18': resnet18(input_channels=6)
             # 'ResNet34': resnet34(input_channels=19),
             # 'ResNet50': resnet50(input_channels=19),
             # 'ResNet101': resnet101(input_channels=19),
@@ -372,7 +372,7 @@ if __name__ == "__main__":
                     "batch_size": train_loader.batch_size,
                     "window_size": train_loader.dataset.window_size,
                     "stride": train_loader.dataset.stride,
-                    "state_dimensions": 8  # Update this to reflect the new state dimension
+                    "state_dimensions": 6  # Update this to reflect the new state dimension
                 },
                 mode="disabled" if wandb_disabled else None
             )
