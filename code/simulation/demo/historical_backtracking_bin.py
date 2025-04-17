@@ -230,9 +230,9 @@ class Projectile(MuJoCoBase):
         self.data.qpos[self.model.body_jntadr[object_body_id]:self.model.body_jntadr[object_body_id]+3] = [x_pos, y_pos, z_pos]
         
         # Randomize initial orientation (uncomment when needed)
-        # quat = [random.uniform(-1, 1) for _ in range(4)]
-        # quat = quat / np.linalg.norm(quat)  # Normalize quaternion
-        # self.data.qpos[self.model.body_jntadr[object_body_id]+3:self.model.body_jntadr[object_body_id]+7] = quat
+        quat = self.config.get('object_related', {}).get(current_object_name, {}).get('qpos', 'N/A') #[random.uniform(-1, 1) for _ in range(4)]
+        quat = quat / np.linalg.norm(quat)  # Normalize quaternion
+        self.data.qpos[self.model.body_jntadr[object_body_id]+3:self.model.body_jntadr[object_body_id]+7] = quat
 
     def randomize_scene_colors(self, panel_geom_name, object_geom_name):
         """Randomize colors for fixed panel and free object"""

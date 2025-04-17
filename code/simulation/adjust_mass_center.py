@@ -228,8 +228,8 @@ def main():
     # parser.add_argument("-q", "--quiet", action="store_true", help="Suppress verbose output")
     
     # args = parser.parse_args()
-    input = "model/universal_robots_ur5e/assets/stanford_bunny_ori.obj"
-    output = "model/universal_robots_ur5e/assets/stanford_bunny.obj"
+    input = "model/universal_robots_ur5e/assets/flange_ori.obj"
+    output = "model/universal_robots_ur5e/assets/flange.obj"
     quiet = True
     
     try:

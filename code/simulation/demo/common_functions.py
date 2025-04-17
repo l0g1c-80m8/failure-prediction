@@ -169,7 +169,7 @@ def icp_2d(src_contour, dst_contour, max_iterations=16, tolerance=1e-6, matrix=F
         
         prev_error = current_error
 
-    print ("R_total[1, 0], R_total[0, 0]", R_total[1, 0], R_total[0, 0])
+    # print ("R_total[1, 0], R_total[0, 0]", R_total[1, 0], R_total[0, 0])
 
     if matrix:
         # Apply log1p scaling to R_total and t_total
@@ -197,7 +197,7 @@ def icp_2d(src_contour, dst_contour, max_iterations=16, tolerance=1e-6, matrix=F
         # rotation_angle_scaled = np.sign(rotation_angle) * np.log1p(np.abs(rotation_angle) * scale_factor)
         # t_total_scaled = np.sign(t_total) * np.log1p(np.abs(t_total) * scale_factor)
         
-        print ("rotation_angle, t_total", rotation_angle, t_total)
+        # print ("rotation_angle, t_total", rotation_angle, t_total)
 
         return rotation_angle, t_total, current_error
 
@@ -339,7 +339,7 @@ def calculate_failure_phase(displacement, object_pos, panel_pos):
     # Object is safely on the panel
     return 0.0
 
-def resample_data(episode):
+def resample_data(episode, cut=True):
     episode_resampled = []
     scale=15
     for item_idx in range(len(episode)):
@@ -348,8 +348,10 @@ def resample_data(episode):
             episode_resampled.append(episode[item_idx])
         elif episode[item_idx]['failure_phase_value'][0] > 0.0 and episode[item_idx]['failure_phase_value'][0] < 1.0:
             episode_resampled.append(episode[item_idx])
-        elif episode[item_idx]['failure_phase_value'][0] == 1.0 and item_idx%scale==0:
+        elif episode[item_idx]['failure_phase_value'][0] == 1.0 and item_idx%scale==0 and not cut:
             episode_resampled.append(episode[item_idx])
+        else:
+            pass
     return episode_resampled
                     
 def plot_raw_metrics(original_episode, episode_num, dataset_type, save_path, current_object_name):

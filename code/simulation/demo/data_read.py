@@ -23,11 +23,12 @@ def read_npy_file(file_path):
 # Example usage
 if __name__ == "__main__":
     # Replace with your file path
-    file_path = "../simple_model/data/train/episode_0_stanford_bunny_raw.npy"
+    file_path = "demo/data/test_data_0415/train_raw/episode_2_raw.npy"
     
     # Read the .npy file
     data = read_npy_file(file_path)
     for i in range(len(data)):
+        print(i)
         print(data[i]["state"])
     
     # if data is not None:

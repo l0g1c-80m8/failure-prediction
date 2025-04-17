@@ -7,6 +7,7 @@ def main(data_dir, interpolate_type = "linear"):
     episode_files = sorted([f for f in os.listdir(data_dir) if f.endswith('.npy')])
     episodes = {}
     for file_idx, episode_file in enumerate(episode_files):
+        # print("file_idx", file_idx)
         episode_path = os.path.join(data_dir, episode_file)
         print("episode_path", episode_path)
         episode_folder_path = os.path.dirname(episode_path)
@@ -100,7 +101,7 @@ def main(data_dir, interpolate_type = "linear"):
                     episodes[file_idx][idx]["risk"] = np.asarray([value], dtype=np.float32)
         
         # 2. Resample the data
-        episode_resampled = resample_data(episodes[file_idx])
+        episode_resampled = resample_data(episodes[file_idx], cut=True)
         dataset_type = "train" if "train" in episode_path else "val"
         # keep only the data after the first window
         episode_resampled_crop = episode_resampled[window:]
@@ -113,6 +114,8 @@ def main(data_dir, interpolate_type = "linear"):
         
         if missing_states > 0:
             print(f"WARNING: Missing 'state' or 'risk' to {missing_states} frames in resampled episode {file_idx}")
+        elif len(episode_resampled_crop)==0:
+            print(f"WARNING: No data in episode_resampled_crop in resampled episode {file_idx}")
         else:
             print(f"Generating {dataset_type} resampled examples...")
             plot_metrics(episodes[file_idx], episode_resampled, file_idx, dataset_type, episode_folder_path)
@@ -121,5 +124,5 @@ def main(data_dir, interpolate_type = "linear"):
 
 
 if __name__ == "__main__":
-    data_dir = "demo/data/test_data_0415/val_raw" # demo/data/test_data_0403/val_raw
+    data_dir = "demo/data/train_raw" # demo/data/test_data_0403/val_raw
     main(data_dir, interpolate_type = "linear")

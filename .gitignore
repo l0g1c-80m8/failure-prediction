@@ -181,6 +181,7 @@ code/simulation/*/*.txt
 .vscode/settings.json
 
 code/simple_model/wandb/
+code/simple_model/history_data/
 code/simple_model/data/*
 code/octo/exp/*
 code/octo/tests/*
