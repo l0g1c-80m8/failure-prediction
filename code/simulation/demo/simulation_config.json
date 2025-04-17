@@ -10,7 +10,7 @@
         "traj_path": "./demo/traj_20250218.txt",
         "initial_delay": 2.0,
         "trajectories": {
-            "n_train_episodes": 100,
+            "n_train_episodes": 50,
             "n_val_episodes": 20,
             "episode_length": 350
         }
@@ -39,7 +39,7 @@
         "camera_image_size": [640, 640]
     },
     "object_related": {
-        "current_object": "cube",
+        "current_object": "teamug",
         "cube": {
             "base_mass": 0.2,
             "mass_variation": [0.8, 1.2],

@@ -54,7 +54,7 @@ class RobotTrajectoryDataset(Dataset):
         # Get states sequence (shape: window_size x 19)
         states = np.stack([frame['state'] for frame in window_data]) 
 
-        # Only take the first 8 state values
+        # Only take the first 6 state values
         states = states[:, :6]       
         
         # Get the risk for the last timestep

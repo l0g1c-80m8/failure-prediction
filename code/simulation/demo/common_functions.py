@@ -169,6 +169,8 @@ def icp_2d(src_contour, dst_contour, max_iterations=16, tolerance=1e-6, matrix=F
         
         prev_error = current_error
 
+    print ("R_total[1, 0], R_total[0, 0]", R_total[1, 0], R_total[0, 0])
+
     if matrix:
         # Apply log1p scaling to R_total and t_total
         scale_factor = 1e5
@@ -195,7 +197,7 @@ def icp_2d(src_contour, dst_contour, max_iterations=16, tolerance=1e-6, matrix=F
         # rotation_angle_scaled = np.sign(rotation_angle) * np.log1p(np.abs(rotation_angle) * scale_factor)
         # t_total_scaled = np.sign(t_total) * np.log1p(np.abs(t_total) * scale_factor)
         
-        # print ("rotation_angle, t_total", rotation_angle, t_total)
+        print ("rotation_angle, t_total", rotation_angle, t_total)
 
         return rotation_angle, t_total, current_error
 
@@ -214,16 +216,8 @@ def process_consecutive_frames(contours1, contours2, matrix=False):
     results = []
     # print("contours1 shape", contours1.shape)
     
-    # Match contours based on area similarity
-    areas1 = cv2.contourArea(contours1[0])
-    areas2 = cv2.contourArea(contours2[0])
-
-    # Find best matching contour in second frame
-    best_match = None
-    best_area_diff = float('inf')
-    
     # Calculate ICP between matched contours
-    r_total, t_total, error = icp_2d(contours1[0], contours2[0], matrix)
+    r_total, t_total, error = icp_2d(contours1[0], contours2[0], matrix=matrix)
     if matrix:
         # Create homogeneous transformation matrix with scaled values
         H = create_homogeneous_matrix(r_total, t_total)
@@ -358,7 +352,7 @@ def resample_data(episode):
             episode_resampled.append(episode[item_idx])
     return episode_resampled
                     
-def plot_raw_metrics(original_episode, episode_num, dataset_type, save_path):
+def plot_raw_metrics(original_episode, episode_num, dataset_type, save_path, current_object_name):
     """
     Visualize original and resampled failure phase curves in a single plot.
     
@@ -390,7 +384,7 @@ def plot_raw_metrics(original_episode, episode_num, dataset_type, save_path):
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig(f'{save_path}/episode{episode_num}_{dataset_type}.png')
+    plt.savefig(f'{save_path}/episode{episode_num}_{current_object_name}_{dataset_type}.png')
     plt.close()
 
 def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type, save_path):

@@ -618,7 +618,8 @@ class Projectile(MuJoCoBase):
                         mj.mj_step(self.model, self.data)
 
                         # Record the object's position
-                        object_pos = self.data.qpos[mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, self.config.get('object_related', {}).get('current_object', 'N/A'))]
+                        current_object_name = self.config.get('object_related', {}).get('current_object', 'N/A')
+                        object_pos = self.data.qpos[mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, current_object_name)]
 
                     # get framebuffer viewport
                     viewport_width, viewport_height = glfw.get_framebuffer_size(self.window)
@@ -782,11 +783,11 @@ class Projectile(MuJoCoBase):
                 
             
             # Plot after simulation
-            plot_raw_metrics(self.episode, episode_num, self.dataset_type, save_path)
+            plot_raw_metrics(self.episode, episode_num, self.dataset_type, save_path, current_object_name)
 
             if self.config.get('simulation_related', {}).get('save_data', 'N/A'):
                 print(f"Generating {self.dataset_type} raw examples...")
-                np.save(f"{save_path}/episode_{episode_num}_raw.npy", self.episode)
+                np.save(f"{save_path}/episode_{episode_num}_{current_object_name}_raw.npy", self.episode)
 
         # writer.close()
         if self.display_camera:

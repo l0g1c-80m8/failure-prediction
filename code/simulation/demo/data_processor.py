@@ -117,9 +117,9 @@ def main(data_dir, interpolate_type = "linear"):
             print(f"Generating {dataset_type} resampled examples...")
             plot_metrics(episodes[file_idx], episode_resampled, file_idx, dataset_type, episode_folder_path)
             # 5. Save the resampled data
-            np.save(f"{episode_folder_path}/new/episode_{file_idx}.npy", episode_resampled_crop)
+            np.save(f"{episode_folder_path}/new/{episode_file}", episode_resampled_crop)
 
 
 if __name__ == "__main__":
-    data_dir = "demo/data/train_raw" # demo/data/test_data_0403/val_raw
+    data_dir = "demo/data/test_data_0415/val_raw" # demo/data/test_data_0403/val_raw
     main(data_dir, interpolate_type = "linear")
