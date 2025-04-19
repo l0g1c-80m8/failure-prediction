@@ -50,15 +50,6 @@ parser.add_argument("--out_dir", type=str, default="../videos/")
 parser.add_argument("--model", "--model_checkpoint_path", type=str, default="../checkpoints/sam2.1_hiera_tiny.pt")
 parser.add_argument("--cfg", "--model_config_path", type=str, default="configs/sam2.1/sam2.1_hiera_t_512")
 
-# Risk prediction model parameters
-parser.add_argument("--risk_model_path", type=str, help="Path to the saved risk model weights")
-parser.add_argument("--risk_model_type", type=str, default='ResNet18', 
-                    choices=['ResNet18', 'ResNet34', 'ResNet50', 'ResNet101', 'ResNet152'], 
-                    help="Type of ResNet model for risk prediction")
-parser.add_argument("--input_channels", type=int, default=8, 
-                    help="Number of input channels for the risk model")
-parser.add_argument("--window_size", type=int, default=10, 
-                    help="Number of frames to use for feature extraction")
 
 args = parser.parse_args()
 
@@ -71,8 +62,8 @@ elif args.input_type == "video" and args.video_path is None:
     parser.error("--video_path is required when input_type is 'video'")
 
 # Validate risk_model_path if not just listing cameras
-if not args.list_cameras and args.risk_model_path is None:
-    parser.error("--risk_model_path is required for risk prediction")
+# if not args.list_cameras and args.risk_model_path is None:
+#     parser.error("--risk_model_path is required for risk prediction")
 
 # CUDA setup
 print(f"CUDA available: {torch.cuda.is_available()}")
@@ -312,16 +303,7 @@ def main():
     
     # Load risk prediction model - in fp32 precision to avoid bfloat16 issues
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Loading risk prediction model from {args.risk_model_path}")
-    
-    # Use direct function call to avoid import issues
-    risk_model = load_model(
-        args.risk_model_path,
-        args.risk_model_type,
-        input_channels=args.input_channels,
-        device=device
-    )
-    print(f"Risk model loaded on {device}")
+    # print(f"Loading risk prediction model from {args.risk_model_path}")
     
     # Initialize input source
     if args.input_type == "video":
@@ -362,12 +344,6 @@ def main():
     fcount = 0
     top_camera_object_contours = []
     top_camera_panel_contours = []
-    window = args.window_size
-    
-    # Initialize risk prediction variables
-    risk_values = []
-    risk_history = []  # To store recent risk values for visualization
-    max_history = 50   # Maximum number of risk values to keep in history
     
     while True:
         # Get frame from appropriate source
@@ -464,50 +440,14 @@ def main():
                 top_camera_panel_contours.append(top_camera_panel_out_mask)
                 
                 # Calculate motion features if we have enough frames
-                if fcount > window:
-                    top_camera_object_pre_points = extract_points_from_mask(top_camera_object_contours[-window])
-                    top_camera_object_current_points = extract_points_from_mask(top_camera_object_out_mask)
-                    top_camera_panel_pre_points = extract_points_from_mask(top_camera_panel_contours[-window])
-                    top_camera_panel_current_points = extract_points_from_mask(top_camera_panel_out_mask)
+                top_camera_object_current_points = extract_points_from_mask(top_camera_object_out_mask)
+                top_camera_panel_current_points = extract_points_from_mask(top_camera_panel_out_mask)
+                
+                if (len(top_camera_object_current_points) > 0 and 
+                    len(top_camera_panel_current_points) > 0):
                     
-                    if (len(top_camera_object_pre_points) > 0 and 
-                        len(top_camera_object_current_points) > 0 and 
-                        len(top_camera_panel_pre_points) > 0 and 
-                        len(top_camera_panel_current_points) > 0):
-                        
-                        top_camera_object_pre_contours = [top_camera_object_pre_points.reshape(-1, 1, 2).astype(np.int32)]
-                        top_camera_object_current_contours = [top_camera_object_current_points.reshape(-1, 1, 2).astype(np.int32)]
-                        top_camera_panel_pre_contours = [top_camera_panel_pre_points.reshape(-1, 1, 2).astype(np.int32)]
-                        top_camera_panel_current_contours = [top_camera_panel_current_points.reshape(-1, 1, 2).astype(np.int32)]
-                        
-                        # Extract transform features
-                        matrix = False
-                        top_camera_object_features = process_consecutive_frames(
-                            top_camera_object_pre_contours, top_camera_object_current_contours, matrix=matrix)
-                        
-                        top_camera_panel_features = process_consecutive_frames(
-                            top_camera_panel_pre_contours, top_camera_panel_current_contours)
-                        
-                        print("object_features", top_camera_object_features)
-                        print("panel_features", top_camera_panel_features)
-                        
-                        # Risk prediction using the combined features
-                        combined_features = combine_features(top_camera_object_features, top_camera_panel_features)
-                        risk_value = predict_from_states(
-                            risk_model, 
-                            combined_features, 
-                            device=device, 
-                            channel=args.input_channels
-                        )
-                        
-                        risk_values.append(risk_value)
-                        risk_history.append(risk_value)
-                        if len(risk_history) > max_history:
-                            risk_history = risk_history[-max_history:]
-                        
-                        print(f"Predicted risk: {risk_value:.4f}")
-                    else:
-                        print("Not enough points to calculate transforms")
+                    top_camera_object_current_contours = [top_camera_object_current_points.reshape(-1, 1, 2).astype(np.int32)]
+                    top_camera_panel_current_contours = [top_camera_panel_current_points.reshape(-1, 1, 2).astype(np.int32)]
                 
                 # Visualize masks on frame
                 top_camera_object_out_mask = cv2.cvtColor(top_camera_object_out_mask, cv2.COLOR_GRAY2RGB)
@@ -520,69 +460,6 @@ def main():
         
         # Convert back to BGR for display and saving
         frame_display = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
-        
-        # Add risk visualization to frame if we have risk values
-        if risk_values:
-            # Calculate a risk color based on value (green to red gradient)
-            current_risk = float(risk_values[-1])  # Convert to Python float
-            risk_color = (0, int(255*(1-current_risk)), int(255*current_risk))  # Convert to integers
-            
-            # Add risk value text to frame
-            cv2.putText(
-                frame_display, 
-                f"Risk: {current_risk:.4f}", 
-                (50, 50), 
-                cv2.FONT_HERSHEY_SIMPLEX, 
-                1, 
-                risk_color, 
-                2, 
-                cv2.LINE_AA
-            )
-            
-            # Draw risk history graph in bottom right corner
-            if len(risk_history) > 1:
-                # Define graph area
-                graph_width = 200
-                graph_height = 100
-                graph_x = frame_width - graph_width - 20
-                graph_y = frame_height - graph_height - 20
-                
-                # Draw graph background
-                cv2.rectangle(
-                    frame_display, 
-                    (graph_x, graph_y), 
-                    (graph_x + graph_width, graph_y + graph_height), 
-                    (0, 0, 0), 
-                    -1
-                )
-                
-                # Draw graph outline
-                cv2.rectangle(
-                    frame_display, 
-                    (graph_x, graph_y), 
-                    (graph_x + graph_width, graph_y + graph_height), 
-                    (255, 255, 255), 
-                    1
-                )
-                
-                # Draw risk history line
-                risk_points = []
-                for i, risk in enumerate(risk_history):
-                    x = graph_x + int((i / (len(risk_history) - 1)) * graph_width) if len(risk_history) > 1 else graph_x
-                    y = graph_y + graph_height - int(risk * graph_height)
-                    risk_points.append((x, y))
-                
-                # Draw risk line with dynamic color
-                for i in range(len(risk_points) - 1):
-                    risk_val = float(risk_history[i])
-                    line_color = (0, int(255*(1-risk_val)), int(255*risk_val))  # Convert to integers
-                    cv2.line(
-                        frame_display, 
-                        risk_points[i], 
-                        risk_points[i+1], 
-                        line_color, 
-                        2
-                    )
         
         # Display frame
         cv2.imshow("frame", frame_display)
@@ -604,11 +481,6 @@ def main():
     out.release()
     cv2.destroyAllWindows()
     
-    # Save risk values to file if available
-    if risk_values and args.out_dir:
-        risk_file = os.path.join(args.out_dir, 'risk_values.npy')
-        np.save(risk_file, np.array(risk_values))
-        print(f"Saved risk values to {risk_file}")
 
 if __name__ == "__main__":
     main()
