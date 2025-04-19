@@ -1,7 +1,0 @@
-# python
-*__pycache__
-*.egg-info
-*.hypothesis
-*.ipynb_checkpoints
-*.mypy_cache
-*.pyc

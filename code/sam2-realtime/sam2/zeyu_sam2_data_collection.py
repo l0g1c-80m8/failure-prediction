@@ -24,6 +24,14 @@ from simple_model.resnet_models import resnet18, resnet34, resnet50, resnet101, 
 from sam2.build_sam import build_sam2_camera_predictor
 from simulation.demo.common_functions import (process_consecutive_frames, extract_points_from_mask, extract_transform_features)
 
+# Add the ur5_scripts directory to the path to be able to import urx_local
+ur5_scripts_dir = os.path.join(project_root, 'ur5_scripts')
+if ur5_scripts_dir not in sys.path:
+    sys.path.append(ur5_scripts_dir)
+
+# Now import from urx_local
+from urx_local.robot import Robot
+
 parser = argparse.ArgumentParser()
 
 # Input source options
@@ -283,6 +291,8 @@ def combine_features(object_features, panel_features):
     return combined_features
 
 def main():
+    robot_left = Robot("192.10.0.11")
+    
     # List cameras if requested
     if args.list_cameras:
         list_realsense_cameras()
@@ -324,15 +334,13 @@ def main():
     if not os.path.isdir(args.out_dir):
         os.makedirs(args.out_dir)
     
+    now = datetime.now()
+    timestamp = now.strftime("%Y%m%d%H%M%S")
     if args.input_type == "video":
         output_path = f"{args.out_dir}/output_{Path(args.video_path).name}"
         if output_path[-3:] != 'mp4':
-            now = datetime.now()
-            timestamp = now.strftime("%Y%m%d%H%M%S")
             output_path = output_path + f"_{timestamp}_.mp4"
     else:
-        now = datetime.now()
-        timestamp = now.strftime("%Y%m%d%H%M%S")
         camera_id = args.camera_serial if args.camera_serial else f"cam{args.camera_index}"
         output_path = f"{args.out_dir}/realsense_{camera_id}_{timestamp}.mp4"
     
@@ -344,7 +352,9 @@ def main():
     fcount = 0
     top_camera_object_contours = []
     top_camera_panel_contours = []
-    
+    episode = []
+    step_num = 0
+
     while True:
         # Get frame from appropriate source
         if args.input_type == "video":
@@ -448,6 +458,31 @@ def main():
                     
                     top_camera_object_current_contours = [top_camera_object_current_points.reshape(-1, 1, 2).astype(np.int32)]
                     top_camera_panel_current_contours = [top_camera_panel_current_points.reshape(-1, 1, 2).astype(np.int32)]
+
+                    # Get the complete pose (position and orientation)
+                    pose = robot_left.get_pose()
+                    # print('Left robot pose: ', pose)
+                    
+                    # Extract the position (x, y, z coordinates)
+                    end_effector_pos = pose.pos
+                    # print('End-effector position (x, y, z): ', end_effector_pos)
+                    x, y, z = end_effector_pos  # This unpacks the position object into its components
+
+                    # Now create the NumPy array from the extracted coordinates
+                    end_effector_pos_array = np.array([x, y, z], dtype=np.float32)
+
+                    episode.append({
+                        # 'image': top_panel_frame,
+                        # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
+                        'time_step': np.asarray(step_num, dtype=np.float32),
+                        'object_top_contour': np.asarray(top_camera_object_current_contours, dtype=np.float32),
+                        'object_front_contour': np.asarray(top_camera_object_current_contours, dtype=np.float32),
+                        'gripper_top_contour': np.asarray(top_camera_panel_current_contours, dtype=np.float32),
+                        'gripper_front_contour': np.asarray(top_camera_panel_current_contours, dtype=np.float32),
+                        'end_effector_pos': end_effector_pos_array,
+                        # 'failure_phase_value': np.asarray([failure_phase_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
+                        # 'language_instruction': 'dummy instruction',
+                            })
                 
                 # Visualize masks on frame
                 top_camera_object_out_mask = cv2.cvtColor(top_camera_object_out_mask, cv2.COLOR_GRAY2RGB)
@@ -457,7 +492,11 @@ def main():
                 top_camera_panel_out_mask = cv2.cvtColor(top_camera_panel_out_mask, cv2.COLOR_GRAY2RGB)
                 top_camera_panel_out_mask[:, :, 1] = np.clip(top_camera_panel_out_mask[:, :, 1] * 255, 0, 255).astype(np.uint8)
                 frame_rgb = cv2.addWeighted(frame_rgb, 1, top_camera_panel_out_mask, 0.5, 0)
+
+            step_num+=1
         
+        np.save(f"{args.out_dir}/episode_{timestamp}_cube_raw.npy", episode)
+
         # Convert back to BGR for display and saving
         frame_display = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
         
