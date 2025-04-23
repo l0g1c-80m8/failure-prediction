@@ -1,4 +1,5 @@
 import numpy as np
+import os
 
 import matplotlib
 matplotlib.use('Agg')
@@ -268,12 +269,13 @@ def extract_transform_features(transforms):
     
     return features
 
-def process_camera_frame(frame):
+def process_camera_frame(frame, min_contour_area=100):
     """
     Process camera frame to get mask and contours for non-zero pixel values.
     
     Args:
         frame: RGB image array (height, width, 3)
+        min_contour_area: 100  # Adjust this threshold as needed
     
     Returns:
         tuple: (mask, contours, filtered_image)
@@ -289,27 +291,28 @@ def process_camera_frame(frame):
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     # Filter small contours (noise)
-    min_contour_area = 100  # Adjust this threshold as needed
-    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
+    filtered_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
     
     # Create visualization of the filtered image
     filtered_image = frame.copy()
-    cv2.drawContours(filtered_image, contours, -1, (0, 255, 0), 2)
     
-    # Draw bounding panel around detected objects
-    # for contour in contours:
-    #     x, y, w, h = cv2.boundingRect(contour)
-    #     cv2.rectangle(filtered_image, (x, y), (x + w, y + h), (255, 0, 0), 2)
+    # If we have valid contours, keep only the largest one
+    if filtered_contours:
+        # Find the contour with the largest area
+        largest_contour = max(filtered_contours, key=cv2.contourArea)
+        # Use only this contour
+        filtered_contours = [largest_contour]
         
-    #     # Calculate and display centroid
-    #     M = cv2.moments(contour)
-    #     if M["m00"] != 0:
-    #         cx = int(M["m10"] / M["m00"])
-    #         cy = int(M["m01"] / M["m00"])
-    #         cv2.circle(filtered_image, (cx, cy), 5, (0, 0, 255), -1)
+        # Draw the contour on the filtered image
+        cv2.drawContours(filtered_image, filtered_contours, -1, (0, 255, 0), 2)
+    else:
+        # If no valid contours found, create a default contour (small square)
+        # default_contour = np.array([[[10, 10]], [[10, 20]], [[20, 20]], [[20, 10]]], dtype=np.int32)
+        # filtered_contours = [default_contour]
+        # cv2.drawContours(filtered_image, filtered_contours, -1, (0, 0, 255), 2)  # Red color for default
+        print("No valid contours found")
     
-    return mask, contours, filtered_image
-
+    return mask, filtered_contours, filtered_image
 
 # Function to calculate failure phase based on displacement, linear speed, and angular speed
 def calculate_failure_phase(displacement, object_pos, panel_pos):
@@ -339,9 +342,8 @@ def calculate_failure_phase(displacement, object_pos, panel_pos):
     # Object is safely on the panel
     return 0.0
 
-def resample_data(episode, cut=True):
+def resample_data(episode, cut=True, scale=15):
     episode_resampled = []
-    scale=15
     for item_idx in range(len(episode)):
         # print(episode[item_idx]['failure_phase_value'][0])
         if episode[item_idx]['failure_phase_value'][0] == 0.0 and item_idx%scale==0:
@@ -354,7 +356,7 @@ def resample_data(episode, cut=True):
             pass
     return episode_resampled
                     
-def plot_raw_metrics(original_episode, episode_num, dataset_type, save_path, current_object_name):
+def plot_raw_metrics(original_episode, episode_num, dataset_type, save_path, current_object_name, timestamp):
     """
     Visualize original and resampled failure phase curves in a single plot.
     
@@ -386,10 +388,10 @@ def plot_raw_metrics(original_episode, episode_num, dataset_type, save_path, cur
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig(f'{save_path}/episode{episode_num}_{current_object_name}_{dataset_type}.png')
+    plt.savefig(f'{save_path}/episode{episode_num}_{current_object_name}_{dataset_type}_{timestamp}.png')
     plt.close()
 
-def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type, save_path):
+def plot_metrics(original_episode, resampled_episode, save_path, episode_name=None):
     """
     Visualize original and resampled failure phase curves in a single plot.
     
@@ -403,8 +405,8 @@ def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type,
         Episode number for the filename
     """
     # Extract original data
-    original_time_steps = range(len(original_episode))
-    original_risk_values = [item['risk'][0] for item in original_episode]
+    # original_time_steps = range(len(original_episode))
+    # original_risk_values = [item['risk'][0] for item in original_episode]
     
     # Map resampled points to their original indices
     resampled_indices = []
@@ -422,8 +424,8 @@ def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type,
     plt.figure(figsize=(12, 6))
     
     # Plot original data as a continuous line
-    plt.plot(original_time_steps, original_risk_values, 'b-', 
-            linewidth=2, alpha=0.6, label='Original data')
+    # plt.plot(original_time_steps, original_risk_values, 'b-', 
+    #         linewidth=2, alpha=0.6, label='Original data')
     
     # Plot resampled data as a dotted line with markers
     plt.plot(resampled_indices, resampled_risk_values, 'r--', 
@@ -447,7 +449,7 @@ def plot_metrics(original_episode, resampled_episode, episode_num, dataset_type,
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
     
     plt.tight_layout()
-    plt.savefig(f'{save_path}/new/comparison_episode{episode_num}_{dataset_type}.png')
+    plt.savefig(f'{save_path}/new/comparison_{episode_name}.png')
     plt.close()
 
 def read_config(file_path):
@@ -473,3 +475,335 @@ def read_config(file_path):
     except Exception as e:
         print(f"Error reading config file: {e}")
         return None
+    
+def combine_arrays(arrays, start_idx=0, end_idx=None, operation='sum'):
+    """
+    Combine values in a series of NumPy arrays position by position.
+    
+    Parameters:
+    -----------
+    arrays : list of numpy.ndarray or list
+        List of NumPy arrays (or lists) to combine
+    start_idx : int, optional
+        Starting index (inclusive) of arrays to combine, default is 0
+    end_idx : int, optional
+        Ending index (inclusive) of arrays to combine, default is None (which means all arrays)
+    operation : str, optional
+        Operation to perform: 'sum', 'mean', 'max', 'min', 'prod', default is 'sum'
+    
+    Returns:
+    --------
+    numpy.ndarray
+        Combined array with the result of the operation
+    """
+    # Validate input
+    if not arrays:
+        raise ValueError("Input list is empty")
+    
+    # Set default end_idx if not provided
+    if end_idx is None:
+        end_idx = len(arrays) - 1  # Inclusive of the last element
+    
+    # Validate indices
+    if start_idx < 0 or start_idx >= len(arrays):
+        raise ValueError(f"start_idx {start_idx} is out of bounds for array of length {len(arrays)}")
+    if end_idx < 0 or end_idx >= len(arrays):
+        raise ValueError(f"end_idx {end_idx} is out of bounds for array of length {len(arrays)}")
+    if start_idx > end_idx:
+        raise ValueError(f"start_idx {start_idx} must be less than or equal to end_idx {end_idx}")
+    
+    # Select subset of arrays - note the +1 to make end_idx inclusive
+    selected_arrays = arrays[start_idx:end_idx+1]
+    
+    # Convert all elements to numpy arrays if they aren't already
+    selected_arrays = [np.array(arr) for arr in selected_arrays]
+    
+    # Check if all arrays have the same shape
+    shape = selected_arrays[0].shape
+    for i, arr in enumerate(selected_arrays[1:], 1):
+        if arr.shape != shape:
+            raise ValueError(f"Array at index {i+start_idx} has shape {arr.shape}, different from {shape}")
+    
+    # Stack arrays along a new axis
+    stacked = np.stack(selected_arrays)
+    
+    # Perform the requested operation along the first axis (the stacking axis)
+    if operation == 'sum':
+        return np.sum(stacked, axis=0)
+    elif operation == 'mean':
+        return np.mean(stacked, axis=0)
+    elif operation == 'max':
+        return np.max(stacked, axis=0)
+    elif operation == 'min':
+        return np.min(stacked, axis=0)
+    elif operation == 'prod':
+        return np.prod(stacked, axis=0)
+    else:
+        raise ValueError(f"Unsupported operation: {operation}")
+
+
+def reshape_contours(contours):
+    """
+    Reshape contours to make them compatible with OpenCV functions.
+    Handles different input shapes including nested contours.
+    
+    Args:
+        contours: Contours in shape (1, N, 1, 2) or similar
+        
+    Returns:
+        Reshaped contours as a list of OpenCV-compatible contours
+    """
+    reshaped_contours = []
+    
+    # Handle case where we have a single contour in shape (1, N, 1, 2)
+    if isinstance(contours, np.ndarray) and contours.ndim == 4:
+        for i in range(contours.shape[0]):
+            # Extract each contour and reshape to (N, 1, 2)
+            contour = contours[i].reshape(-1, 1, 2).astype(np.int32)
+            reshaped_contours.append(contour)
+    # Case where we already have a list of contours
+    elif isinstance(contours, list):
+        for contour in contours:
+            if isinstance(contour, np.ndarray):
+                # Make sure contour is in shape (N, 1, 2)
+                if contour.ndim == 3 and contour.shape[1] == 1 and contour.shape[2] == 2:
+                    reshaped_contours.append(contour.astype(np.int32))
+                elif contour.ndim == 2 and contour.shape[1] == 2:
+                    # Reshape (N, 2) to (N, 1, 2)
+                    reshaped_contours.append(contour.reshape(-1, 1, 2).astype(np.int32))
+                else:
+                    raise ValueError(f"Unsupported contour shape: {contour.shape}")
+    else:
+        raise ValueError(f"Unsupported contours type: {type(contours)}")
+    
+    return reshaped_contours
+
+def apply_transformation(contour, rotation, tx, ty):
+    """
+    Apply rotation and translation to a contour.
+    
+    Args:
+        contour: Contour points array from OpenCV in shape (N, 1, 2)
+        rotation: Rotation angle in radians
+        tx, ty: Translation parameters
+    
+    Returns:
+        Transformed contour in the same shape as input
+    """
+    # Extract points as (N, 2)
+    points = contour.reshape(-1, 2).astype(np.float32)
+    
+    # Create rotation matrix
+    c, s = np.cos(rotation), np.sin(rotation)
+    R = np.array([[c, -s], [s, c]])
+    
+    # Apply rotation and translation
+    transformed_points = (R @ points.T).T + np.array([tx, ty])
+    
+    # Convert back to original contour format
+    transformed_contour = transformed_points.reshape(contour.shape).astype(np.int32)
+    
+    return transformed_contour
+
+def generate_sample_contours(shape1=(1, 56, 1, 2), shape2=(1, 53, 1, 2)):
+    """Generate two sample contours with specified shapes for testing."""
+    
+    # Create a simple polygon for the first contour
+    angles1 = np.linspace(0, 2*np.pi, shape1[1], endpoint=False)
+    radius1 = 100 + 10 * np.sin(3 * angles1)  # Add some variation
+    x1 = 200 + radius1 * np.cos(angles1)
+    y1 = 200 + radius1 * np.sin(angles1)
+    contour1_points = np.column_stack((x1, y1))
+    
+    # Reshape to match the requested shape
+    contour1 = contour1_points.reshape(shape1).astype(np.int32)
+    
+    # Create a slightly different polygon for the second contour
+    angles2 = np.linspace(0, 2*np.pi, shape2[1], endpoint=False)
+    radius2 = 90 + 15 * np.sin(4 * angles2)  # Different variation
+    x2 = 250 + radius2 * np.cos(angles2)  # Shifted center
+    y2 = 220 + radius2 * np.sin(angles2)
+    contour2_points = np.column_stack((x2, y2))
+    
+    # Reshape to match the requested shape
+    contour2 = contour2_points.reshape(shape2).astype(np.int32)
+    
+    return contour1, contour2
+
+def load_image_contours(image1_path, image2_path, target_shape1=(1, 56, 1, 2), target_shape2=(1, 53, 1, 2)):
+    """
+    Load contours from two images and reshape to target shapes.
+    
+    Args:
+        image1_path: Path to first image
+        image2_path: Path to second image
+        target_shape1: Target shape for first contour
+        target_shape2: Target shape for second contour
+        
+    Returns:
+        Two contours with specified shapes
+    """
+    # Read images
+    img1 = cv2.imread(image1_path)
+    img2 = cv2.imread(image2_path)
+    
+    if img1 is None or img2 is None:
+        raise ValueError(f"Failed to load images: {image1_path} or {image2_path}")
+    
+    # Convert to grayscale
+    gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+    gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+    
+    # Threshold
+    _, binary1 = cv2.threshold(gray1, 127, 255, cv2.THRESH_BINARY)
+    _, binary2 = cv2.threshold(gray2, 127, 255, cv2.THRESH_BINARY)
+    
+    # Find contours
+    raw_contours1, _ = cv2.findContours(binary1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    raw_contours2, _ = cv2.findContours(binary2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Get the largest contour from each image
+    if len(raw_contours1) > 0 and len(raw_contours2) > 0:
+        # Select largest contours
+        contour1 = max(raw_contours1, key=cv2.contourArea)
+        contour2 = max(raw_contours2, key=cv2.contourArea)
+        
+        # Resample contours to match target shapes
+        contour1 = resample_contour(contour1, target_shape1[1])
+        contour2 = resample_contour(contour2, target_shape2[1])
+        
+        # Reshape to match target shapes
+        contour1 = contour1.reshape(target_shape1).astype(np.int32)
+        contour2 = contour2.reshape(target_shape2).astype(np.int32)
+        
+        return contour1, contour2
+    else:
+        raise ValueError("No contours found in one or both images")
+
+def resample_contour(contour, target_points):
+    """
+    Resample a contour to have exactly the specified number of points.
+    
+    Args:
+        contour: OpenCV contour
+        target_points: Desired number of points
+        
+    Returns:
+        Resampled contour with target_points points
+    """
+    # Convert to (N, 2) array
+    points = contour.reshape(-1, 2)
+    
+    # Calculate the perimeter
+    perimeter = cv2.arcLength(contour, True)
+    
+    # Create a new array for resampled points
+    resampled = np.zeros((target_points, 2), dtype=np.int32)
+    
+    # Distance between each new point
+    step = perimeter / target_points
+    
+    # Initialize
+    dist_traveled = 0
+    new_idx = 0
+    resampled[0] = points[0]
+    
+    # Loop through original points
+    for i in range(1, len(points)):
+        # Distance to next original point
+        dist = np.linalg.norm(points[i] - points[i-1])
+        
+        while dist_traveled + dist >= step and new_idx < target_points - 1:
+            # Interpolate to find next point
+            alpha = (step - dist_traveled) / (dist + 1e-10)
+            new_idx += 1
+            resampled[new_idx] = points[i-1] + alpha * (points[i] - points[i-1])
+            dist -= step - dist_traveled
+            dist_traveled = 0
+        
+        dist_traveled += dist
+    
+    # Ensure we have the exact number of points (handle any floating-point issues)
+    if new_idx < target_points - 1:
+        resampled[new_idx+1:] = points[-1]
+    
+    return resampled.reshape(-1, 1, 2)
+
+def visualize_contour_transformation(processed_c1, processed_c2, features, data_idx, output_path="./", episode_name="episode"):
+    """
+    Visualize original contours and the transformation using pre-processed contours and features.
+    
+    Args:
+        processed_c1: First contour, already processed for use with process_consecutive_frames
+        processed_c2: Second contour, already processed for use with process_consecutive_frames
+        features: Transformation features from process_consecutive_frames (rotation, tx, ty)
+        output_path: Path to save the visualization
+    """
+    # Extract rotation and translation parameters
+    rotation, tx, ty = features[0], features[1], features[2]
+    # print(f"Transformation parameters - Rotation: {rotation:.4f} rad ({rotation * 180 / np.pi:.2f}°), Translation: ({tx:.2f}, {ty:.2f})")
+    
+    # Reshape contours for visualization if needed
+    reshaped_c1 = processed_c1
+    reshaped_c2 = processed_c2
+    
+    # Ensure contours are in the right format for visualization
+    if isinstance(processed_c1, np.ndarray) and processed_c1.ndim > 3:
+        reshaped_c1 = reshape_contours(processed_c1)
+    elif isinstance(processed_c1, list):
+        reshaped_c1 = processed_c1
+    
+    if isinstance(processed_c2, np.ndarray) and processed_c2.ndim > 3:
+        reshaped_c2 = reshape_contours(processed_c2)
+    elif isinstance(processed_c2, list):
+        reshaped_c2 = processed_c2
+        
+    # Apply transformation to the first contour
+    transformed_contours = []
+    if isinstance(reshaped_c1, list):
+        for c in reshaped_c1:
+            transformed_contour = apply_transformation(c, rotation, tx, ty)
+            transformed_contours.append(transformed_contour)
+    else:
+        # Handle case where reshaped_c1 is a single contour
+        transformed_contours.append(apply_transformation(reshaped_c1, rotation, tx, ty))
+    
+    # Create canvas for visualization
+    canvas_size = (800, 600)
+    canvas = np.ones((canvas_size[1], canvas_size[0], 3), dtype=np.uint8) * 255
+    
+    # Ensure all contours are in the right format for cv2.drawContours
+    draw_c1 = reshaped_c1 if isinstance(reshaped_c1, list) else [reshaped_c1]
+    draw_c2 = reshaped_c2 if isinstance(reshaped_c2, list) else [reshaped_c2]
+    
+    # Draw contours
+    cv2.drawContours(canvas, draw_c1, -1, (255, 0, 0), 2)  # Original contour1 in blue
+    cv2.drawContours(canvas, draw_c2, -1, (0, 255, 0), 2)  # Original contour2 in green
+    cv2.drawContours(canvas, transformed_contours, -1, (0, 0, 255), 2)  # Transformed contour1 in red
+    
+    # Add legend
+    legend_y = 30
+    cv2.putText(canvas, "Original Contour 1", (20, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+    cv2.putText(canvas, "Original Contour 2", (20, legend_y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+    cv2.putText(canvas, "Transformed Contour 1", (20, legend_y + 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+    
+    # Add transformation parameters
+    rotation_deg = rotation * 180 / np.pi
+    cv2.putText(canvas, f"Rotation: {rotation_deg:.2f} degrees", (20, legend_y + 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+    cv2.putText(canvas, f"Translation: ({tx:.2f}, {ty:.2f})", (20, legend_y + 130), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+    
+    # Save the visualization
+    cv2.imwrite(f'{output_path}/new/transform_{episode_name}_{data_idx}.png', canvas)
+    print(f"Visualization saved as {output_path}")
+    
+    # # Create figure and display/save the result
+    # plt.figure(figsize=(10, 8))
+    # plt.imshow(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
+    # plt.title("Contour Transformation Visualization")
+    # plt.axis('off')
+    # plt.tight_layout()
+    
+    # # Save as PNG as well
+    # output_png = os.path.splitext(output_path)[0] + "_plt.png"
+    # plt.savefig(output_png)
+    # plt.close()

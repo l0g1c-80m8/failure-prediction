@@ -39,6 +39,9 @@
     <material class="ur5e" name="bunny_material" rgba="0.49 0.0 0.0 1"/>
     <material class="ur5e" name="teamugobj_material" rgba="0.49 0.0 0.0 1"/>
     <material class="ur5e" name="flange_material" rgba="0.49 0.0 0.0 1"/>
+    <material class="ur5e" name="flange2_material" rgba="0.49 0.0 0.0 1"/>
+    <material class="ur5e" name="cover0_material" rgba="0.49 0.0 0.0 1"/>
+    <material class="ur5e" name="connector0_material" rgba="0.49 0.0 0.0 1"/>
     <material class="ur5e" name="panel_material" rgba="0.615686 0.811765 0.929412 1"/>
 
     <mesh file="base_0.obj"/>
@@ -66,6 +69,9 @@
     <mesh file="stanford_bunny.obj" scale="0.8 0.8 0.8"/>
     <mesh file="teamug.obj" scale="0.8 0.8 0.8"/>
     <mesh file="flange.obj" scale="1.0 1.0 1.0"/>
+    <mesh file="flange2.obj" scale="1.0 1.0 1.0"/>
+    <mesh file="cover0.obj" scale="1.0 1.0 1.0"/>
+    <mesh file="connector0.obj" scale="1.0 1.0 1.0"/>
     <mesh file="panel_0.obj" scale="1.0 1.0 1.0"/>
   </asset>
 
@@ -148,7 +154,7 @@
     <!-- New Customized Body -->
     <body name="object_body" pos="0.0 0.5 0.1">
       <joint type="free"/>
-      <geom name="object_collision" type="mesh" mesh="flange" rgba="0.7 0.5 0.3 1" group="2" contype="1" conaffinity="1"/>
+      <geom name="object_collision" type="mesh" mesh="connector0" rgba="0.7 0.5 0.3 1" group="2" contype="1" conaffinity="1"/>
       <inertial pos="0 0 0" mass="0.8" diaginertia="0.01 0.01 0.01"/>
     </body>
                   

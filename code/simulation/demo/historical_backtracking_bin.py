@@ -3,6 +3,8 @@ import mujoco as mj
 import numpy as np
 from mujoco.glfw import glfw
 import sys
+import time
+from datetime import datetime
 
 from mujoco_base import MuJoCoBase
 import imageio
@@ -29,6 +31,7 @@ class Projectile(MuJoCoBase):
         self.initial_delay = self.config.get('simulation_related', {}).get('initial_delay', 'N/A')  # Delay before starting movement
         self.display_camera = self.config.get('camera_related', {}).get('display_camera', 'N/A')
         self.episode = [] # To store the episode data
+        self.min_contour_area = self.config.get('simulation_related', {}).get('min_contour_area', 'N/A')
         # self.high_threshold_step = 0  # Step when displacement > DISPLACEMENT_THRESHOLD_HIGH
         # self.is_high_threshold_step_set = False
 
@@ -657,12 +660,12 @@ class Projectile(MuJoCoBase):
                             # Process panel frame
                             top_panel_writer.append_data(top_panel_frame)
                             top_panel_view = cv2.cvtColor(top_panel_frame, cv2.COLOR_RGB2BGR)
-                            top_panel_mask, top_panel_contour, top_panel_filtered = process_camera_frame(top_panel_view)
+                            top_panel_mask, top_panel_contour, top_panel_filtered = process_camera_frame(top_panel_view, min_contour_area=self.min_contour_area)
                             
                             # Process object frame
                             top_object_writer.append_data(top_object_frame)
                             top_object_view = cv2.cvtColor(top_object_frame, cv2.COLOR_RGB2BGR)
-                            top_object_mask, top_object_contour, top_object_filtered = process_camera_frame(top_object_view)
+                            top_object_mask, top_object_contour, top_object_filtered = process_camera_frame(top_object_view, min_contour_area=self.min_contour_area)
 
                         # Get front camera frames
                         front_panel_frame, front_object_frame = self.get_camera_image('front_camera')
@@ -671,15 +674,14 @@ class Projectile(MuJoCoBase):
                             front_panel_frame = cv2.rotate(front_panel_frame, cv2.ROTATE_90_CLOCKWISE)
                             front_panel_writer.append_data(front_panel_frame)
                             front_panel_view = cv2.cvtColor(front_panel_frame, cv2.COLOR_RGB2BGR)
-                            front_panel_mask, front_panel_contour, front_panel_filtered = process_camera_frame(front_panel_view)
+                            front_panel_mask, front_panel_contour, front_panel_filtered = process_camera_frame(front_panel_view, min_contour_area=self.min_contour_area)
                             
                             # Rotate and process object frame
                             front_object_frame = cv2.rotate(front_object_frame, cv2.ROTATE_90_CLOCKWISE)
                             front_object_writer.append_data(front_object_frame)
                             front_object_view = cv2.cvtColor(front_object_frame, cv2.COLOR_RGB2BGR)
-                        front_object_mask, front_object_contour, front_object_filtered = process_camera_frame(front_object_view)
+                        front_object_mask, front_object_contour, front_object_filtered = process_camera_frame(front_object_view, min_contour_area=self.min_contour_area)
 
-                    # Process both frames
 
                     # Display images
                     if self.display_camera:
@@ -702,6 +704,18 @@ class Projectile(MuJoCoBase):
 
                     # skip the first object_drop_time steps because the object is falling from the sky
                     if step_num >= object_drop_time:
+                        # Check for empty or invalid contours
+                        if (np.asarray(top_object_contour, dtype=np.float32).shape[0] == 0 or np.asarray(top_panel_contour, dtype=np.float32).shape[0] == 0 or 
+                            np.asarray(front_object_contour, dtype=np.float32).shape[0] == 0 or np.asarray(front_panel_contour, dtype=np.float32).shape[0] == 0):
+                            print(f"Warning: Empty contours detected at step_num {step_num}, skipping processing")
+                            # print("np.asarray(top_panel_contour, dtype=np.float32).shape", np.asarray(top_panel_contour, dtype=np.float32).shape)
+                            # print("np.asarray(top_object_contour, dtype=np.float32).shape", np.asarray(top_object_contour, dtype=np.float32).shape)
+                            # print("np.asarray(front_panel_contour, dtype=np.float32).shape", np.asarray(front_panel_contour, dtype=np.float32).shape)
+                            # print("np.asarray(front_object_contour, dtype=np.float32).shape", np.asarray(front_object_contour, dtype=np.float32).shape)
+                            # sys.exit()
+                            continue
+                        
+
                         # print("step_num", step_num)
                         end_effector_pos, transform_data_3D = self.data_collection(object_body_id, fixed_panel_body_id)
                         displacement = transform_data_3D['relative_position']
@@ -783,11 +797,13 @@ class Projectile(MuJoCoBase):
                 
             
             # Plot after simulation
-            plot_raw_metrics(self.episode, episode_num, self.dataset_type, save_path, current_object_name)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            plot_raw_metrics(self.episode, episode_num, self.dataset_type, save_path, current_object_name, timestamp)
 
             if self.config.get('simulation_related', {}).get('save_data', 'N/A'):
                 print(f"Generating {self.dataset_type} raw examples...")
-                np.save(f"{save_path}/episode_{episode_num}_{current_object_name}_raw.npy", self.episode)
+                np.save(f"{save_path}/episode_{episode_num}_{current_object_name}_{timestamp}_raw", self.episode)
+                
 
         # writer.close()
         if self.display_camera:

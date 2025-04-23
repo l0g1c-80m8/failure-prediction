@@ -1,7 +1,10 @@
 import os
 import numpy as np
+import time
+from datetime import datetime
 from common_functions import (linear_interpolation, resample_data, plot_metrics,
-                              process_consecutive_frames, extract_transform_features)
+                              process_consecutive_frames,
+                              combine_arrays, visualize_contour_transformation)
 
 def main(data_dir, interpolate_type = "linear"):
     episode_files = sorted([f for f in os.listdir(data_dir) if f.endswith('.npy')])
@@ -11,8 +14,12 @@ def main(data_dir, interpolate_type = "linear"):
         episode_path = os.path.join(data_dir, episode_file)
         print("episode_path", episode_path)
         episode_folder_path = os.path.dirname(episode_path)
+        # Get the filename without directory
+        episode_filename = os.path.basename(episode_path)  # Returns "episode_0_connector0_raw.npy"
+        # Remove the extension
+        episode_name = os.path.splitext(episode_filename)[0]  # Returns "episode_0_connector0_raw"
         os.makedirs(os.path.join(episode_folder_path, "new"), exist_ok=True)
-        print("episode_folder_path", episode_folder_path)
+        # print("episode_folder_path", episode_folder_path)
         episodes[file_idx] = np.load(episode_path, allow_pickle=True)
         episode_failure_phase_start = -1
         episode_failure_phase_reach = -1
@@ -22,6 +29,11 @@ def main(data_dir, interpolate_type = "linear"):
         front_camera_object_contours = []
         front_camera_panel_contours = []
         window = 30
+        top_object_features_intervals = []
+        top_panel_features_intervals = []
+        front_object_features_intervals = []
+        front_panel_features_intervals = []
+        matrix = False
         
         # 1. Interpolate the data
         for data_idx in range(len(episodes[file_idx])):
@@ -49,20 +61,54 @@ def main(data_dir, interpolate_type = "linear"):
             front_camera_object_contours.append(front_object_contour)
             front_camera_panel_contours.append(front_panel_contour)
 
-            if len(top_camera_object_contours) >= window:
-                try:
-                    matrix = False
+            if data_idx > 0:
+                # Debug contour shapes before processing
+                # print(f"--- Frame {data_idx} ---")
+                # print(f"  Top object contours: prev={top_camera_object_contours[data_idx-1].shape}, current={top_object_contour.shape}")
+                # print(f"  Top panel contours: prev={top_camera_panel_contours[data_idx-1].shape}, current={top_panel_contour.shape}")
+                # print(f"  Front object contours: prev={front_camera_object_contours[data_idx-1].shape}, current={front_object_contour.shape}")
+                # print(f"  Front panel contours: prev={front_camera_panel_contours[data_idx-1].shape}, current={front_panel_contour.shape}")
+                
+                # Check for empty or invalid contours
+                if (top_object_contour.shape[0] == 0 or top_camera_object_contours[data_idx-1].shape[0] == 0 or
+                    top_panel_contour.shape[0] == 0 or top_camera_panel_contours[data_idx-1].shape[0] == 0 or
+                    front_object_contour.shape[0] == 0 or front_camera_object_contours[data_idx-1].shape[0] == 0 or
+                    front_panel_contour.shape[0] == 0 or front_camera_panel_contours[data_idx-1].shape[0] == 0):
+                    print(f"Warning: Empty contours detected at frame {data_idx}, skipping processing")
+                    break
+                
+                # Process top object contours
+                top_object_features = process_consecutive_frames(top_camera_object_contours[data_idx-1], top_object_contour, matrix=matrix)
+                top_object_features_intervals.append(top_object_features)
+                
+                # Only visualize if requested and contours are valid for visualization
+                # if not matrix:
+                #     visualize_contour_transformation(top_camera_object_contours[data_idx-1], top_object_contour, top_object_features, data_idx, output_path=episode_folder_path, episode_name=episode_name)
+                
+                # Process remaining contours
+                top_panel_features = process_consecutive_frames(top_camera_panel_contours[data_idx-1], top_panel_contour, matrix=matrix)
+                top_panel_features_intervals.append(top_panel_features)
+                
+                front_object_features = process_consecutive_frames(front_camera_object_contours[data_idx-1], front_object_contour, matrix=matrix)
+                front_object_features_intervals.append(front_object_features)
+                
+                front_panel_features = process_consecutive_frames(front_camera_panel_contours[data_idx-1], front_panel_contour, matrix=matrix)
+                front_panel_features_intervals.append(front_panel_features)
+                    
+
+                if len(front_panel_features_intervals) >= window:
+                    # if top_camera_object_contours[-window].shape[0] == 0 or top_object_contour.shape[0] == 0:
+                    #     break
                     # print("top_camera_object_contours[-window] shape", top_camera_object_contours[-window].shape)
                     # print("top_object_contour shape", top_object_contour.shape)
-                    if top_camera_object_contours[-window].shape[0] == 0 or top_object_contour.shape[0] == 0:
-                        break
-                    top_object_features = process_consecutive_frames(top_camera_object_contours[-window], top_object_contour, matrix=matrix)
+                    # print("data_idx", data_idx) # 30
+                    top_object_features = combine_arrays(top_object_features_intervals, start_idx=data_idx-window, end_idx=data_idx-1)  # e.g. data_idx=30 (total 31 steps), start_idx_0, end_idx_29
                     # print("top_object_features", top_object_features)
-                    top_panel_features = process_consecutive_frames(top_camera_panel_contours[-window], top_panel_contour, matrix=matrix)
+                    top_panel_features = combine_arrays(top_panel_features_intervals, start_idx=data_idx-window, end_idx=data_idx-1)
                     # print("top_panel_features", top_panel_features)
-                    front_object_features = process_consecutive_frames(front_camera_object_contours[-window], front_object_contour, matrix=matrix)
+                    front_object_features = combine_arrays(front_object_features_intervals, start_idx=data_idx-window, end_idx=data_idx-1)
                     # print("front_object_features", front_object_features)
-                    front_panel_features = process_consecutive_frames(front_camera_panel_contours[-window], front_panel_contour, matrix=matrix)
+                    front_panel_features = combine_arrays(front_panel_features_intervals, start_idx=data_idx-window, end_idx=data_idx-1)
                     # print("front_panel_features", front_panel_features)
 
                     # Combine all features
@@ -84,9 +130,6 @@ def main(data_dir, interpolate_type = "linear"):
                         episodes[file_idx][data_idx]['state'] = np.asarray(combined_features, dtype=np.float32)
                     else:
                         raise ValueError(f"Error: combined_features shape {combined_features.shape} incorrect")
-                    
-                except Exception as e:
-                    print(f"Error in contour processing for frame {data_idx}: {e}")
 
         # After processing the episode, report if any values weren't found
         if episode_failure_phase_start == -1 or episode_failure_phase_reach == -1:
@@ -101,26 +144,28 @@ def main(data_dir, interpolate_type = "linear"):
                     episodes[file_idx][idx]["risk"] = np.asarray([value], dtype=np.float32)
         
         # 2. Resample the data
-        episode_resampled = resample_data(episodes[file_idx], cut=True)
+        episode_crop = episodes[file_idx][window:]
+        # print("len(episode_resampled_crop)", len(episode_crop))
+        episode_resampled = resample_data(episode_crop, cut=True, scale=15)
+        # print("len(episode_resampled)", len(episode_resampled))
         dataset_type = "train" if "train" in episode_path else "val"
         # keep only the data after the first window
-        episode_resampled_crop = episode_resampled[window:]
 
         # 4. Verify all frames have 'state' and 'risk' fields before saving
         missing_states = 0
-        for frame_idx in range(len(episode_resampled_crop)):
-            if 'state' not in episode_resampled_crop[frame_idx] or 'risk' not in episode_resampled_crop[frame_idx]:
+        for frame_idx in range(len(episode_resampled)):
+            if 'state' not in episode_resampled[frame_idx] or 'risk' not in episode_resampled[frame_idx]:
                 missing_states += 1
         
         if missing_states > 0:
             print(f"WARNING: Missing 'state' or 'risk' to {missing_states} frames in resampled episode {file_idx}")
-        elif len(episode_resampled_crop)==0:
-            print(f"WARNING: No data in episode_resampled_crop in resampled episode {file_idx}")
+        elif len(episode_resampled)==0:
+            print(f"WARNING: No data in episode_resampled in resampled episode {file_idx}")
         else:
             print(f"Generating {dataset_type} resampled examples...")
-            plot_metrics(episodes[file_idx], episode_resampled, file_idx, dataset_type, episode_folder_path)
+            plot_metrics(episodes[file_idx], episode_resampled, episode_folder_path, episode_name=episode_name)
             # 5. Save the resampled data
-            np.save(f"{episode_folder_path}/new/{episode_file}", episode_resampled_crop)
+            np.save(f"{episode_folder_path}/new/{episode_name}.npy", episode_resampled)
 
 
 if __name__ == "__main__":

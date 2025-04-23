@@ -9,8 +9,9 @@
         "xml_path": "./model/universal_robots_ur5e/test_scene_complete.xml",
         "traj_path": "./demo/traj_20250218.txt",
         "initial_delay": 2.0,
+        "min_contour_area": 3,
         "trajectories": {
-            "n_train_episodes": 50,
+            "n_train_episodes": 20,
             "n_val_episodes": 20,
             "episode_length": 350
         }
@@ -39,7 +40,7 @@
         "camera_image_size": [640, 640]
     },
     "object_related": {
-        "current_object": "flange",
+        "current_object": "connector0",
         "cube": {
             "base_mass": 0.4,
             "mass_variation": [0.8, 1.2],
@@ -74,6 +75,39 @@
             "base_mass": 0.2,
             "mass_variation": [0.8, 1.2],
             "base_size": 0.015,
+            "size_variation": [1.0, 3],
+            "friction_variation": [0.25, 0.35],
+            "x_offset": [-0.04, 0.04],
+            "y_offset": [-0.04, 0.04],
+            "z_offset": [0.05, 0.06],
+            "qpos": [[0, 0, 1, 1]]
+        },
+        "flange2": {
+            "base_mass": 0.5,
+            "mass_variation": [0.8, 1.2],
+            "base_size": 0.015,
+            "size_variation": [1.0, 3],
+            "friction_variation": [0.25, 0.35],
+            "x_offset": [-0.04, 0.04],
+            "y_offset": [-0.04, 0.04],
+            "z_offset": [0.05, 0.06],
+            "qpos": [[0, 0, 1, 1]]
+        },
+        "cover0": {
+            "base_mass": 0.5,
+            "mass_variation": [0.8, 1.2],
+            "base_size": 0.015,
+            "size_variation": [1.0, 3],
+            "friction_variation": [0.25, 0.35],
+            "x_offset": [-0.04, 0.04],
+            "y_offset": [-0.04, 0.04],
+            "z_offset": [0.05, 0.06],
+            "qpos": [[0, 0, 1, 1]]
+        },
+        "connector0": {
+            "base_mass": 0.5,
+            "mass_variation": [0.8, 1.2],
+            "base_size": 0.03,
             "size_variation": [1.0, 3],
             "friction_variation": [0.25, 0.35],
             "x_offset": [-0.04, 0.04],
