@@ -10,12 +10,22 @@ from datetime import datetime
 import colorsys
 import time
 import sys
+import threading
+
+import time
+import random
+import math
+
+
 
 # Add project root to path to ensure imports work correctly
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, '../..'))
 if project_root not in sys.path:
     sys.path.append(project_root)
+
+
+from ur5_scripts import urx
 
 # Import risk prediction functions using the correct paths
 from simple_model.inference import load_model, predict_from_states
@@ -30,7 +40,7 @@ if ur5_scripts_dir not in sys.path:
     sys.path.append(ur5_scripts_dir)
 
 # Now import from urx_local
-from urx_local.robot import Robot
+# from urx_local.robot import Robot
 
 parser = argparse.ArgumentParser()
 
@@ -52,6 +62,14 @@ parser.add_argument("--camera_serial", type=str, default=None,
                     help="Serial number of the RealSense camera to use")
 parser.add_argument("--camera_index", type=int, default=0, 
                     help="Index of the RealSense camera to use (0, 1, 2, etc.)")
+
+# New robot control parameters
+parser.add_argument("--traj_file", type=str, default="./traj_20250409.txt", 
+                    help="Path to trajectory file")
+parser.add_argument("--robot_ip", type=str, default="192.10.0.11", 
+                    help="Robot IP address")
+parser.add_argument("--n_rounds", type=int, default=2, 
+                    help="Number of trajectory rounds to execute")
 
 # Output settings
 parser.add_argument("--out_dir", type=str, default="../videos/")
@@ -89,6 +107,48 @@ if use_autocast:
 else:
     print("Not using autocast (not supported on this hardware)")
 
+def parse_trajectory(file_path):
+    trajectories = []
+    with open(file_path, 'r') as f:
+        for line in f:
+            # Remove brackets and split by comma
+            values = line.strip('[] \n').split(',')
+            # Convert strings to floats
+            trajectory = list(map(float, values))
+            trajectories.append(trajectory)
+    return trajectories
+
+def execute_trajectory(robot, trajectories, n, is_executing):
+    print("Robot execution thread starting...")
+    is_executing[0] = True
+    t_tmp = random.uniform(1.4, 2.0)
+    print(f"Using time parameter: {t_tmp}")
+
+    for _ in range(n):
+        # Forward sequence (top to bottom)
+        for i, trajectory in enumerate(trajectories):
+            randomized_trajectory = trajectory[:]  # Create a copy of the trajectory
+            # Add a random gain of ±10 degrees to the 6th joint
+            random_gain = random.uniform(-20, 20)  # Generate random angle in degrees
+            randomized_trajectory[5] += math.radians(random_gain)  # Convert to radians and apply
+            
+            print(f"Moving to position {i} with randomized trajectory: {randomized_trajectory}")
+            robot.servoj(randomized_trajectory, vel=0.1, acc=0.1, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
+        
+        # Reverse sequence (bottom to top)
+        for i, trajectory in enumerate(reversed(trajectories)):
+            randomized_trajectory = trajectory[:]  # Create a copy of the trajectory
+            random_gain = random.uniform(-20, 20)
+            randomized_trajectory[5] += math.radians(random_gain)
+            
+            print(f"Moving to position {len(trajectories)-1-i} with randomized trajectory: {randomized_trajectory}")
+            robot.servoj(randomized_trajectory, vel=0.1, acc=0.1, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
+            
+        time.sleep(0.5)  # Pause between rounds
+
+    robot.servoj(trajectories[0], vel=0.1, acc=0.1, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
+    print('Finished moving the robot through all positions.')
+    is_executing[0] = False
 
 def list_realsense_cameras():
     """List all connected RealSense cameras and their details."""
@@ -291,7 +351,20 @@ def combine_features(object_features, panel_features):
     return combined_features
 
 def main():
-    robot_left = Robot("192.10.0.11")
+    # Initialize robot
+    robot_left = urx.Robot(args.robot_ip)
+    print(f"Connected to robot at {args.robot_ip}")
+    
+    # Parse robot trajectory
+    trajectory = parse_trajectory(args.traj_file)
+    print(f"Parsed trajectory from {args.traj_file} with {len(trajectory)} points")
+    
+    # Get initial robot joint positions
+    joints_left = robot_left.getj()
+    print('Initial robot joints: ', joints_left)
+    
+    # Robot execution flag (for thread coordination)
+    is_executing = [False]
     
     # List cameras if requested
     if args.list_cameras:
@@ -430,6 +503,16 @@ def main():
                     _, out_obj_ids, out_mask_logits = predictor.add_new_prompt(
                         frame_idx=ann_frame_idx, obj_id=i, points=points[i], labels=labels[i]
                     )
+
+            # Start robot manipulation in a separate thread after initialization
+            print("Starting robot manipulation...")
+            robot_thread = threading.Thread(
+                target=execute_trajectory, 
+                args=(robot_left, trajectory, args.n_rounds, is_executing)
+            )
+            robot_thread.daemon = True  # Make thread exit when main program exits
+            robot_thread.start()
+            print("Robot manipulation started in background thread")
         
         else:
             # Tracking mode - use autocast for SAM2 tracking
@@ -439,7 +522,7 @@ def main():
             else:
                 out_obj_ids, out_mask_logits = predictor.track(frame_rgb)
                 
-            print("out_obj_ids", out_obj_ids)
+            # print("out_obj_ids", out_obj_ids)
             
             # Process masks for visualization and feature extraction
             if len(out_obj_ids) >= 2:  # Make sure we have at least two objects
@@ -495,8 +578,6 @@ def main():
                 frame_rgb = cv2.addWeighted(frame_rgb, 1, top_camera_panel_out_mask, 0.5, 0)
 
             step_num+=1
-        
-        np.save(f"{args.out_dir}/episode_{timestamp}_cube_raw.npy", episode)
 
         # Convert back to BGR for display and saving
         frame_display = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
@@ -510,7 +591,8 @@ def main():
         # Check for quit key
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
-    
+    np.save(f"{args.out_dir}/episode_{timestamp}_cube_raw.npy", episode)
+
     # Cleanup
     print(f"Video saved at {output_path}")
     if args.input_type == "video" and cap is not None:
