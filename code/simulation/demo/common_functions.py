@@ -58,6 +58,8 @@ def extract_points_from_mask(mask, show=False):
         cv2.imshow(f"{datetime.datetime.now()}", edges)
     points = np.column_stack(np.where(edges > 0))
 
+    # Swap columns to convert from (y, x) to (x, y)
+    points = points[:, [1, 0]]
     # print(len(points))
     return points
 

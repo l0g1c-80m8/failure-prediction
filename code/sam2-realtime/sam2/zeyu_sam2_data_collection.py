@@ -342,7 +342,7 @@ def main():
             output_path = output_path + f"_{timestamp}_.mp4"
     else:
         camera_id = args.camera_serial if args.camera_serial else f"cam{args.camera_index}"
-        output_path = f"{args.out_dir}/realsense_{camera_id}_{timestamp}.mp4"
+        output_path = f"{args.out_dir}realsense_{camera_id}_{timestamp}.mp4"
     
     out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), 30.0, (frame_width, frame_height))
     
@@ -472,7 +472,7 @@ def main():
                     end_effector_pos_array = np.array([x, y, z], dtype=np.float32)
 
                     episode.append({
-                        # 'image': top_panel_frame,
+                        'full_top_frame_rgb': frame_rgb,
                         # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
                         'time_step': np.asarray(step_num, dtype=np.float32),
                         'object_top_contour': np.asarray(top_camera_object_current_contours, dtype=np.float32),
@@ -480,6 +480,7 @@ def main():
                         'gripper_top_contour': np.asarray(top_camera_panel_current_contours, dtype=np.float32),
                         'gripper_front_contour': np.asarray(top_camera_panel_current_contours, dtype=np.float32),
                         'end_effector_pos': end_effector_pos_array,
+                        'risk': np.asarray([0.0], dtype=np.float32)  # Placeholder for risk prediction
                         # 'failure_phase_value': np.asarray([failure_phase_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
                         # 'language_instruction': 'dummy instruction',
                             })

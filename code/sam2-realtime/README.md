@@ -47,7 +47,8 @@ python3.10 zeyu_sam2_video_risk_inference.py --input_type realsense --camera_ser
 ```
 export DISPLAY=:1
 
-python3.10 zeyu_sam2_data_collection.py --input_type realsense --camera_serial 217222067304
+<!-- 217222067236 -->
+python3.10 zeyu_sam2_data_collection.py --input_type realsense --camera_serial 217222063197
 ```
 
 Then SAM-2-online can be used in a few lines as follows for image and video and **camera** prediction.
