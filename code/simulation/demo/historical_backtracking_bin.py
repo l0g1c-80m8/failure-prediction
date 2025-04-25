@@ -155,6 +155,7 @@ class Projectile(MuJoCoBase):
         self.randomize_floor()
         self.randomize_scene_colors("panel_collision", "object_collision")
         self.randomize_object('object_body', 'object_collision')
+        mj.mj_forward(self.model, self.data)
 
         self.trajectory = self.load_trajectory()
 
@@ -188,20 +189,33 @@ class Projectile(MuJoCoBase):
 
     def randomize_object(self, object_body_id, object_geom_id):
         """Randomize the object's size, mass, friction, and other physical properties."""
+        # Debug: print all mesh names in the model
+        # for i in range(self.model.nmesh):
+        #     mesh_name = mj.mj_id2name(self.model, mj.mjtObj.mjOBJ_MESH, i)
+        #     print(f"Mesh ID {i}: {mesh_name}")
+
         # Get object body and geom IDs
         object_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, object_body_id)
         object_geom_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_GEOM, object_geom_id)
         current_object_name = self.config.get('object_related', {}).get('current_object', 'N/A')
+        object_mesh_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_MESH, current_object_name)
+        print("object_mesh_id", object_mesh_id)
 
         fixed_panel_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, 'fixed_panel')
         fixed_panel_pos = self.data.xpos[fixed_panel_body_id]
         # print("fixed_panel_pos", fixed_panel_pos)
         
         # Randomize object size (within reasonable bounds)
+        print("object_geom_id", object_geom_id)
         base_size = self.config.get('object_related', {}).get(current_object_name, {}).get('base_size', 'N/A') # Original size
+        # print("base_size", base_size)
         size_variation = random.uniform(self.config.get('object_related', {}).get(current_object_name, {}).get('size_variation', 'N/A')[0], self.config.get('object_related', {}).get(current_object_name, {}).get('size_variation', 'N/A')[1])  # n% variation
         new_size = base_size * size_variation
+        # print("new_size", new_size)
         self.model.geom_size[object_geom_id] = [new_size, new_size, new_size]
+        if object_mesh_id >= 0:
+            # Scale the mesh
+            self.model.mesh_scale[object_mesh_id] = [new_size, new_size, new_size]
         
         # Randomize mass (scaled with size)
         base_mass = self.config.get('object_related', {}).get(current_object_name, {}).get('base_mass', 'N/A') # Original mass
@@ -477,18 +491,19 @@ class Projectile(MuJoCoBase):
 
     def get_camera_image(self, camera_name):
         """
-        Get two images from the specified camera - one for fixed panel and one for object.
+        Get images from the specified camera - processed (panel/object separate) and non-processed (full scene).
         
         Args:
             camera_name (str): Name of the camera to capture from
             
         Returns:
-            tuple: Two RGB image arrays (fixed_panel_img, object_img) each of shape (height, width, 3)
+            tuple: Four RGB image arrays (panel_img, object_img, full_img_rgb, full_img_depth) 
+                each of shape (height, width, 3) or (height, width) for depth
         """
         # Skip if cameras are disabled
         if not self.enable_cameras:
-            return None, None
-    
+            return None, None, None, None
+        
         # Get camera id
         cam_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_CAMERA, camera_name)
         if cam_id < 0:
@@ -497,9 +512,11 @@ class Projectile(MuJoCoBase):
         # Get image dimensions
         image_size = self.config.get('camera_related', {}).get('camera_image_size', 'N/A')
         
-        # Initialize image arrays for both fixed panel and object
-        fixed_panel_img = np.zeros((image_size[0], image_size[1], 3), dtype=np.uint8)
+        # Initialize image arrays
+        panel_img = np.zeros((image_size[0], image_size[1], 3), dtype=np.uint8)
         object_img = np.zeros((image_size[0], image_size[1], 3), dtype=np.uint8)
+        full_img_rgb = np.zeros((image_size[0], image_size[1], 3), dtype=np.uint8)
+        full_img_depth = np.zeros((image_size[0], image_size[1]), dtype=np.float32)
         
         # Create camera instance
         cam = mj.MjvCamera()
@@ -514,6 +531,19 @@ class Projectile(MuJoCoBase):
             # Set up viewport
             viewport = mj.MjrRect(0, 0, image_size[1], image_size[0])
             
+            # First render - full scene (non-processed image)
+            # Restore original visibility settings to show everything
+            self.opt.geomgroup[:] = original_geomgroup
+            
+            # Update and render scene for full view
+            mj.mjv_updateScene(self.model, self.data, self.opt, None, cam,
+                            mj.mjtCatBit.mjCAT_ALL.value, self.scene)
+            mj.mjr_render(viewport, self.scene, self.context)
+            
+            # Read pixels for full RGB image
+            mj.mjr_readPixels(full_img_rgb, full_img_depth, viewport, self.context)
+            
+            # Now do the processed renders as before
             # First render - fixed panel only
             self.opt.geomgroup[:] = 0  # Hide all groups
             self.opt.geomgroup[1] = 1  # Show only fixed panel
@@ -524,7 +554,7 @@ class Projectile(MuJoCoBase):
             mj.mjr_render(viewport, self.scene, self.context)
             
             # Read pixels for fixed panel image
-            mj.mjr_readPixels(fixed_panel_img, None, viewport, self.context)
+            mj.mjr_readPixels(panel_img, None, viewport, self.context)
             
             # Second render - object only
             self.opt.geomgroup[:] = 0  # Hide all groups
@@ -541,9 +571,9 @@ class Projectile(MuJoCoBase):
             # Restore original visibility settings
             self.opt.geomgroup[:] = original_geomgroup
             
-            return fixed_panel_img, object_img
+            return panel_img, object_img, full_img_rgb, full_img_depth
         
-        return None, None  # Return None for both images if camera name not recognized
+        return None, None, None, None  # Return None for all images if camera name not recognized
 
     def simulate(self):
         video_dir = './demo'
@@ -654,10 +684,11 @@ class Projectile(MuJoCoBase):
                     # Camera operations only if enabled
                     if self.enable_cameras:
                         # Get top camera frame
-                        top_panel_frame, top_object_frame = self.get_camera_image('top_camera')
+                        top_panel_frame, top_object_frame, full_top_frame_rgb, full_top_frame_depth = self.get_camera_image('top_camera')
                         # top_camera_frame = top_camera_frame[::-1, :, :]
                         if top_panel_frame is not None and top_object_frame is not None:
                             # Process panel frame
+                            # print("top_panel_frame", type(top_panel_frame))  # <class 'numpy.ndarray'>
                             top_panel_writer.append_data(top_panel_frame)
                             top_panel_view = cv2.cvtColor(top_panel_frame, cv2.COLOR_RGB2BGR)
                             top_panel_mask, top_panel_contour, top_panel_filtered = process_camera_frame(top_panel_view, min_contour_area=self.min_contour_area)
@@ -668,7 +699,10 @@ class Projectile(MuJoCoBase):
                             top_object_mask, top_object_contour, top_object_filtered = process_camera_frame(top_object_view, min_contour_area=self.min_contour_area)
 
                         # Get front camera frames
-                        front_panel_frame, front_object_frame = self.get_camera_image('front_camera')
+                        front_panel_frame, front_object_frame, full_front_frame_rgb, full_front_frame_depth = self.get_camera_image('front_camera')
+                        # Add this line to rotate the full front frame before storing it in the episode
+                        if full_front_frame_rgb is not None:
+                            full_front_frame_rgb = cv2.rotate(full_front_frame_rgb, cv2.ROTATE_90_CLOCKWISE)
                         if front_panel_frame is not None and front_object_frame is not None:
                             # Rotate and process panel frame
                             front_panel_frame = cv2.rotate(front_panel_frame, cv2.ROTATE_90_CLOCKWISE)
@@ -748,7 +782,8 @@ class Projectile(MuJoCoBase):
                                 first_failure_time_step = step_num - object_drop_time # + episode_num * (self.config.get('trajectories', {}).get('episode_length', 'N/A') - object_drop_time)
 
                             self.episode.append({
-                            # 'image': top_panel_frame,
+                            'full_top_frame_rgb': full_top_frame_rgb,
+                            'full_front_frame_rgb': full_front_frame_rgb,
                             # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
                             'time_step': np.asarray(step_num, dtype=np.float32),
                             'object_top_contour': np.asarray(top_object_contour, dtype=np.float32),
@@ -802,7 +837,7 @@ class Projectile(MuJoCoBase):
 
             if self.config.get('simulation_related', {}).get('save_data', 'N/A'):
                 print(f"Generating {self.dataset_type} raw examples...")
-                np.save(f"{save_path}/episode_{episode_num}_{current_object_name}_{timestamp}_raw", self.episode)
+                np.save(f"{save_path}/episode{episode_num}_{current_object_name}_{self.dataset_type}_{timestamp}_raw", self.episode)
                 
 
         # writer.close()

@@ -388,7 +388,7 @@ def plot_raw_metrics(original_episode, episode_num, dataset_type, save_path, cur
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig(f'{save_path}/episode{episode_num}_{current_object_name}_{dataset_type}_{timestamp}.png')
+    plt.savefig(f'{save_path}/episode{episode_num}_{current_object_name}_{dataset_type}_{timestamp}_raw.png')
     plt.close()
 
 def plot_metrics(original_episode, resampled_episode, save_path, episode_name=None):

@@ -8,7 +8,7 @@ from common_functions import (linear_interpolation, resample_data, plot_metrics,
 
 def main(data_dir, interpolate_type = "linear"):
     episode_files = sorted([f for f in os.listdir(data_dir) if f.endswith('.npy')])
-    episodes = {}
+    # episodes = {}
     for file_idx, episode_file in enumerate(episode_files):
         # print("file_idx", file_idx)
         episode_path = os.path.join(data_dir, episode_file)
@@ -20,7 +20,7 @@ def main(data_dir, interpolate_type = "linear"):
         episode_name = os.path.splitext(episode_filename)[0]  # Returns "episode_0_connector0_raw"
         os.makedirs(os.path.join(episode_folder_path, "new"), exist_ok=True)
         # print("episode_folder_path", episode_folder_path)
-        episodes[file_idx] = np.load(episode_path, allow_pickle=True)
+        episodes_file_idx = np.load(episode_path, allow_pickle=True)
         episode_failure_phase_start = -1
         episode_failure_phase_reach = -1
         
@@ -36,9 +36,9 @@ def main(data_dir, interpolate_type = "linear"):
         matrix = False
         
         # 1. Interpolate the data
-        for data_idx in range(len(episodes[file_idx])):
-            failure_phase_value = episodes[file_idx][data_idx]['failure_phase_value']  # Extract the scalar from the array
-            episodes[file_idx][data_idx]["risk"] = failure_phase_value
+        for data_idx in range(len(episodes_file_idx)):
+            failure_phase_value = episodes_file_idx[data_idx]['failure_phase_value']  # Extract the scalar from the array
+            episodes_file_idx[data_idx]["risk"] = failure_phase_value
             
             # print("file_idx", file_idx, "failure_phase_value", failure_phase_value)
             # Record first occurrence of value 0.5
@@ -51,11 +51,11 @@ def main(data_dir, interpolate_type = "linear"):
                 print(f"Episode {file_idx}: First occurrence of failure_phase_value=1.0 at index {data_idx}")
 
             # 1.1 Calculate states
-            top_object_contour = episodes[file_idx][data_idx]['object_top_contour']
-            top_panel_contour = episodes[file_idx][data_idx]['gripper_top_contour']
-            front_object_contour = episodes[file_idx][data_idx]['object_front_contour']
-            front_panel_contour = episodes[file_idx][data_idx]['gripper_front_contour']
-            end_effector_pos = episodes[file_idx][data_idx]['end_effector_pos']
+            top_object_contour = episodes_file_idx[data_idx]['object_top_contour']
+            top_panel_contour = episodes_file_idx[data_idx]['gripper_top_contour']
+            front_object_contour = episodes_file_idx[data_idx]['object_front_contour']
+            front_panel_contour = episodes_file_idx[data_idx]['gripper_front_contour']
+            end_effector_pos = episodes_file_idx[data_idx]['end_effector_pos']
             top_camera_object_contours.append(top_object_contour)
             top_camera_panel_contours.append(top_panel_contour)
             front_camera_object_contours.append(front_object_contour)
@@ -127,7 +127,7 @@ def main(data_dir, interpolate_type = "linear"):
                     # print("end_effector_pos", np.asarray(end_effector_pos).shape) # (3,)
                     # print("combined_features", combined_features.shape) # (19,) if matrix, otherwise (15,)
                     if (matrix and combined_features.shape[0]==19) or (not matrix and combined_features.shape[0]==15):
-                        episodes[file_idx][data_idx]['state'] = np.asarray(combined_features, dtype=np.float32)
+                        episodes_file_idx[data_idx]['state'] = np.asarray(combined_features, dtype=np.float32)
                     else:
                         raise ValueError(f"Error: combined_features shape {combined_features.shape} incorrect")
 
@@ -141,10 +141,10 @@ def main(data_dir, interpolate_type = "linear"):
                 # Update the "action" key for the dictionaries between i and k
                 for idx, value in enumerate(interpolated_values, start=episode_failure_phase_start):
                     # print("value", value)
-                    episodes[file_idx][idx]["risk"] = np.asarray([value], dtype=np.float32)
+                    episodes_file_idx[idx]["risk"] = np.asarray([value], dtype=np.float32)
         
         # 2. Resample the data
-        episode_crop = episodes[file_idx][window:]
+        episode_crop = episodes_file_idx[window:]
         # print("len(episode_resampled_crop)", len(episode_crop))
         episode_resampled = resample_data(episode_crop, cut=True, scale=15)
         # print("len(episode_resampled)", len(episode_resampled))
@@ -163,11 +163,11 @@ def main(data_dir, interpolate_type = "linear"):
             print(f"WARNING: No data in episode_resampled in resampled episode {file_idx}")
         else:
             print(f"Generating {dataset_type} resampled examples...")
-            plot_metrics(episodes[file_idx], episode_resampled, episode_folder_path, episode_name=episode_name)
+            plot_metrics(episodes_file_idx, episode_resampled, episode_folder_path, episode_name=episode_name)
             # 5. Save the resampled data
             np.save(f"{episode_folder_path}/new/{episode_name}.npy", episode_resampled)
 
 
 if __name__ == "__main__":
-    data_dir = "demo/data/train_raw" # demo/data/test_data_0403/val_raw
+    data_dir = "demo/data/val_raw" # demo/data/test_data_0403/val_raw
     main(data_dir, interpolate_type = "linear")
