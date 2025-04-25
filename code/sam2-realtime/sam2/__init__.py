@@ -13,4 +13,8 @@ from hydra.core.global_hydra import GlobalHydra
 if not GlobalHydra.instance().is_initialized():
     initialize_config_module("sam2", version_base="1.2")
 
+# Get the absolute path to the project root
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, '../..'))
+sys.path.append(project_root)
 
