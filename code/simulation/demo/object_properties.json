@@ -1,0 +1,326 @@
+{
+    "cube": {
+        "base_mass": 0.4,
+        "mass_variation": [
+            0.8,
+            1.2
+        ],
+        "base_size": 1,
+        "size_variation": [
+            1.0,
+            2.0
+        ],
+        "friction_variation": [
+            0.25,
+            0.35
+        ],
+        "x_offset": [
+            -0.04,
+            0.04
+        ],
+        "y_offset": [
+            -0.04,
+            0.04
+        ],
+        "z_offset": [
+            0.05,
+            0.06
+        ],
+        "qpos": [
+            [
+                0,
+                0,
+                1,
+                1
+            ]
+        ]
+    },
+    "stanford_bunny": {
+        "base_mass": 0.2,
+        "mass_variation": [
+            0.8,
+            1.2
+        ],
+        "base_size": 1,
+        "size_variation": [
+            1.0,
+            2.0
+        ],
+        "friction_variation": [
+            0.25,
+            0.35
+        ],
+        "x_offset": [
+            -0.04,
+            0.04
+        ],
+        "y_offset": [
+            -0.04,
+            0.04
+        ],
+        "z_offset": [
+            0.05,
+            0.06
+        ],
+        "qpos": [
+            [
+                0,
+                0,
+                1,
+                1
+            ]
+        ]
+    },
+    "teamug": {
+        "base_mass": 0.2,
+        "mass_variation": [
+            0.8,
+            1.2
+        ],
+        "base_size": 1,
+        "size_variation": [
+            1.0,
+            2.0
+        ],
+        "friction_variation": [
+            0.25,
+            0.35
+        ],
+        "x_offset": [
+            -0.04,
+            0.04
+        ],
+        "y_offset": [
+            -0.04,
+            0.04
+        ],
+        "z_offset": [
+            0.05,
+            0.06
+        ],
+        "qpos": [
+            [
+                0,
+                0,
+                1,
+                1
+            ]
+        ]
+    },
+    "flange": {
+        "base_mass": 0.2,
+        "mass_variation": [
+            0.8,
+            1.2
+        ],
+        "base_size": 1,
+        "size_variation": [
+            1.0,
+            2.0
+        ],
+        "friction_variation": [
+            0.25,
+            0.35
+        ],
+        "x_offset": [
+            -0.04,
+            0.04
+        ],
+        "y_offset": [
+            -0.04,
+            0.04
+        ],
+        "z_offset": [
+            0.05,
+            0.06
+        ],
+        "qpos": [
+            [
+                0,
+                0,
+                1,
+                1
+            ]
+        ]
+    },
+    "flange2": {
+        "base_mass": 0.5,
+        "mass_variation": [
+            0.8,
+            1.2
+        ],
+        "base_size": 1,
+        "size_variation": [
+            1.0,
+            2.0
+        ],
+        "friction_variation": [
+            0.25,
+            0.35
+        ],
+        "x_offset": [
+            -0.04,
+            0.04
+        ],
+        "y_offset": [
+            -0.04,
+            0.04
+        ],
+        "z_offset": [
+            0.05,
+            0.06
+        ],
+        "qpos": [
+            [
+                0,
+                0,
+                1,
+                1
+            ]
+        ]
+    },
+    "cover0": {
+        "base_mass": 0.5,
+        "mass_variation": [
+            0.8,
+            1.2
+        ],
+        "base_size": 1,
+        "size_variation": [
+            1.0,
+            2.0
+        ],
+        "friction_variation": [
+            0.25,
+            0.35
+        ],
+        "x_offset": [
+            -0.04,
+            0.04
+        ],
+        "y_offset": [
+            -0.04,
+            0.04
+        ],
+        "z_offset": [
+            0.05,
+            0.06
+        ],
+        "qpos": [
+            [
+                0,
+                0,
+                1,
+                1
+            ]
+        ]
+    },
+    "connector0": {
+        "base_mass": 0.5,
+        "mass_variation": [
+            0.8,
+            1.2
+        ],
+        "base_size": 1,
+        "size_variation": [
+            1.0,
+            2.0
+        ],
+        "friction_variation": [
+            0.25,
+            0.35
+        ],
+        "x_offset": [
+            -0.04,
+            0.04
+        ],
+        "y_offset": [
+            -0.04,
+            0.04
+        ],
+        "z_offset": [
+            0.05,
+            0.06
+        ],
+        "qpos": [
+            [
+                0,
+                0,
+                1,
+                1
+            ]
+        ]
+    },
+    "combined_model": {
+        "base_mass": 0.5,
+        "mass_variation": [
+            0.8,
+            1.2
+        ],
+        "base_size": 1,
+        "size_variation": [
+            1.0,
+            2.0
+        ],
+        "friction_variation": [
+            0.25,
+            0.35
+        ],
+        "x_offset": [
+            -0.04,
+            0.04
+        ],
+        "y_offset": [
+            -0.04,
+            0.04
+        ],
+        "z_offset": [
+            0.05,
+            0.06
+        ],
+        "qpos": [
+            [
+                0,
+                0,
+                1,
+                1
+            ]
+        ]
+    },
+    "sem-PersonStanding-158b64ae73f514045071967803b3d7cf": {
+        "base_mass": 0.5,
+        "mass_variation": [
+            0.8,
+            1.2
+        ],
+        "base_size": 1,
+        "size_variation": [
+            0.05,
+            0.1
+        ],
+        "friction_variation": [
+            0.25,
+            0.35
+        ],
+        "x_offset": [
+            -0.04,
+            0.04
+        ],
+        "y_offset": [
+            -0.04,
+            0.04
+        ],
+        "z_offset": [
+            0.05,
+            0.06
+        ],
+        "qpos": [
+            [
+                0,
+                0,
+                0,
+                1
+            ]
+        ]
+    }
+}

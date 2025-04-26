@@ -4,6 +4,7 @@ import numpy as np
 from mujoco.glfw import glfw
 import sys
 import time
+import argparse
 from datetime import datetime
 
 from mujoco_base import MuJoCoBase
@@ -20,6 +21,11 @@ from common_functions import (flat_interpolation, process_camera_frame,
                         calculate_failure_phase, plot_raw_metrics,
                         read_config
                         )
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Update simulation config JSON')
+    parser.add_argument('--config', default='simulation_config.json', help='Path to the simulation_config.json file to modify')
+    return parser.parse_args()
 
 class Projectile(MuJoCoBase):
     def __init__(self, config, ramdom_episode):
@@ -849,7 +855,8 @@ class Projectile(MuJoCoBase):
         glfw.terminate()
 
 if __name__ == "__main__":
-    config = read_config("./demo/simulation_config.json")
+    args = parse_arguments()
+    config = read_config(args.config)
     if not config:  # Check if config is not None before trying to access values
         print("Could not load configuration. Using default values.")
     
