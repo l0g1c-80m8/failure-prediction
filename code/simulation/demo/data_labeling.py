@@ -85,7 +85,7 @@ class ContourImageWidget(QLabel):
 
 
 class ValuePlotter(FigureCanvas):
-    """Widget for plotting risk values"""
+    """Widget for plotting risk values with draggable markers"""
     
     def __init__(self, parent=None):
         self.fig, self.ax = plt.subplots(figsize=(6, 3), dpi=100)
@@ -97,6 +97,19 @@ class ValuePlotter(FigureCanvas):
         self.values = []
         self.current_index = -1
         
+        # Add markers for risk transition
+        self.first_failure_time_step = None
+        self.failure_time_step_trim = None
+        
+        # Connect mouse events
+        self.mpl_connect('button_press_event', self.on_click)
+        self.mpl_connect('motion_notify_event', self.on_motion)
+        self.mpl_connect('button_release_event', self.on_release)
+        
+        # Variables for dragging
+        self.dragging = False
+        self.active_marker = None
+        
     def set_data(self, values):
         """Set the data to plot"""
         self.values = values
@@ -106,6 +119,16 @@ class ValuePlotter(FigureCanvas):
         """Highlight the current index"""
         self.current_index = index
         self.update_plot()
+        
+    def set_markers(self, first_failure, failure_trim):
+        """Set the risk transition markers"""
+        self.first_failure_time_step = first_failure
+        self.failure_time_step_trim = failure_trim
+        self.update_plot()
+        
+    def get_markers(self):
+        """Get the current marker positions"""
+        return self.first_failure_time_step, self.failure_time_step_trim
         
     def update_plot(self):
         """Update the plot with current data"""
@@ -118,13 +141,87 @@ class ValuePlotter(FigureCanvas):
             if 0 <= self.current_index < len(self.values):
                 self.ax.plot(self.current_index, self.values[self.current_index], 'ro')
             
+            # Draw failure markers if set
+            if self.first_failure_time_step is not None:
+                self.ax.axvline(x=self.first_failure_time_step, color='g', linestyle='--', 
+                               alpha=0.7, label='First Failure')
+            
+            if self.failure_time_step_trim is not None:
+                self.ax.axvline(x=self.failure_time_step_trim, color='r', linestyle='--', 
+                               alpha=0.7, label='Failure Complete')
+            
             self.ax.set_ylim(-0.1, 1.1)  # Assuming values are between 0 and 1
             self.ax.set_xlabel('Time Step')
             self.ax.set_ylabel('Risk Value')
             self.ax.grid(True)
+            
+            if self.first_failure_time_step is not None or self.failure_time_step_trim is not None:
+                self.ax.legend()
         
         self.fig.tight_layout()
         self.draw()
+        
+    def on_click(self, event):
+        """Handle mouse click to set or drag markers"""
+        if event.inaxes != self.ax or event.button != 1:
+            return
+            
+        if event.xdata is None:
+            return
+            
+        x_pos = int(round(event.xdata))
+        if x_pos < 0 or x_pos >= len(self.values):
+            return
+        
+        # Check if click is near existing markers
+        if self.first_failure_time_step is not None and abs(x_pos - self.first_failure_time_step) < 5:
+            self.dragging = True
+            self.active_marker = 'first'
+            return
+            
+        if self.failure_time_step_trim is not None and abs(x_pos - self.failure_time_step_trim) < 5:
+            self.dragging = True
+            self.active_marker = 'second'
+            return
+        
+        # Set new marker
+        if self.first_failure_time_step is None:
+            self.first_failure_time_step = x_pos
+        elif self.failure_time_step_trim is None:
+            # Ensure second marker is after first
+            if x_pos > self.first_failure_time_step:
+                self.failure_time_step_trim = x_pos
+        else:
+            # Reset markers and start over
+            self.first_failure_time_step = x_pos
+            self.failure_time_step_trim = None
+        
+        self.update_plot()
+        
+    def on_motion(self, event):
+        """Handle mouse drag to move markers"""
+        if not self.dragging or event.xdata is None:
+            return
+            
+        x_pos = int(round(event.xdata))
+        if x_pos < 0 or x_pos >= len(self.values):
+            return
+            
+        if self.active_marker == 'first':
+            # First marker can't be after second
+            if self.failure_time_step_trim is None or x_pos < self.failure_time_step_trim:
+                self.first_failure_time_step = x_pos
+        elif self.active_marker == 'second':
+            # Second marker can't be before first
+            if x_pos > self.first_failure_time_step:
+                self.failure_time_step_trim = x_pos
+                
+        self.update_plot()
+        
+    def on_release(self, event):
+        """Handle mouse release to stop dragging"""
+        self.dragging = False
+        self.active_marker = None
 
 
 class FileListDialog(QDialog):
@@ -331,16 +428,27 @@ class EpisodeEditor(QMainWindow):
         self.value_spin.valueChanged.connect(self.value_changed)
         value_edit_layout.addWidget(self.value_spin)
         
+        # Add new button for applying the markers
+        self.apply_markers_button = QPushButton("Apply Risk Markers")
+        self.apply_markers_button.clicked.connect(self.apply_risk_markers)
+        self.apply_markers_button.setEnabled(False)
+        value_edit_layout.addWidget(self.apply_markers_button)
+        
         self.interpolate_button = QPushButton("Interpolate Values")
         self.interpolate_button.clicked.connect(self.interpolate_values)
         value_edit_layout.addWidget(self.interpolate_button)
         
         value_edit_layout.addStretch()
         
+        # Add instructions label
+        instructions_label = QLabel("Click on plot to set first failure marker (green), click again to set failure complete marker (red). Then press 'Apply Risk Markers'.")
+        instructions_label.setStyleSheet("color: #555; font-style: italic;")
+        
         # Add all layouts to controls
         controls_layout.addLayout(nav_layout)
         controls_layout.addLayout(step_info_layout)
         controls_layout.addLayout(value_edit_layout)
+        controls_layout.addWidget(instructions_label)
         
         controls_widget.setLayout(controls_layout)
         splitter.addWidget(controls_widget)
@@ -367,6 +475,7 @@ class EpisodeEditor(QMainWindow):
         self.step_spin.setEnabled(enabled)
         self.value_spin.setEnabled(enabled)
         self.interpolate_button.setEnabled(enabled)
+        self.apply_markers_button.setEnabled(enabled)
         self.save_button.setEnabled(enabled)
     
     def load_folder(self):
@@ -474,6 +583,9 @@ class EpisodeEditor(QMainWindow):
             # Extract risk values for plotting
             risk_values = [step['risk'][0] for step in self.episode_data]
             self.value_plot.set_data(risk_values)
+            
+            # Reset markers
+            self.value_plot.set_markers(None, None)
             
             # Enable controls
             self.set_controls_enabled(True)
@@ -717,6 +829,57 @@ class EpisodeEditor(QMainWindow):
         self.front_panel_view.setFixedSize(320, 240)
         self.front_object_view.setFixedSize(320, 240)
 
+    def apply_risk_markers(self):
+        """Apply risk values based on the marker positions"""
+        if self.episode_data is None:
+            return
+        
+        # Get marker positions
+        first_failure, failure_trim = self.value_plot.get_markers()
+        
+        if first_failure is None:
+            self.status_bar.showMessage("Error: First failure marker not set")
+            return
+            
+        if failure_trim is None:
+            self.status_bar.showMessage("Error: Failure complete marker not set")
+            return
+            
+        if first_failure >= failure_trim:
+            self.status_bar.showMessage("Error: First failure must be before failure complete")
+            return
+        
+        # Corrected linear interpolation function
+        def linear_interpolation(first_failure_time_step, failure_time_step_trim):
+            return np.linspace(0, 1, failure_time_step_trim - first_failure_time_step + 1)
+        
+        try:
+            # Set all values before first_failure to 0
+            for i in range(first_failure):
+                self.episode_data[i]['risk'] = np.asarray([0.0], dtype=np.float32)
+                
+            # Set interpolated values between markers
+            interpolated = linear_interpolation(first_failure, failure_trim)
+            for i, value in enumerate(interpolated):
+                idx = first_failure + i
+                self.episode_data[idx]['risk'] = np.asarray([value], dtype=np.float32)
+                
+            # Set all values after failure_trim to 1
+            for i in range(failure_trim + 1, len(self.episode_data)):
+                self.episode_data[i]['risk'] = np.asarray([1.0], dtype=np.float32)
+                
+            # Update plot with new values
+            risk_values = [step['risk'][0] for step in self.episode_data]
+            self.value_plot.set_data(risk_values)
+            
+            # Update display
+            self.update_display()
+            
+            self.status_bar.showMessage(f"Applied risk values: 0 before step {first_failure}, " +
+                                       f"interpolated to step {failure_trim}, 1 after")
+        except Exception as e:
+            self.status_bar.showMessage(f"Error applying risk values: {str(e)}")
+            print(f"Error details: {str(e)}")
 
 def main():
     # Create Qt application
