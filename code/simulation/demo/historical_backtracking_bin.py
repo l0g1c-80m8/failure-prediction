@@ -17,7 +17,7 @@ import ast
 
 import cv2
 
-from common_functions import (flat_interpolation, process_camera_frame,
+from common_functions import (flat_interpolation, process_simulation_camera_frame,
                         calculate_failure_phase, plot_raw_metrics,
                         read_config
                         )
@@ -697,12 +697,12 @@ class Projectile(MuJoCoBase):
                             # print("top_panel_frame", type(top_panel_frame))  # <class 'numpy.ndarray'>
                             top_panel_writer.append_data(top_panel_frame)
                             top_panel_view = cv2.cvtColor(top_panel_frame, cv2.COLOR_RGB2BGR)
-                            top_panel_mask, top_panel_contour, top_panel_filtered = process_camera_frame(top_panel_view, min_contour_area=self.min_contour_area)
+                            top_panel_mask, top_panel_contour, top_panel_filtered = process_simulation_camera_frame(top_panel_view, min_contour_area=self.min_contour_area)
                             
                             # Process object frame
                             top_object_writer.append_data(top_object_frame)
                             top_object_view = cv2.cvtColor(top_object_frame, cv2.COLOR_RGB2BGR)
-                            top_object_mask, top_object_contour, top_object_filtered = process_camera_frame(top_object_view, min_contour_area=self.min_contour_area)
+                            top_object_mask, top_object_contour, top_object_filtered = process_simulation_camera_frame(top_object_view, min_contour_area=self.min_contour_area)
 
                         # Get front camera frames
                         front_panel_frame, front_object_frame, full_front_frame_rgb, full_front_frame_depth = self.get_camera_image('front_camera')
@@ -714,13 +714,13 @@ class Projectile(MuJoCoBase):
                             front_panel_frame = cv2.rotate(front_panel_frame, cv2.ROTATE_90_CLOCKWISE)
                             front_panel_writer.append_data(front_panel_frame)
                             front_panel_view = cv2.cvtColor(front_panel_frame, cv2.COLOR_RGB2BGR)
-                            front_panel_mask, front_panel_contour, front_panel_filtered = process_camera_frame(front_panel_view, min_contour_area=self.min_contour_area)
+                            front_panel_mask, front_panel_contour, front_panel_filtered = process_simulation_camera_frame(front_panel_view, min_contour_area=self.min_contour_area)
                             
                             # Rotate and process object frame
                             front_object_frame = cv2.rotate(front_object_frame, cv2.ROTATE_90_CLOCKWISE)
                             front_object_writer.append_data(front_object_frame)
                             front_object_view = cv2.cvtColor(front_object_frame, cv2.COLOR_RGB2BGR)
-                        front_object_mask, front_object_contour, front_object_filtered = process_camera_frame(front_object_view, min_contour_area=self.min_contour_area)
+                        front_object_mask, front_object_contour, front_object_filtered = process_simulation_camera_frame(front_object_view, min_contour_area=self.min_contour_area)
 
 
                     # Display images

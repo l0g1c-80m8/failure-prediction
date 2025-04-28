@@ -32,7 +32,7 @@ from simple_model.inference import load_model, predict_from_states
 from simple_model.resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
 
 from sam2.build_sam import build_sam2_camera_predictor
-from simulation.demo.common_functions import (process_consecutive_frames, extract_points_from_mask, extract_transform_features)
+from simulation.demo.common_functions import process_real_camera_mask
 
 # Add the ur5_scripts directory to the path to be able to import urx_local
 ur5_scripts_dir = os.path.join(project_root, 'ur5_scripts')
@@ -505,14 +505,14 @@ def main():
                     )
 
             # Start robot manipulation in a separate thread after initialization
-            print("Starting robot manipulation...")
-            robot_thread = threading.Thread(
-                target=execute_trajectory, 
-                args=(robot_left, trajectory, args.n_rounds, is_executing)
-            )
-            robot_thread.daemon = True  # Make thread exit when main program exits
-            robot_thread.start()
-            print("Robot manipulation started in background thread")
+            # print("Starting robot manipulation...")
+            # robot_thread = threading.Thread(
+            #     target=execute_trajectory, 
+            #     args=(robot_left, trajectory, args.n_rounds, is_executing)
+            # )
+            # robot_thread.daemon = True  # Make thread exit when main program exits
+            # robot_thread.start()
+            # print("Robot manipulation started in background thread")
         
         else:
             # Tracking mode - use autocast for SAM2 tracking
@@ -529,18 +529,26 @@ def main():
                 top_camera_object_out_mask = (out_mask_logits[0] > 0.0).permute(1, 2, 0).cpu().numpy().astype(np.uint8)
                 top_camera_panel_out_mask = (out_mask_logits[1] > 0.0).permute(1, 2, 0).cpu().numpy().astype(np.uint8)
                 
-                top_camera_object_contours.append(top_camera_object_out_mask)
-                top_camera_panel_contours.append(top_camera_panel_out_mask)
+                top_camera_object_current_points = process_real_camera_mask(top_camera_object_out_mask, min_contour_area=3)
+                top_camera_panel_current_points = process_real_camera_mask(top_camera_panel_out_mask, min_contour_area=3)
+                top_camera_object_current_points = np.asarray(top_camera_object_current_points, dtype=np.float32)
+                top_camera_panel_current_points = np.asarray(top_camera_panel_current_points, dtype=np.float32)
+                # print("top_camera_object_current_points.shape", top_camera_object_current_points.shape)
+                # print("top_camera_panel_current_points.shape", top_camera_panel_current_points.shape)
+                # top_camera_object_contours.append(top_camera_object_out_mask)
+                # top_camera_panel_contours.append(top_camera_panel_out_mask)
                 
                 # Calculate motion features if we have enough frames
-                top_camera_object_current_points = extract_points_from_mask(top_camera_object_out_mask)
-                top_camera_panel_current_points = extract_points_from_mask(top_camera_panel_out_mask)
+                # top_camera_object_current_points = extract_points_from_mask(top_camera_object_out_mask)
+                # top_camera_panel_current_points = extract_points_from_mask(top_camera_panel_out_mask)
                 
                 if (len(top_camera_object_current_points) > 0 and 
                     len(top_camera_panel_current_points) > 0):
                     
-                    top_camera_object_current_contours = [top_camera_object_current_points.reshape(-1, 1, 2).astype(np.int32)]
-                    top_camera_panel_current_contours = [top_camera_panel_current_points.reshape(-1, 1, 2).astype(np.int32)]
+                    top_camera_object_current_contours = top_camera_object_current_points.reshape(-1, 1, 2).astype(np.int32)
+                    top_camera_panel_current_contours = top_camera_panel_current_points.reshape(-1, 1, 2).astype(np.int32)
+                    print("top_camera_object_current_contours.shape", np.asarray(top_camera_object_current_contours, dtype=np.float32).shape)
+                    print("top_camera_panel_current_contours.shape", np.asarray(top_camera_panel_current_contours, dtype=np.float32).shape)
 
                     # Get the complete pose (position and orientation)
                     pose = robot_left.get_pose()

@@ -271,7 +271,42 @@ def extract_transform_features(transforms):
     
     return features
 
-def process_camera_frame(frame, min_contour_area=100):
+def process_real_camera_mask(masks, min_contour_area=100):
+    """
+    Process camera frame to get mask and contours for non-zero pixel values.
+    
+    Args:
+        frame: RGB image array (height, width, 3)
+        min_contour_area: 100  # Adjust this threshold as needed
+    
+    Returns:
+        tuple: (mask, contours, filtered_image)
+    """
+    
+    # Find contours
+    contours, _ = cv2.findContours(masks, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Filter small contours (noise)
+    filtered_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
+    
+    
+    # If we have valid contours, keep only the largest one
+    if filtered_contours:
+        # Find the contour with the largest area
+        largest_contour = max(filtered_contours, key=cv2.contourArea)
+        # Use only this contour
+        filtered_contours = [largest_contour]
+        
+    else:
+        # If no valid contours found, create a default contour (small square)
+        # default_contour = np.array([[[10, 10]], [[10, 20]], [[20, 20]], [[20, 10]]], dtype=np.int32)
+        # filtered_contours = [default_contour]
+        # cv2.drawContours(filtered_image, filtered_contours, -1, (0, 0, 255), 2)  # Red color for default
+        print("No valid contours found")
+    
+    return filtered_contours
+
+def process_simulation_camera_frame(frame, min_contour_area=100):
     """
     Process camera frame to get mask and contours for non-zero pixel values.
     
