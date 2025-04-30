@@ -44,7 +44,7 @@ def main():
             print(f"Object {obj_name} already exists in config, use existing size scale")
         else:
             # Object not found in properties file, add default properties
-            obj_size_scale = [1.0, 1.7]
+            obj_size_scale = [0.05, 0.1]
             default_properties = {
                     "base_mass": 0.5,
                     "mass_variation": [0.8, 1.2],

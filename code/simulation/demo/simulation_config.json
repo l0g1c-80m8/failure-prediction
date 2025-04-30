@@ -11,7 +11,7 @@
         "initial_delay": 2.0,
         "min_contour_area": 3,
         "trajectories": {
-            "n_train_episodes": 5,
+            "n_train_episodes": 1,
             "n_val_episodes": 1,
             "episode_length": 350
         }
