@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 
 N_TRAIN_EPISODES = 1
 N_VAL_EPISODES = 1
-EPISODE_LENGTH = 300  # Number of points in trajectory
+EPISODE_LENGTH = 10  # Number of points in trajectory
 
 # Thresholds for action calculation
 DISPLACEMENT_THRESHOLD_HIGH = 0.12
@@ -30,7 +30,7 @@ ANGULAR_SPEED_THRESHOLD_LOW = 0.1
 
 
 class Projectile(MuJoCoBase):
-    def __init__(self, xml_path, traj_file, initial_delay=3.0):
+    def __init__(self, xml_path, traj_file, output_dir, initial_delay=3.0):
         super().__init__(xml_path)
         self.init_angular_speed = 1.0  # Angular speed in radians per second
         self.initial_delay = initial_delay  # Delay before starting movement
@@ -51,6 +51,8 @@ class Projectile(MuJoCoBase):
         self.current_target = None
         self.next_target = None
         self.transition_start_time = None
+        
+        self.output_dir = output_dir
 
     def load_trajectory(self):
         with open(self.traj_file, "r") as file:
@@ -186,7 +188,7 @@ class Projectile(MuJoCoBase):
         relative_displacement = np.linalg.norm(cube_pos - fixed_box_pos)
 
         # Optionally print or log these values
-        print(f"Time: {self.data.time:.2f}s | Linear Speed: {linear_speed:.2f} m/s | Angular Speed: {angular_speed:.2f} rad/s | Relative Displacement: {relative_displacement:.2f} m")
+        print(f"Time: {self.data.time:.2f}s | Linear Speed: {linear_speed:.2f} m/s | Angular Speed: {angular_speed:.2f} rad/s | Relative Displacement: {relative_displacement:.2f} m | ", end="")
         
         # # Calculate the action based on the thresholds and interpolation logic
         # action_value = self.calculate_action(relative_displacement, linear_speed, angular_speed)
@@ -224,9 +226,10 @@ class Projectile(MuJoCoBase):
                             (LINEAR_SPEED_THRESHOLD_HIGH - LINEAR_SPEED_THRESHOLD_LOW)
         angular_speed_factor = (abs(angular_speed) - ANGULAR_SPEED_THRESHOLD_LOW) / \
                             (ANGULAR_SPEED_THRESHOLD_HIGH - ANGULAR_SPEED_THRESHOLD_LOW)
-
+        print(np.linalg.norm(displacement), linear_speed_factor, abs(angular_speed))
         # Combine the factors with an average, assuming equal importance
         action_value = (displacement_factor + linear_speed_factor + angular_speed_factor) / 3.0
+        print("Action:", f"{round(action_value, 4)}...")
         return action_value
 
     def randomize_camera_position(self):
@@ -507,10 +510,10 @@ class Projectile(MuJoCoBase):
             #     self.episode[step_num]["action"] = np.asarray([action_value], dtype=np.float32)  # Ensure action is a tensor of shape (1,)
             if dataset == "train":
                 print("Generating train examples...")
-                np.save(f'data/train/episode_{episode_num}.npy', self.episode)
+                np.save(f'{self.output_dir}/data/train/episode_{episode_num}.npy', self.episode)
             elif dataset == "val":
                 print("Generating val examples...")
-                np.save(f'data/val/episode_{episode_num}.npy', self.episode)
+                np.save(f'{self.output_dir}/data/val/episode_{episode_num}.npy', self.episode)
 
         # Plot after simulation
 
@@ -596,11 +599,12 @@ class Projectile(MuJoCoBase):
 def main():
     xml_path = "./model/universal_robots_ur5e/test_scene.xml"
     traj_path = "../ur5-scripts/traj.txt"  # Adjust path as needed
+    root_output_dir = "../rlds_dataset_builder-main/zeyu_example_dataset/"
 
-    os.makedirs('data/train', exist_ok=True)
-    os.makedirs('data/val', exist_ok=True)
+    os.makedirs(os.path.join(root_output_dir, 'data/train'), exist_ok=True)
+    os.makedirs(os.path.join(root_output_dir, 'data/val'), exist_ok=True)
 
-    sim = Projectile(xml_path, traj_path, initial_delay=0.5)
+    sim = Projectile(xml_path, traj_path, root_output_dir, initial_delay=0.5)
     sim.reset()
     sim.simulate(sys.argv[1])
 

@@ -16,8 +16,9 @@
     "runArgs": [
       "--name=mujoco-dev-container",
       "--network=host",
-      "--memory=26g",
+      "--memory=50g",
       "--gpus=all",
+      "--shm-size=16g",
       "--tty",
       "--device=/dev/dri/",
       "--device=/dev/bus/usb",
