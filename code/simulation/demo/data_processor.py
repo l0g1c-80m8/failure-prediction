@@ -1,8 +1,8 @@
 import os
 import numpy as np
-import time
-from datetime import datetime
-from common_functions import (linear_interpolation, resample_data, plot_metrics,
+from common_functions import (linear_interpolation, spline_interpolation,
+                              hermite_spline_interpolation, piecewise_bezier_interpolation,
+                              resample_data, plot_metrics,
                               process_consecutive_frames,
                               combine_arrays, visualize_contour_transformation)
 
@@ -28,7 +28,7 @@ def main(data_dir, interpolate_type = "linear"):
         top_camera_panel_contours = []
         front_camera_object_contours = []
         front_camera_panel_contours = []
-        window = 30
+        window = 1
         top_object_features_intervals = []
         top_panel_features_intervals = []
         front_object_features_intervals = []
@@ -142,6 +142,57 @@ def main(data_dir, interpolate_type = "linear"):
                 for idx, value in enumerate(interpolated_values, start=episode_failure_phase_start):
                     # print("value", value)
                     episodes_file_idx[idx]["risk"] = np.asarray([value], dtype=np.float32)
+            elif interpolate_type == "spline":
+                # We need to handle the three segments:
+                # 1. From index 0 to episode_failure_phase_start (should be 0.0)
+                # 2. From episode_failure_phase_start to episode_failure_phase_reach (spline interpolation)
+                # 3. From episode_failure_phase_reach to end (should be 1.0)
+                
+                # We'll just apply the spline interpolation from 0 to episode_failure_phase_reach
+                # This ensures we have a curve starting at (0, 0.0), going through
+                # (episode_failure_phase_start, 0.5), and ending at (episode_failure_phase_reach, 1.0)
+                
+                # First, set all values before episode_failure_phase_start to 0.0
+                for idx in range(episode_failure_phase_start):
+                    episodes_file_idx[idx]["risk"] = np.asarray([0.0], dtype=np.float32)
+                
+                # Generate the spline interpolation for the middle segment
+                interpolated_values = spline_interpolation(0, episode_failure_phase_start, episode_failure_phase_reach)
+                
+                # Update the risk values based on the interpolation
+                for idx in range(episode_failure_phase_reach + 1):
+                    value = interpolated_values[idx]
+                    episodes_file_idx[idx]["risk"] = np.asarray([value], dtype=np.float32)
+                
+                # Set all values after episode_failure_phase_reach to 1.0
+                for idx in range(episode_failure_phase_reach + 1, len(episodes_file_idx)):
+                    episodes_file_idx[idx]["risk"] = np.asarray([1.0], dtype=np.float32)
+            # Apply our chosen interpolation method
+            elif interpolate_type == "bezier":
+                # Use piecewise Bezier interpolation (guaranteed to stay in [0,1] range by construction)
+                interpolated_values = piecewise_bezier_interpolation(0, episode_failure_phase_start, episode_failure_phase_reach)
+                
+                # Update the risk values for all time steps
+                for idx in range(episode_failure_phase_reach + 1):
+                    value = interpolated_values[idx]
+                    episodes_file_idx[idx]["risk"] = np.asarray([value], dtype=np.float32)
+                
+                # Set all values after episode_failure_phase_reach to 1.0
+                for idx in range(episode_failure_phase_reach + 1, len(episodes_file_idx)):
+                    episodes_file_idx[idx]["risk"] = np.asarray([1.0], dtype=np.float32)
+                    
+            elif interpolate_type == "hermite":
+                # Use Hermite spline interpolation (guaranteed to stay in [0,1] range with proper tangents)
+                interpolated_values = hermite_spline_interpolation(0, episode_failure_phase_start, episode_failure_phase_reach)
+                
+                # Update the risk values for all time steps
+                for idx in range(episode_failure_phase_reach + 1):
+                    value = interpolated_values[idx]
+                    episodes_file_idx[idx]["risk"] = np.asarray([value], dtype=np.float32)
+                
+                # Set all values after episode_failure_phase_reach to 1.0
+                for idx in range(episode_failure_phase_reach + 1, len(episodes_file_idx)):
+                    episodes_file_idx[idx]["risk"] = np.asarray([1.0], dtype=np.float32)
         
         # 2. Resample the data
         episode_crop = episodes_file_idx[window:]
@@ -169,5 +220,5 @@ def main(data_dir, interpolate_type = "linear"):
 
 
 if __name__ == "__main__":
-    data_dir = "demo/data/val_raw" # demo/data/test_data_0403/val_raw
-    main(data_dir, interpolate_type = "linear")
+    data_dir = "demo/data/train_raw" # demo/data/test_data_0403/val_raw
+    main(data_dir, interpolate_type = "bezier") # linear

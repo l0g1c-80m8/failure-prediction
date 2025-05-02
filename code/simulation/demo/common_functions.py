@@ -7,6 +7,10 @@ import matplotlib.pyplot as plt
 
 import cv2
 from scipy.spatial.distance import cdist
+from scipy.interpolate import CubicSpline
+
+import time
+from datetime import datetime
 
 import json
 
@@ -24,6 +28,202 @@ def linear_interpolation(first_failure_time_step, failure_time_step_trim):
 def sin_interpolation(first_failure_time_step, failure_time_step_trim):
     x = np.linspace(0, 1, first_failure_time_step - failure_time_step_trim + 1)
     return np.sin(x)
+
+def spline_interpolation(start_idx, middle_idx, end_idx):
+    """
+    Create a cubic spline interpolation that:
+    - Starts at (start_idx, 0.0)
+    - Passes through (middle_idx, 0.5)
+    - Ends at (end_idx, 1.0)
+    - Stays within (0.0, 1.0)
+    - Has continuous slope at the joint points
+    
+    Args:
+        start_idx: The starting index (value will be 0.0)
+        middle_idx: The index where value should be 0.5
+        end_idx: The index where value should be 1.0
+        
+    Returns:
+        Array of interpolated values from start_idx to end_idx
+    """
+    # Define the key points
+    x = np.array([start_idx, middle_idx, end_idx])
+    y = np.array([0.0, 0.5, 1.0])
+    
+    # Create the spline
+    cs = CubicSpline(x, y, bc_type='natural')
+    
+    # Generate interpolated values
+    x_interp = np.arange(start_idx, end_idx + 1)
+    result = cs(x_interp)
+    
+    # Ensure values stay within [0.0, 1.0]
+    result = np.clip(result, 0.0, 1.0)
+    
+    return result
+
+def hermite_spline_interpolation(start_idx, middle_idx, end_idx):
+    """
+    Create a Hermite spline interpolation that:
+    - Starts at (start_idx, 0.0) with zero slope
+    - Passes through (middle_idx, 0.5) with calculated slope
+    - Ends at (end_idx, 1.0) with zero slope
+    - Guarantees values stay within [0.0, 1.0] without clipping
+    - Has continuous first derivatives at the joint points
+    """
+    # Create output array
+    num_points = end_idx - start_idx + 1
+    result = np.zeros(num_points)
+    
+    # Define points and tangents for Hermite splines
+    x = np.array([start_idx, middle_idx, end_idx])
+    y = np.array([0.0, 0.5, 1.0])
+    
+    # Calculate reasonable tangents that will keep the curve bounded
+    m1 = 1.0 / (middle_idx - start_idx) * 0.5  # Slope from point 0 to 1
+    m2 = 1.0 / (end_idx - middle_idx) * 0.5   # Slope from point 1 to 2
+    
+    # Set tangents: nearly zero at ends, moderate at middle point
+    tangents = np.array([0.1 * m1, (m1 + m2) / 2, 0.1 * m2])
+    
+    # Define Hermite basis functions
+    def h00(t): return 2*t**3 - 3*t**2 + 1
+    def h10(t): return t**3 - 2*t**2 + t
+    def h01(t): return -2*t**3 + 3*t**2
+    def h11(t): return t**3 - t**2
+    
+    # Loop through each segment
+    for i in range(num_points):
+        idx = start_idx + i
+        
+        if idx <= middle_idx:
+            # First segment: 0.0 to 0.5
+            t = (idx - start_idx) / (middle_idx - start_idx)
+            
+            # Hermite interpolation formula
+            p0, p1 = y[0], y[1]
+            m0, m1 = tangents[0] * (middle_idx - start_idx), tangents[1] * (middle_idx - start_idx)
+            
+            result[i] = h00(t) * p0 + h10(t) * m0 + h01(t) * p1 + h11(t) * m1
+        else:
+            # Second segment: 0.5 to 1.0
+            t = (idx - middle_idx) / (end_idx - middle_idx)
+            
+            # Hermite interpolation formula
+            p0, p1 = y[1], y[2]
+            m0, m1 = tangents[1] * (end_idx - middle_idx), tangents[2] * (end_idx - middle_idx)
+            
+            result[i] = h00(t) * p0 + h10(t) * m0 + h01(t) * p1 + h11(t) * m1
+    
+    return result
+
+def piecewise_bezier_interpolation(start_idx, middle_idx, end_idx):
+    """
+    Create a piecewise Bezier curve interpolation with edge case handling.
+    
+    Args:
+        start_idx: The starting index (value will be 0.0)
+        middle_idx: The index where value should be 0.5
+        end_idx: The index where value should be 1.0
+        
+    Returns:
+        Array of interpolated values from start_idx to end_idx
+    """
+    # Check edge cases
+    if middle_idx == start_idx:
+        # Handle case where middle point is at the start
+        # In this case, we only need to interpolate from 0.5 to 1.0
+        num_points = end_idx - start_idx + 1
+        result = np.zeros(num_points)
+        result[0] = 0.5  # Set the first point to 0.5
+        
+        # For points after the first one
+        if num_points > 1:
+            segment_length = end_idx - middle_idx
+            
+            for i in range(1, num_points):
+                idx = start_idx + i
+                # Calculate t - avoid division by zero
+                t = (idx - middle_idx) / segment_length if segment_length > 0 else 1.0
+                
+                # Control points for Bezier curve
+                q1y = 0.65  # Control point 1 y-value
+                q2y = 0.85  # Control point 2 y-value
+                
+                # Cubic Bezier formula for second segment
+                result[i] = (1-t)**3 * 0.5 + \
+                           3*(1-t)**2*t * q1y + \
+                           3*(1-t)*t**2 * q2y + \
+                           t**3 * 1.0
+        return result
+        
+    elif middle_idx == end_idx:
+        # Handle case where middle point is at the end
+        # In this case, we only need to interpolate from 0.0 to 0.5
+        num_points = end_idx - start_idx + 1
+        result = np.zeros(num_points)
+        
+        segment_length = middle_idx - start_idx
+        
+        for i in range(num_points - 1):
+            idx = start_idx + i
+            # Calculate t - this should be safe as we checked segment_length > 0
+            t = (idx - start_idx) / segment_length
+            
+            # Control points for Bezier curve
+            p1y = 0.15  # Control point 1 y-value
+            p2y = 0.35  # Control point 2 y-value
+            
+            # Cubic Bezier formula for first segment
+            result[i] = (1-t)**3 * 0.0 + \
+                       3*(1-t)**2*t * p1y + \
+                       3*(1-t)*t**2 * p2y + \
+                       t**3 * 0.5
+        
+        # Set the last point to 0.5
+        result[-1] = 0.5
+        return result
+    
+    # Normal case - both segments exist
+    num_points = end_idx - start_idx + 1
+    result = np.zeros(num_points)
+    
+    # Calculate segment lengths
+    segment1_length = middle_idx - start_idx
+    segment2_length = end_idx - middle_idx
+    
+    # Calculate Bezier curve points
+    for i in range(num_points):
+        idx = start_idx + i
+        
+        if idx <= middle_idx:
+            # First segment: 0.0 to 0.5
+            t = (idx - start_idx) / segment1_length
+            
+            # Control points for Bezier curve
+            p1y = 0.15  # Control point 1 y-value
+            p2y = 0.35  # Control point 2 y-value
+            
+            # Cubic Bezier formula
+            result[i] = (1-t)**3 * 0.0 + \
+                       3*(1-t)**2*t * p1y + \
+                       3*(1-t)*t**2 * p2y + \
+                       t**3 * 0.5
+        else:
+            # Second segment: 0.5 to 1.0
+            t = (idx - middle_idx) / segment2_length
+            
+            # Control points for Bezier curve
+            q1y = 0.65  # Control point 1 y-value
+            q2y = 0.85  # Control point 2 y-value
+            
+            # Cubic Bezier formula
+            result[i] = (1-t)**3 * 0.5 + \
+                       3*(1-t)**2*t * q1y + \
+                       3*(1-t)*t**2 * q2y + \
+                       t**3 * 1.0
+    
+    return result
 
 def find_closest_points(src_points, dst_points):
     """
@@ -379,7 +579,7 @@ def calculate_failure_phase(displacement, object_pos, panel_pos):
     # Object is safely on the panel
     return 0.0
 
-def resample_data(episode, cut=True, scale=15):
+def resample_data(episode, cut=True, scale=2):
     episode_resampled = []
     for item_idx in range(len(episode)):
         # print(episode[item_idx]['failure_phase_value'][0])
