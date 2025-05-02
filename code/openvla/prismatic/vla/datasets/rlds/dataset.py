@@ -261,7 +261,7 @@ def apply_trajectory_transforms(
     future_action_window_size: int = 0,
     subsample_length: Optional[int] = None,
     skip_unlabeled: bool = False,
-    max_action: Optional[float] = None,
+    max_actfion: Optional[float] = None,
     max_proprio: Optional[float] = None,
     task_augment_strategy: Optional[str] = None,
     task_augment_kwargs: dict = {},
