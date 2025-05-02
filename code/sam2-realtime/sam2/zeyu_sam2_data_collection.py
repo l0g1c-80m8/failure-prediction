@@ -10,6 +10,13 @@ from datetime import datetime
 import colorsys
 import time
 import sys
+import threading
+
+import time
+import random
+import math
+
+
 
 # Add project root to path to ensure imports work correctly
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -17,12 +24,23 @@ project_root = os.path.abspath(os.path.join(current_dir, '../..'))
 if project_root not in sys.path:
     sys.path.append(project_root)
 
+
+from ur5_scripts import urx
+
 # Import risk prediction functions using the correct paths
 from simple_model.inference import load_model, predict_from_states
 from simple_model.resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
 
 from sam2.build_sam import build_sam2_camera_predictor
-from simulation.demo.common_functions import (process_consecutive_frames, extract_points_from_mask, extract_transform_features)
+from simulation.demo.common_functions import process_real_camera_mask
+
+# Add the ur5_scripts directory to the path to be able to import urx_local
+ur5_scripts_dir = os.path.join(project_root, 'ur5_scripts')
+if ur5_scripts_dir not in sys.path:
+    sys.path.append(ur5_scripts_dir)
+
+# Now import from urx_local
+# from urx_local.robot import Robot
 
 parser = argparse.ArgumentParser()
 
@@ -45,20 +63,19 @@ parser.add_argument("--camera_serial", type=str, default=None,
 parser.add_argument("--camera_index", type=int, default=0, 
                     help="Index of the RealSense camera to use (0, 1, 2, etc.)")
 
+# New robot control parameters
+parser.add_argument("--traj_file", type=str, default="./traj_20250409.txt", 
+                    help="Path to trajectory file")
+parser.add_argument("--robot_ip", type=str, default="192.10.0.11", 
+                    help="Robot IP address")
+parser.add_argument("--n_rounds", type=int, default=2, 
+                    help="Number of trajectory rounds to execute")
+
 # Output settings
 parser.add_argument("--out_dir", type=str, default="../videos/")
 parser.add_argument("--model", "--model_checkpoint_path", type=str, default="../checkpoints/sam2.1_hiera_tiny.pt")
 parser.add_argument("--cfg", "--model_config_path", type=str, default="configs/sam2.1/sam2.1_hiera_t_512")
 
-# Risk prediction model parameters
-parser.add_argument("--risk_model_path", type=str, help="Path to the saved risk model weights")
-parser.add_argument("--risk_model_type", type=str, default='ResNet18', 
-                    choices=['ResNet18', 'ResNet34', 'ResNet50', 'ResNet101', 'ResNet152'], 
-                    help="Type of ResNet model for risk prediction")
-parser.add_argument("--input_channels", type=int, default=8, 
-                    help="Number of input channels for the risk model")
-parser.add_argument("--window_size", type=int, default=10, 
-                    help="Number of frames to use for feature extraction")
 
 args = parser.parse_args()
 
@@ -71,8 +88,8 @@ elif args.input_type == "video" and args.video_path is None:
     parser.error("--video_path is required when input_type is 'video'")
 
 # Validate risk_model_path if not just listing cameras
-if not args.list_cameras and args.risk_model_path is None:
-    parser.error("--risk_model_path is required for risk prediction")
+# if not args.list_cameras and args.risk_model_path is None:
+#     parser.error("--risk_model_path is required for risk prediction")
 
 # CUDA setup
 print(f"CUDA available: {torch.cuda.is_available()}")
@@ -90,6 +107,48 @@ if use_autocast:
 else:
     print("Not using autocast (not supported on this hardware)")
 
+def parse_trajectory(file_path):
+    trajectories = []
+    with open(file_path, 'r') as f:
+        for line in f:
+            # Remove brackets and split by comma
+            values = line.strip('[] \n').split(',')
+            # Convert strings to floats
+            trajectory = list(map(float, values))
+            trajectories.append(trajectory)
+    return trajectories
+
+def execute_trajectory(robot, trajectories, n, is_executing):
+    print("Robot execution thread starting...")
+    is_executing[0] = True
+    t_tmp = random.uniform(1.4, 2.0)
+    print(f"Using time parameter: {t_tmp}")
+
+    for _ in range(n):
+        # Forward sequence (top to bottom)
+        for i, trajectory in enumerate(trajectories):
+            randomized_trajectory = trajectory[:]  # Create a copy of the trajectory
+            # Add a random gain of ±10 degrees to the 6th joint
+            random_gain = random.uniform(-20, 20)  # Generate random angle in degrees
+            randomized_trajectory[5] += math.radians(random_gain)  # Convert to radians and apply
+            
+            print(f"Moving to position {i} with randomized trajectory: {randomized_trajectory}")
+            robot.servoj(randomized_trajectory, vel=0.1, acc=0.1, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
+        
+        # Reverse sequence (bottom to top)
+        for i, trajectory in enumerate(reversed(trajectories)):
+            randomized_trajectory = trajectory[:]  # Create a copy of the trajectory
+            random_gain = random.uniform(-20, 20)
+            randomized_trajectory[5] += math.radians(random_gain)
+            
+            print(f"Moving to position {len(trajectories)-1-i} with randomized trajectory: {randomized_trajectory}")
+            robot.servoj(randomized_trajectory, vel=0.1, acc=0.1, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
+            
+        time.sleep(0.5)  # Pause between rounds
+
+    robot.servoj(trajectories[0], vel=0.1, acc=0.1, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
+    print('Finished moving the robot through all positions.')
+    is_executing[0] = False
 
 def list_realsense_cameras():
     """List all connected RealSense cameras and their details."""
@@ -292,6 +351,21 @@ def combine_features(object_features, panel_features):
     return combined_features
 
 def main():
+    # Initialize robot
+    robot_left = urx.Robot(args.robot_ip)
+    print(f"Connected to robot at {args.robot_ip}")
+    
+    # Parse robot trajectory
+    trajectory = parse_trajectory(args.traj_file)
+    print(f"Parsed trajectory from {args.traj_file} with {len(trajectory)} points")
+    
+    # Get initial robot joint positions
+    joints_left = robot_left.getj()
+    print('Initial robot joints: ', joints_left)
+    
+    # Robot execution flag (for thread coordination)
+    is_executing = [False]
+    
     # List cameras if requested
     if args.list_cameras:
         list_realsense_cameras()
@@ -312,16 +386,7 @@ def main():
     
     # Load risk prediction model - in fp32 precision to avoid bfloat16 issues
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Loading risk prediction model from {args.risk_model_path}")
-    
-    # Use direct function call to avoid import issues
-    risk_model = load_model(
-        args.risk_model_path,
-        args.risk_model_type,
-        input_channels=args.input_channels,
-        device=device
-    )
-    print(f"Risk model loaded on {device}")
+    # print(f"Loading risk prediction model from {args.risk_model_path}")
     
     # Initialize input source
     if args.input_type == "video":
@@ -342,17 +407,15 @@ def main():
     if not os.path.isdir(args.out_dir):
         os.makedirs(args.out_dir)
     
+    now = datetime.now()
+    timestamp = now.strftime("%Y%m%d%H%M%S")
     if args.input_type == "video":
         output_path = f"{args.out_dir}/output_{Path(args.video_path).name}"
         if output_path[-3:] != 'mp4':
-            now = datetime.now()
-            timestamp = now.strftime("%Y%m%d%H%M%S")
             output_path = output_path + f"_{timestamp}_.mp4"
     else:
-        now = datetime.now()
-        timestamp = now.strftime("%Y%m%d%H%M%S")
         camera_id = args.camera_serial if args.camera_serial else f"cam{args.camera_index}"
-        output_path = f"{args.out_dir}/realsense_{camera_id}_{timestamp}.mp4"
+        output_path = f"{args.out_dir}realsense_{camera_id}_{timestamp}.mp4"
     
     out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), 30.0, (frame_width, frame_height))
     
@@ -362,13 +425,9 @@ def main():
     fcount = 0
     top_camera_object_contours = []
     top_camera_panel_contours = []
-    window = args.window_size
-    
-    # Initialize risk prediction variables
-    risk_values = []
-    risk_history = []  # To store recent risk values for visualization
-    max_history = 50   # Maximum number of risk values to keep in history
-    
+    episode = []
+    step_num = 0
+
     while True:
         # Get frame from appropriate source
         if args.input_type == "video":
@@ -444,6 +503,16 @@ def main():
                     _, out_obj_ids, out_mask_logits = predictor.add_new_prompt(
                         frame_idx=ann_frame_idx, obj_id=i, points=points[i], labels=labels[i]
                     )
+
+            # Start robot manipulation in a separate thread after initialization
+            # print("Starting robot manipulation...")
+            # robot_thread = threading.Thread(
+            #     target=execute_trajectory, 
+            #     args=(robot_left, trajectory, args.n_rounds, is_executing)
+            # )
+            # robot_thread.daemon = True  # Make thread exit when main program exits
+            # robot_thread.start()
+            # print("Robot manipulation started in background thread")
         
         else:
             # Tracking mode - use autocast for SAM2 tracking
@@ -453,61 +522,59 @@ def main():
             else:
                 out_obj_ids, out_mask_logits = predictor.track(frame_rgb)
                 
-            print("out_obj_ids", out_obj_ids)
+            # print("out_obj_ids", out_obj_ids)
             
             # Process masks for visualization and feature extraction
             if len(out_obj_ids) >= 2:  # Make sure we have at least two objects
                 top_camera_object_out_mask = (out_mask_logits[0] > 0.0).permute(1, 2, 0).cpu().numpy().astype(np.uint8)
                 top_camera_panel_out_mask = (out_mask_logits[1] > 0.0).permute(1, 2, 0).cpu().numpy().astype(np.uint8)
                 
-                top_camera_object_contours.append(top_camera_object_out_mask)
-                top_camera_panel_contours.append(top_camera_panel_out_mask)
+                top_camera_object_current_points = process_real_camera_mask(top_camera_object_out_mask, min_contour_area=3)
+                top_camera_panel_current_points = process_real_camera_mask(top_camera_panel_out_mask, min_contour_area=3)
+                top_camera_object_current_points = np.asarray(top_camera_object_current_points, dtype=np.float32)
+                top_camera_panel_current_points = np.asarray(top_camera_panel_current_points, dtype=np.float32)
+                # print("top_camera_object_current_points.shape", top_camera_object_current_points.shape)
+                # print("top_camera_panel_current_points.shape", top_camera_panel_current_points.shape)
+                # top_camera_object_contours.append(top_camera_object_out_mask)
+                # top_camera_panel_contours.append(top_camera_panel_out_mask)
                 
                 # Calculate motion features if we have enough frames
-                if fcount > window:
-                    top_camera_object_pre_points = extract_points_from_mask(top_camera_object_contours[-window])
-                    top_camera_object_current_points = extract_points_from_mask(top_camera_object_out_mask)
-                    top_camera_panel_pre_points = extract_points_from_mask(top_camera_panel_contours[-window])
-                    top_camera_panel_current_points = extract_points_from_mask(top_camera_panel_out_mask)
+                # top_camera_object_current_points = extract_points_from_mask(top_camera_object_out_mask)
+                # top_camera_panel_current_points = extract_points_from_mask(top_camera_panel_out_mask)
+                
+                if (len(top_camera_object_current_points) > 0 and 
+                    len(top_camera_panel_current_points) > 0):
                     
-                    if (len(top_camera_object_pre_points) > 0 and 
-                        len(top_camera_object_current_points) > 0 and 
-                        len(top_camera_panel_pre_points) > 0 and 
-                        len(top_camera_panel_current_points) > 0):
-                        
-                        top_camera_object_pre_contours = [top_camera_object_pre_points.reshape(-1, 1, 2).astype(np.int32)]
-                        top_camera_object_current_contours = [top_camera_object_current_points.reshape(-1, 1, 2).astype(np.int32)]
-                        top_camera_panel_pre_contours = [top_camera_panel_pre_points.reshape(-1, 1, 2).astype(np.int32)]
-                        top_camera_panel_current_contours = [top_camera_panel_current_points.reshape(-1, 1, 2).astype(np.int32)]
-                        
-                        # Extract transform features
-                        matrix = False
-                        top_camera_object_features = process_consecutive_frames(
-                            top_camera_object_pre_contours, top_camera_object_current_contours, matrix=matrix)
-                        
-                        top_camera_panel_features = process_consecutive_frames(
-                            top_camera_panel_pre_contours, top_camera_panel_current_contours)
-                        
-                        print("object_features", top_camera_object_features)
-                        print("panel_features", top_camera_panel_features)
-                        
-                        # Risk prediction using the combined features
-                        combined_features = combine_features(top_camera_object_features, top_camera_panel_features)
-                        risk_value = predict_from_states(
-                            risk_model, 
-                            combined_features, 
-                            device=device, 
-                            channel=args.input_channels
-                        )
-                        
-                        risk_values.append(risk_value)
-                        risk_history.append(risk_value)
-                        if len(risk_history) > max_history:
-                            risk_history = risk_history[-max_history:]
-                        
-                        print(f"Predicted risk: {risk_value:.4f}")
-                    else:
-                        print("Not enough points to calculate transforms")
+                    top_camera_object_current_contours = top_camera_object_current_points.reshape(-1, 1, 2).astype(np.int32)
+                    top_camera_panel_current_contours = top_camera_panel_current_points.reshape(-1, 1, 2).astype(np.int32)
+                    print("top_camera_object_current_contours.shape", np.asarray(top_camera_object_current_contours, dtype=np.float32).shape)
+                    print("top_camera_panel_current_contours.shape", np.asarray(top_camera_panel_current_contours, dtype=np.float32).shape)
+
+                    # Get the complete pose (position and orientation)
+                    pose = robot_left.get_pose()
+                    # print('Left robot pose: ', pose)
+                    
+                    # Extract the position (x, y, z coordinates)
+                    end_effector_pos = pose.pos
+                    # print('End-effector position (x, y, z): ', end_effector_pos)
+                    x, y, z = end_effector_pos  # This unpacks the position object into its components
+
+                    # Now create the NumPy array from the extracted coordinates
+                    end_effector_pos_array = np.array([x, y, z], dtype=np.float32)
+
+                    episode.append({
+                        'full_top_frame_rgb': frame_rgb,
+                        # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
+                        'time_step': np.asarray(step_num, dtype=np.float32),
+                        'object_top_contour': np.asarray(top_camera_object_current_contours, dtype=np.float32),
+                        'object_front_contour': np.asarray(top_camera_object_current_contours, dtype=np.float32),
+                        'gripper_top_contour': np.asarray(top_camera_panel_current_contours, dtype=np.float32),
+                        'gripper_front_contour': np.asarray(top_camera_panel_current_contours, dtype=np.float32),
+                        'end_effector_pos': end_effector_pos_array,
+                        'risk': np.asarray([0.0], dtype=np.float32)  # Placeholder for risk prediction
+                        # 'failure_phase_value': np.asarray([failure_phase_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
+                        # 'language_instruction': 'dummy instruction',
+                            })
                 
                 # Visualize masks on frame
                 top_camera_object_out_mask = cv2.cvtColor(top_camera_object_out_mask, cv2.COLOR_GRAY2RGB)
@@ -517,72 +584,11 @@ def main():
                 top_camera_panel_out_mask = cv2.cvtColor(top_camera_panel_out_mask, cv2.COLOR_GRAY2RGB)
                 top_camera_panel_out_mask[:, :, 1] = np.clip(top_camera_panel_out_mask[:, :, 1] * 255, 0, 255).astype(np.uint8)
                 frame_rgb = cv2.addWeighted(frame_rgb, 1, top_camera_panel_out_mask, 0.5, 0)
-        
+
+            step_num+=1
+
         # Convert back to BGR for display and saving
         frame_display = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
-        
-        # Add risk visualization to frame if we have risk values
-        if risk_values:
-            # Calculate a risk color based on value (green to red gradient)
-            current_risk = float(risk_values[-1])  # Convert to Python float
-            risk_color = (0, int(255*(1-current_risk)), int(255*current_risk))  # Convert to integers
-            
-            # Add risk value text to frame
-            cv2.putText(
-                frame_display, 
-                f"Risk: {current_risk:.4f}", 
-                (50, 50), 
-                cv2.FONT_HERSHEY_SIMPLEX, 
-                1, 
-                risk_color, 
-                2, 
-                cv2.LINE_AA
-            )
-            
-            # Draw risk history graph in bottom right corner
-            if len(risk_history) > 1:
-                # Define graph area
-                graph_width = 200
-                graph_height = 100
-                graph_x = frame_width - graph_width - 20
-                graph_y = frame_height - graph_height - 20
-                
-                # Draw graph background
-                cv2.rectangle(
-                    frame_display, 
-                    (graph_x, graph_y), 
-                    (graph_x + graph_width, graph_y + graph_height), 
-                    (0, 0, 0), 
-                    -1
-                )
-                
-                # Draw graph outline
-                cv2.rectangle(
-                    frame_display, 
-                    (graph_x, graph_y), 
-                    (graph_x + graph_width, graph_y + graph_height), 
-                    (255, 255, 255), 
-                    1
-                )
-                
-                # Draw risk history line
-                risk_points = []
-                for i, risk in enumerate(risk_history):
-                    x = graph_x + int((i / (len(risk_history) - 1)) * graph_width) if len(risk_history) > 1 else graph_x
-                    y = graph_y + graph_height - int(risk * graph_height)
-                    risk_points.append((x, y))
-                
-                # Draw risk line with dynamic color
-                for i in range(len(risk_points) - 1):
-                    risk_val = float(risk_history[i])
-                    line_color = (0, int(255*(1-risk_val)), int(255*risk_val))  # Convert to integers
-                    cv2.line(
-                        frame_display, 
-                        risk_points[i], 
-                        risk_points[i+1], 
-                        line_color, 
-                        2
-                    )
         
         # Display frame
         cv2.imshow("frame", frame_display)
@@ -593,7 +599,8 @@ def main():
         # Check for quit key
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
-    
+    np.save(f"{args.out_dir}/episode_{timestamp}_cube_raw.npy", episode)
+
     # Cleanup
     print(f"Video saved at {output_path}")
     if args.input_type == "video" and cap is not None:
@@ -604,11 +611,6 @@ def main():
     out.release()
     cv2.destroyAllWindows()
     
-    # Save risk values to file if available
-    if risk_values and args.out_dir:
-        risk_file = os.path.join(args.out_dir, 'risk_values.npy')
-        np.save(risk_file, np.array(risk_values))
-        print(f"Saved risk values to {risk_file}")
 
 if __name__ == "__main__":
     main()

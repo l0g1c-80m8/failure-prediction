@@ -2,12 +2,13 @@ import torch
 import torch.nn as nn
 
 class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1, downsample=None):
+    def __init__(self, in_channels, out_channels, stride=1, downsample=None, dropout_rate=0.2):
         super(ResidualBlock, self).__init__()
         self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size=3, 
                               stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm1d(out_channels)
         self.relu = nn.ReLU(inplace=True)
+        self.dropout = nn.Dropout(dropout_rate)  # Add dropout layer
         self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size=3,
                               stride=1, padding=1, bias=False)
         self.bn2 = nn.BatchNorm1d(out_channels)
@@ -19,6 +20,7 @@ class ResidualBlock(nn.Module):
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
+        out = self.dropout(out)  # Apply dropout after activation
 
         out = self.conv2(out)
         out = self.bn2(out)
@@ -70,9 +72,10 @@ class BottleneckBlock(nn.Module):
         return out
 
 class ResNet(nn.Module):
-    def __init__(self, block, layers, input_channels=9, zero_init_residual=False):
+    def __init__(self, block, layers, input_channels=9, zero_init_residual=False, dropout_rate=0.5):
         super(ResNet, self).__init__()
         self.in_channels = 64
+        self.dropout_rate = dropout_rate
         
         # Initial convolution layer
         self.conv1 = nn.Conv1d(input_channels, self.in_channels, kernel_size=7,
@@ -89,6 +92,8 @@ class ResNet(nn.Module):
 
         # Final layers
         self.avgpool = nn.AdaptiveAvgPool1d(1)
+        # Add dropout before the fully connected layer
+        self.dropout = nn.Dropout(dropout_rate)
         self.fc = nn.Linear(512 * (block.expansion if hasattr(block, 'expansion') else 1), 1)
         self.sigmoid = nn.Sigmoid()
 
@@ -138,22 +143,23 @@ class ResNet(nn.Module):
 
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
+        x = self.dropout(x)  # Apply dropout before the final FC layer
         x = self.fc(x)
         x = self.sigmoid(x)
 
         return x
 
-def resnet18(input_channels=9, **kwargs):
-    return ResNet(ResidualBlock, [2, 2, 2, 2], input_channels, **kwargs)
+def resnet18(input_channels=9, dropout_rate=0.5, **kwargs):
+    return ResNet(ResidualBlock, [2, 2, 2, 2], input_channels, dropout_rate=dropout_rate, **kwargs)
 
-def resnet34(input_channels=9, **kwargs):
-    return ResNet(ResidualBlock, [3, 4, 6, 3], input_channels, **kwargs)
+def resnet34(input_channels=9, dropout_rate=0.5, **kwargs):
+    return ResNet(ResidualBlock, [3, 4, 6, 3], input_channels, dropout_rate=dropout_rate, **kwargs)
 
-def resnet50(input_channels=9, **kwargs):
-    return ResNet(BottleneckBlock, [3, 4, 6, 3], input_channels, **kwargs)
+def resnet50(input_channels=9, dropout_rate=0.5, **kwargs):
+    return ResNet(BottleneckBlock, [3, 4, 6, 3], input_channels, dropout_rate=dropout_rate, **kwargs)
 
-def resnet101(input_channels=9, **kwargs):
-    return ResNet(BottleneckBlock, [3, 4, 23, 3], input_channels, **kwargs)
+def resnet101(input_channels=9, dropout_rate=0.5, **kwargs):
+    return ResNet(BottleneckBlock, [3, 4, 23, 3], input_channels, dropout_rate=dropout_rate, **kwargs)
 
-def resnet152(input_channels=9, **kwargs):
-    return ResNet(BottleneckBlock, [3, 8, 36, 3], input_channels, **kwargs)
+def resnet152(input_channels=9, dropout_rate=0.5, **kwargs):
+    return ResNet(BottleneckBlock, [3, 8, 36, 3], input_channels, dropout_rate=dropout_rate, **kwargs)

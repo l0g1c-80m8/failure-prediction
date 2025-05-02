@@ -32,14 +32,6 @@
   </default>
 
   <asset>
-    <material class="ur5e" name="black" rgba="0.033 0.033 0.033 1"/>
-    <material class="ur5e" name="jointgray" rgba="0.278 0.278 0.278 1"/>
-    <material class="ur5e" name="linkgray" rgba="0.82 0.82 0.82 1"/>
-    <material class="ur5e" name="urblue" rgba="0.49 0.678 0.8 1"/>
-    <material class="ur5e" name="bunny_material" rgba="0.49 0.0 0.0 1"/>
-    <material class="ur5e" name="teamugobj_material" rgba="0.49 0.0 0.0 1"/>
-    <material class="ur5e" name="panel_material" rgba="0.615686 0.811765 0.929412 1"/>
-
     <mesh file="base_0.obj"/>
     <mesh file="base_1.obj"/>
     <mesh file="shoulder_0.obj"/>
@@ -61,9 +53,16 @@
     <mesh file="wrist2_2.obj"/>
     <mesh file="wrist3.obj"/>
 
-    <mesh file="cube.obj" scale="0.8 0.8 0.8"/>
-    <mesh file="teamug.obj" scale="0.8 0.8 0.8"/>
+    <mesh file="objects/stanford_bunny.obj" scale="0.7 0.7 0.7"/>
     <mesh file="panel_0.obj" scale="1.0 1.0 1.0"/>
+
+
+    <material class="ur5e" name="black" rgba="0.033 0.033 0.033 1"/>
+    <material class="ur5e" name="jointgray" rgba="0.278 0.278 0.278 1"/>
+    <material class="ur5e" name="linkgray" rgba="0.82 0.82 0.82 1"/>
+    <material class="ur5e" name="urblue" rgba="0.49 0.678 0.8 1"/>
+    <material class="ur5e" name="bunny_material" rgba="0.49 0.0 0.0 1"/>
+    <material class="ur5e" name="panel_material" rgba="0.615686 0.811765 0.929412 1"/>
   </asset>
 
   <contact>
@@ -145,7 +144,7 @@
     <!-- New Customized Body -->
     <body name="object_body" pos="0.0 0.5 0.1">
       <joint type="free"/>
-      <geom name="object_collision" type="mesh" mesh="cube" rgba="0.7 0.5 0.3 1" group="2" contype="1" conaffinity="1"/>
+      <geom name="object_collision" type="mesh" mesh="stanford_bunny" rgba="0.7 0.5 0.3 1" group="2" contype="1" conaffinity="1"/>
       <inertial pos="0 0 0" mass="0.8" diaginertia="0.01 0.01 0.01"/>
     </body>
                   

@@ -54,8 +54,8 @@ class RobotTrajectoryDataset(Dataset):
         # Get states sequence (shape: window_size x 19)
         states = np.stack([frame['state'] for frame in window_data]) 
 
-        # Only take the first 8 state values
-        states = states[:, :8]       
+        # Only take the first 6 state values
+        # states = states[:, :6]       
         
         # Get the risk for the last timestep
         # Convert to numpy array first, then to tensor
@@ -132,6 +132,11 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
             cosine_decay = 0.5 * (1 + np.cos(np.pi * decay_step / decay_steps))
             return min_lr + (initial_lr - min_lr) * cosine_decay
     
+    # print(f"CUDA available: {torch.cuda.is_available()}")
+    # print(f"Number of GPUs: {torch.cuda.device_count()}")
+    if torch.cuda.device_count() > 1:
+        print(f"Using {torch.cuda.device_count()} GPUs!")
+        model = nn.DataParallel(model)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     
@@ -155,7 +160,10 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
         for batch in train_pbar:
             states = batch['states'].to(device)
             risks = batch['risk'].to(device)
-            
+
+            # print(f"Input tensor device: {batch['states'].device}")
+            # print(f"Model's first parameter device: {next(model.parameters()).device}")
+
             # Update learning rate
             current_lr = get_lr(global_step)
             for param_group in optimizer.param_groups:
@@ -326,65 +334,62 @@ def visualize_predictions(predictions, ground_truth):
 
 
 if __name__ == "__main__":
-    try:
-        os.environ['QT_X11_NO_MITSHM'] = '1'
-        # Initialize wandb
-        wandb.login()
-        
-        # Create data loaders
-        train_loader, val_loader = create_data_loaders(
-            train_dir='data/train',
-            val_dir='data/val',
-            window_size=1,
-            stride=1,
-            batch_size=1016,
-            num_workers=8
-        )
-        
-        # Example of using different ResNet architectures
-        models = {
-            'ResNet18': resnet18(input_channels=8)
-            # 'ResNet34': resnet34(input_channels=19),
-            # 'ResNet50': resnet50(input_channels=19),
-            # 'ResNet101': resnet101(input_channels=19),
-            # 'ResNet152': resnet152(input_channels=19)
-        }
+    os.environ['QT_X11_NO_MITSHM'] = '1'
+    # Initialize wandb
+    wandb.login()
+    
+    # Create data loaders
+    train_loader, val_loader = create_data_loaders(
+        train_dir='data/train',
+        val_dir='data/val',
+        window_size=1,
+        stride=1,
+        batch_size=1016,
+        num_workers=8
+    )
+    
+    # Example of using different ResNet architectures
+    models = {
+        'ResNet18': resnet18(input_channels=15)
+        # 'ResNet34': resnet34(input_channels=19),
+        # 'ResNet50': resnet50(input_channels=19),
+        # 'ResNet101': resnet101(input_channels=19),
+        # 'ResNet152': resnet152(input_channels=19)
+    }
 
-        wandb_disabled = False
+    wandb_disabled = False
+    
+    # Train and evaluate each model
+    for name, model in models.items():
+        print(f"\nTraining {name}")
+        # Initialize wandb
+        num_epochs=50
+        warmup_epochs=10
+        initial_lr=0.001
+        min_lr=1e-6
+        wandb.init(
+            project="robot-trajectory-prediction",
+            name=f"{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            config={
+                "architecture": name,
+                "epochs": num_epochs,
+                "warmup_epochs": warmup_epochs,
+                "initial_lr": initial_lr,
+                "min_lr": min_lr,
+                "batch_size": train_loader.batch_size,
+                "window_size": train_loader.dataset.window_size,
+                "stride": train_loader.dataset.stride,
+                "state_dimensions": 6  # Update this to reflect the new state dimension
+            },
+            mode="disabled" if wandb_disabled else None
+        )
+        # Train the model
+        train_model(model, train_loader, val_loader, name, num_epochs=num_epochs,
+                    warmup_epochs=warmup_epochs,
+                    initial_lr=initial_lr,
+                    min_lr=min_lr)
         
-        # Train and evaluate each model
-        for name, model in models.items():
-            print(f"\nTraining {name}")
-            # Initialize wandb
-            num_epochs=1000
-            warmup_epochs=10
-            initial_lr=0.01
-            min_lr=1e-6
-            wandb.init(
-                project="robot-trajectory-prediction",
-                name=f"{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                config={
-                    "architecture": name,
-                    "epochs": num_epochs,
-                    "warmup_epochs": warmup_epochs,
-                    "initial_lr": initial_lr,
-                    "min_lr": min_lr,
-                    "batch_size": train_loader.batch_size,
-                    "window_size": train_loader.dataset.window_size,
-                    "stride": train_loader.dataset.stride,
-                    "state_dimensions": 8  # Update this to reflect the new state dimension
-                },
-                mode="disabled" if wandb_disabled else None
-            )
-            # Train the model
-            train_model(model, train_loader, val_loader, name, num_epochs=num_epochs,
-                        warmup_epochs=warmup_epochs,
-                        initial_lr=initial_lr,
-                        min_lr=min_lr)
-            
-            # Evaluate on validation set
-            val_mse = evaluate_model(model, val_loader, name)
-            print(f"Validation MSE for {name}: {val_mse:.4f}")
-            wandb.finish()
-    except Exception as e:
-        print(f"An error occurred: {e}")
+        # Evaluate on validation set
+        val_mse = evaluate_model(model, val_loader, name)
+        print(f"Validation MSE for {name}: {val_mse:.4f}")
+        wandb.finish()
