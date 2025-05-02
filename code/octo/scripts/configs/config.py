@@ -92,9 +92,9 @@ def get_model_config(transformer_size):
             action=ModuleSpec.create(
                 MSEActionHead,
                 action_horizon=1,
-                # action_dim=7,
+                action_dim=7,
                 # ZEYU
-                action_dim=1,
+                # action_dim=1,
                 readout_key="obs",
             ),
         ),

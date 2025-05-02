@@ -24,7 +24,7 @@ import jax
 import numpy as np
 import wandb
 
-sys.path.append("path/to/your/act")
+sys.path.append("examples/act")
 
 # keep this to register ALOHA sim env
 from envs.aloha_sim_env import AlohaGymEnv  # noqa
@@ -39,10 +39,11 @@ flags.DEFINE_string(
     "finetuned_path", None, "Path to finetuned Octo checkpoint directory."
 )
 
+flags.DEFINE_bool("debug", False, "Debug config (no wandb logging)")
 
 def main(_):
     # setup wandb for logging
-    wandb.init(name="eval_aloha", project="octo")
+    wandb.init(name="eval_aloha", project="octo", mode="disabled" if FLAGS.debug else None)
 
     # load finetuned model
     logging.info("Loading finetuned model...")

@@ -51,6 +51,13 @@ def main(_):
     ), "Batch size must be divisible by device count."
 
     initialize_compilation_cache()
+
+    # Add these diagnostic prints
+    print("JAX version:", jax.__version__)
+    print("Available devices:", jax.devices())
+    print("Device count:", jax.device_count())
+    print("Default backend:", jax.default_backend())
+    
     # prevent tensorflow from using GPU memory since it's only used for data loading
     tf.config.set_visible_devices([], "GPU")
 

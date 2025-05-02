@@ -14,6 +14,8 @@ def get_config(config_string="full,multimodal"):
     # There should be two image keys
     # first image key should be the third-person view (None if not used)
     # and second image key should be the wrist view (None if not used)
+    # ZEYU
+    action_dim = FieldReference(1)
 
     FINETUNING_KWARGS = {
         "name": "zeyu_example_dataset",
@@ -48,7 +50,9 @@ def get_config(config_string="full,multimodal"):
         raise ValueError("Invalid mode")
 
     max_steps = FieldReference(50000)
-    window_size = FieldReference(default=1)
+    # window_size = FieldReference(default=1)
+    # ZEYU
+    window_size = FieldReference(4)
 
     config = dict(
         pretrained_path=placeholder(str),
@@ -92,6 +96,10 @@ def get_config(config_string="full,multimodal"):
             trajs_for_viz=8,
             samples_per_state=8,
         ),
+        # ZEYU Add update_config here
+        update_config={
+            "dataset_kwargs": FINETUNING_KWARGS,  # Override the pretrained dataset settings
+        },
     )
 
     if task == "image_conditioned":
@@ -108,7 +116,8 @@ def get_config(config_string="full,multimodal"):
 
     traj_transform_kwargs = dict(
         window_size=window_size,
-        action_horizon=28, # Length of action sequence to execute/ensemble
+        action_horizon=50, # 28, # Length of action sequence to execute/ensemble
+        max_action_dim=action_dim, # ZEYU
         goal_relabeling_strategy=goal_relabeling_strategy,
         task_augment_strategy="delete_task_conditioning",
         task_augment_kwargs=dict(

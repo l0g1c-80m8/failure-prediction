@@ -14,6 +14,8 @@ import tqdm
 import wandb
 
 from octo.data.dataset import make_single_dataset
+# zeyu
+from octo.model.components.action_heads import DiffusionActionHead
 from octo.model.octo_model import OctoModel
 from octo.utils.jax_utils import initialize_compilation_cache
 from octo.utils.spec import ModuleSpec
@@ -130,9 +132,11 @@ def main(_):
         FLAGS.config.pretrained_path,
         step=FLAGS.config.pretrained_step,
     )
+    # The pretrained config is flattened into a dictionary
     flat_config = flax.traverse_util.flatten_dict(
         pretrained_model.config, keep_empty_nodes=True
     )
+    # This step removes specific parts of the pretrained config that you explicitly want to exclude
     for d_key in flax.traverse_util.flatten_dict(
         FLAGS.config.get("config_delete_keys", ConfigDict()).to_dict()
     ):
@@ -140,9 +144,24 @@ def main(_):
             if ".".join(c_key).startswith(".".join(d_key)):
                 del flat_config[c_key]
 
+    # print("finetune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!flat_config:", flat_config)
+    # print("finetune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!FLAGS.config:", FLAGS.config)
+    # Your customized config (from the update_config field in FLAGS.config) is applied to the remaining configuration
     config = ConfigDict(flax.traverse_util.unflatten_dict(flat_config))
+    # print("finetune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!FLAGS.config.get(\"update_config\", ConfigDict()):", FLAGS.config.get("update_config", ConfigDict()))
     config.update(FLAGS.config.get("update_config", ConfigDict()))
     config = config.to_dict()
+    # print("finetune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!Flattened Pretrained Config:", flax.traverse_util.flatten_dict(pretrained_model.config))
+    # print("finetune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!Flattened Custom Config:", flax.traverse_util.flatten_dict(FLAGS.config.to_dict()))
+    # print("finetune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!pretrained_model.config:", pretrained_model.config)
+    # print("finetune.py!!!!!!!!!!!!!!!!!!!!!!!!!!!config:", config)
+    # ZEYU
+    config["model"]["heads"]["action"] = ModuleSpec.create(
+        DiffusionActionHead,
+        action_horizon=50,
+        action_dim=1,
+        readout_key="readout_action",
+    )
     check_config_diff(config, pretrained_model.config)
 
     #########
@@ -193,8 +212,13 @@ def main(_):
         rng=init_rng,
         dataset_statistics=dataset.dataset_statistics,
     )
+    # ZEYU
+    # print("finetune.py!!!!!!!!!!!!!!!!!!!", pretrained_model.get_pretty_spec())
+    # print("finetune.py!!!!!!!!!!!!!!!!!!!", model.get_pretty_spec())
     merged_params = merge_params(model.params, pretrained_model.params)
     model = model.replace(params=merged_params)
+
+
     del pretrained_model
 
     #########
