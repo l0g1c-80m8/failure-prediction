@@ -120,8 +120,8 @@ def compute_metrics(outputs, targets):
         'mse': mse
     }
 
-def train_model(model, train_loader, val_loader, model_name, camera_name, run_name, num_epochs=50, 
-              warmup_epochs=10, initial_lr=0.01, min_lr=1e-6, patience=10):
+def train_model(model, train_loader, val_loader, model_name, num_epochs=50, 
+              warmup_epochs=10, initial_lr=0.01, min_lr=1e-6):
     """Train the model and validate periodically with progress tracking and logging."""
     
     criterion = nn.MSELoss()
@@ -169,7 +169,8 @@ def train_model(model, train_loader, val_loader, model_name, camera_name, run_na
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]", leave=False)
         
         for batch in train_pbar:
-            states = batch[f'states_{camera_name}'].to(device)
+            states_cam1 = batch['states_cam1'].to(device)
+            states_cam2 = batch['states_cam2'].to(device)
             risks = batch['risk'].to(device)
 
             # print(f"Input tensor device: {batch['states'].device}")
@@ -181,7 +182,10 @@ def train_model(model, train_loader, val_loader, model_name, camera_name, run_na
                 param_group['lr'] = current_lr
 
             optimizer.zero_grad()
-            outputs = model(states)
+            outputs_cam1 = model(states_cam1)
+            outputs_cam2 = model(states_cam2)
+
+            outputs = torch.maximum(outputs_cam1, outputs_cam2) # takes the maximum elements from both the outputs
 
             loss = criterion(outputs, risks)
             
@@ -258,14 +262,8 @@ def train_model(model, train_loader, val_loader, model_name, camera_name, run_na
         # Save best model based on validation mse
         if val_metrics['mse'] < best_val_mse:
             best_val_mse = val_metrics['mse']
-            torch.save(model.state_dict(), f'{run_name}/best_model_{model_name}.pth')
-            wandb.save(f'{run_name}/best_model_{model_name}.pth')
-            patient_epoch = 0
-        else:
-            patient_epoch += 1
-            if patient_epoch >= patience:
-                print(f"Early stopping at epoch {epoch + 1} ... best val mse: {best_val_mse:.4f}")
-                break
+            torch.save(model.state_dict(), f'best_model_{model_name}.pth')
+            wandb.save(f'best_model_{model_name}.pth')
 
         # Update epoch progress bar
         epoch_pbar.set_postfix({
@@ -377,28 +375,22 @@ if __name__ == "__main__":
     # Example of using different ResNet architectures
     models = {
         'ResNet18': resnet18(input_channels=9)
-        # 'ResNet34': resnet34(input_channels=9),
-        # 'ResNet50': resnet50(input_channels=9),
-        # 'ResNet101': resnet101(input_channels=9),
-        # 'ResNet152': resnet152(input_channels=9)
+        # 'ResNet34': resnet34(input_channels=19),
+        # 'ResNet50': resnet50(input_channels=19),
+        # 'ResNet101': resnet101(input_channels=19),
+        # 'ResNet152': resnet152(input_channels=19)
     }
 
     wandb_disabled = False
     
     # Train and evaluate each model
-    for model_name, model in models.items():
-        print(f"\nTraining {model_name}")
+    for name, model in models.items():
+        print(f"\nTraining {name}")
         # Initialize wandb
         num_epochs=100
         warmup_epochs=10
         initial_lr=0.001
         min_lr=1e-6
-        patience=10
-        camera_name = "cam2"  # or "cam2"
-        assert camera_name in ["cam1", "cam2"], "camera_name must be either 'cam1' or 'cam2'"
-        run_name = f"{model_name}_{camera_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
-        os.makedirs(f"runs/{run_name}", exist_ok=True)
 
         # Get local rank for distributed training
         local_rank = int(os.environ.get("LOCAL_RANK", 0))
@@ -406,9 +398,9 @@ if __name__ == "__main__":
         # Initialize wandb
         wandb.init(
             project="robot-trajectory-prediction",
-            name=f"{run_name}_GPU{local_rank}",
+            name=f"{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_GPU{local_rank}",
             config={
-                "architecture": model_name,
+                "architecture": name,
                 "epochs": num_epochs,
                 "warmup_epochs": warmup_epochs,
                 "initial_lr": initial_lr,
@@ -421,12 +413,12 @@ if __name__ == "__main__":
             mode="disabled" if wandb_disabled else None
         )
         # Train the model
-        train_model(model, train_loader, val_loader, model_name, camera_name, run_name, num_epochs=num_epochs,
+        train_model(model, train_loader, val_loader, name, num_epochs=num_epochs,
                     warmup_epochs=warmup_epochs,
                     initial_lr=initial_lr,
-                    min_lr=min_lr, patience=patience)
+                    min_lr=min_lr)
         
         # Evaluate on validation set
-        val_mse = evaluate_model(model, val_loader, model_name)
-        print(f"Validation MSE for {model_name}: {val_mse:.4f}")
+        val_mse = evaluate_model(model, val_loader, name)
+        print(f"Validation MSE for {name}: {val_mse:.4f}")
         wandb.finish()

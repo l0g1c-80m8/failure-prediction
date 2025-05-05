@@ -194,3 +194,4 @@ code/simulation/model/universal_robots_ur5e/assets/get_a_grip_mesh
 
 # ignore model weights
 *.pth
+*.pt
