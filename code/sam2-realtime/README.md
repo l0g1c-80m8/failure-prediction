@@ -41,6 +41,9 @@ python3.10 zeyu_sam2_video_inference.py --list_cameras
 python3.10 zeyu_sam2_video_inference.py --input_type realsense --camera_index 0
 python3.10 zeyu_sam2_video_inference.py --input_type realsense --camera_serial 217222067304
 python3.10 zeyu_sam2_video_risk_inference.py --input_type realsense --camera_serial 217222067304 --risk_model_path /home/zeyu/PHD_LAB/Material_handling_2024/zeyu-failure-prediction/code/simple_model/best_model_ResNet18.pth
+
+python3 sam2_data_collection_2views.py --input_type realsense --camera_serial_top 217222067304 --camera_serial_front 217222063197
+
 ```
 
 ### Data Collection

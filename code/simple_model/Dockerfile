@@ -3,11 +3,11 @@ ARG BUILD_PLATFORM=linux/amd64
 FROM --platform=${BUILD_PLATFORM} nvidia/cuda:12.1.1-cudnn8-devel-ubuntu20.04
 ENV DEBIAN_FRONTEND=noninteractive
 
-ARG USERNAME=zeyu
+ARG USERNAME=rajas
 # ARG USER_UID=1000
 # ARG USER_GID=1000
-ARG USER_UID=1013
-ARG USER_GID=1014
+ARG USER_UID=1018
+ARG USER_GID=1019
 
 # Install packages
 RUN apt-get update && apt-get install -y \
@@ -90,6 +90,27 @@ RUN python3.10 -m pip install --no-cache-dir \
     mujoco-py \
     mujoco-python-viewer \
     virtualenv
+
+# Install X11 and Qt dependencies
+RUN apt-get install -y --no-install-recommends \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-randr0 \
+    libxcb-render-util0 \
+    libxcb-xinerama0 \
+    libxcb-xkb1 \
+    libxkbcommon-x11-0 \
+    xvfb \
+    fontconfig \
+    libfontconfig1 \
+    libxcb-shm0 \
+    libxcb-util1 \
+    libxcb-cursor0 \
+    libxcb-xfixes0 \
+    libxcb-shape0 \
+    libxcb-render0 \
+    libxcb-glx0
 
 # Create symbolic links for python3 and pip3
 RUN ln -sf /usr/bin/python3.10 /usr/bin/python3 && \
