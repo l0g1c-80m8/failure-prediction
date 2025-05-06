@@ -117,7 +117,7 @@ if use_autocast:
 else:
     print("Not using autocast (not supported on this hardware)")
 
-def parse_trajectory(file_path):
+def parse_trajectory(file_path, shuffle=True):
     trajectories = []
     with open(file_path, 'r') as f:
         for line in f:
@@ -126,6 +126,8 @@ def parse_trajectory(file_path):
             # Convert strings to floats
             trajectory = list(map(float, values))
             trajectories.append(trajectory)
+    if shuffle:
+        random.shuffle(trajectories)  # Shuffle the trajectory
     return trajectories
 
 def execute_trajectory(robot, trajectories, n, is_executing):
@@ -136,27 +138,28 @@ def execute_trajectory(robot, trajectories, n, is_executing):
 
     for _ in range(n):
         # Forward sequence (top to bottom)
+        acc_scale = random.uniform(0.1, 0.15)
         for i, trajectory in enumerate(trajectories):
             randomized_trajectory = trajectory[:]  # Create a copy of the trajectory
             # Add a random gain of ±10 degrees to the 6th joint
-            random_gain = random.uniform(-20, 20)  # Generate random angle in degrees
+            random_gain = random.uniform(0, 5)  # Generate random angle in degrees
             randomized_trajectory[5] += math.radians(random_gain)  # Convert to radians and apply
             
             print(f"Moving to position {i} with randomized trajectory: {randomized_trajectory}")
-            robot.servoj(randomized_trajectory, vel=0.1, acc=0.1, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
+            robot.servoj(randomized_trajectory, vel=0.1, acc=acc_scale, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
         
         # Reverse sequence (bottom to top)
         for i, trajectory in enumerate(reversed(trajectories)):
             randomized_trajectory = trajectory[:]  # Create a copy of the trajectory
-            random_gain = random.uniform(-20, 20)
+            random_gain = random.uniform(-5, 0)
             randomized_trajectory[5] += math.radians(random_gain)
             
             print(f"Moving to position {len(trajectories)-1-i} with randomized trajectory: {randomized_trajectory}")
-            robot.servoj(randomized_trajectory, vel=0.1, acc=0.1, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
+            robot.servoj(randomized_trajectory, vel=0.1, acc=acc_scale, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
             
         time.sleep(0.5)  # Pause between rounds
 
-    robot.servoj(trajectories[0], vel=0.1, acc=0.1, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
+    robot.servoj(trajectories[0], vel=0.1, acc=acc_scale, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
     print('Finished moving the robot through all positions.')
     is_executing[0] = False
 
@@ -417,7 +420,7 @@ def main():
     print(f"Connected to robot at {args.robot_ip}")
     
     # Parse robot trajectory
-    trajectory = parse_trajectory(args.traj_file)
+    trajectory = parse_trajectory(args.traj_file, shuffle=True)
     print(f"Parsed trajectory from {args.traj_file} with {len(trajectory)} points")
     
     # Get initial robot joint positions
@@ -599,11 +602,13 @@ def main():
                 # Get the top camera object and panel masks
                 for i, obj_id in enumerate(out_obj_ids_top):
                     mask_dict[obj_id]["top"] = (out_mask_logits_top[i] > 0.0).permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-                    save_mask_dict[obj_id]["top"] = np.asarray(process_real_camera_mask(mask_dict[obj_id]["top"], min_contour_area=3), dtype=np.float32)
+                    current_points = process_real_camera_mask(mask_dict[obj_id]["top"], min_contour_area=3)
+                    save_mask_dict[obj_id]["top"] = np.asarray( current_points, dtype=np.float32) if len(current_points) > 0 else None
 
                 for i, obj_id in enumerate(out_obj_ids_front):
                     mask_dict[obj_id]["front"] = (out_mask_logits_front[i] > 0.0).permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-                    save_mask_dict[obj_id]["front"] = np.asarray(process_real_camera_mask(mask_dict[obj_id]["front"], min_contour_area=3), dtype=np.float32)
+                    current_points = process_real_camera_mask(mask_dict[obj_id]["front"], min_contour_area=3)
+                    save_mask_dict[obj_id]["front"] = np.asarray( current_points, dtype=np.float32) if len(current_points) > 0 else None
 
                 
                 """top_camera_object_out_mask = (out_mask_logits_top[0] > 0.0).permute(1, 2, 0).cpu().numpy().astype(np.uint8)
@@ -631,17 +636,29 @@ def main():
                 # Calculate motion features if we have enough frames
                 # top_camera_object_current_points = extract_points_from_mask(top_camera_object_out_mask)
                 # top_camera_panel_current_points = extract_points_from_mask(top_camera_panel_out_mask)
-                
-                # TODO: Change variable names to fit the new structure
 
-                is_nonempty = all(
-                    (v > 0).all()
-                    for object_views in save_mask_dict.values()
-                    for v in object_views.values()
-                    if v is not None
-                )
+                # print(save_mask_dict)
+                # print(save_mask_dict[1]['front'].shape)
 
-                if is_nonempty:
+                def has_nonempty_masks(mask_dict, view='top', min_required=2):
+                    nonempty = [
+                        v[view] for v in mask_dict.values()
+                        if v[view] is not None
+                    ]
+                    return len(nonempty) >= 0
+
+                # is_nonempty = any(
+                #     (v > 0).any()
+                #     for object_views in save_mask_dict.values()
+                #     for v in object_views.values()
+                #     if v is not None
+                # )
+
+                # if (len(top_camera_object_current_points) > 0 and 
+                    # len(top_camera_panel_current_points) > 0):
+
+                if has_nonempty_masks(save_mask_dict, view='top') and \
+                    has_nonempty_masks(save_mask_dict, view='front'):
 
                     # Get the complete pose (position and orientation)
                     pose = robot_left.get_pose()
@@ -681,7 +698,7 @@ def main():
                             # print("front_camera_object_current_points.shape", front_camera_object_current_points.shape)
                             episode_step_data[f'{key_name}_front_contour'] = np.asarray(front_camera_object_current_contours, dtype=np.float32)
                     
-
+                    episode.append(episode_step_data)
                     # episode.append({
                     #     'full_top_frame_rgb': frame_rgb_top,
                     #     'full_front_frame_rgb': frame_rgb_front,
@@ -743,7 +760,7 @@ def main():
         # Check for quit key
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
-    # np.save(f"{args.out_dir}/episode_{timestamp}_cube_raw.npy", episode)
+    np.save(f"{args.out_dir}/episode_{timestamp}_cube_raw.npy", episode)
 
     # Cleanup
     print(f"Video saved at {output_path}")
