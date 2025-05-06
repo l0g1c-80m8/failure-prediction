@@ -17,8 +17,8 @@ def capture_video_from_depth_camera(save_folder, fps=30, save_all=True):
     config = rs.config()
     
     # Enable streams with aligned resolution
-    config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, fps)
-    config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, fps)
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, fps)
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, fps)
 
     # Start streaming
     profile = pipeline.start(config)
@@ -44,10 +44,10 @@ def capture_video_from_depth_camera(save_folder, fps=30, save_all=True):
         if save_all:
             color_writer = cv2.VideoWriter(color_video_path, 
                                          cv2.VideoWriter_fourcc(*'XVID'), 
-                                         fps, (1280, 720))
+                                         fps, (640, 480))
             depth_writer = cv2.VideoWriter(depth_video_path, 
                                          cv2.VideoWriter_fourcc(*'XVID'), 
-                                         fps, (1280, 720))
+                                         fps, (640, 480))
             combined_writer = cv2.VideoWriter(combined_video_path, 
                                             cv2.VideoWriter_fourcc(*'XVID'), 
                                             fps, (2560, 720))
@@ -101,8 +101,8 @@ def capture_video_from_depth_camera(save_folder, fps=30, save_all=True):
                 combined_writer.write(combined_image)
             
             # Display preview (resized for better viewing)
-            display_image = cv2.resize(combined_image, (1920, 540))
-            cv2.imshow('Recording Preview (Press Q to stop)', display_image)
+            # display_image = cv2.resize(combined_image, (2*1280, 480))
+            cv2.imshow('Recording Preview (Press Q to stop)', combined_image)
             
             # Check for 'Q' key press
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -168,13 +168,13 @@ def view_real_time_from_depth_camera():
         print("The demo requires Depth camera with Color sensor")
         exit(0)
 
-    config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
 
     if device_product_line == 'L500':
         config.enable_stream(rs.stream.color, 960, 540, rs.format.bgr8, 30)
     else:
         # config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)   # USB 2.0
-        config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)    # USB 3.0
+        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)    # USB 3.0
 
     # Start streaming
     pipeline.start(config)
@@ -215,10 +215,6 @@ def view_real_time_from_depth_camera():
             cv2.imshow('RealSense', images)
             cv2.waitKey(1)
 
-
-
-
-            
     finally:
 
         # Stop streaming

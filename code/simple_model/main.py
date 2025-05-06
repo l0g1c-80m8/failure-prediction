@@ -11,75 +11,117 @@ from datetime import datetime
 import matplotlib
 matplotlib.use("TkAgg")  # or "Qt5Agg"
 import matplotlib.pyplot as plt
+import sys
 
 from resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
 
 
 class RobotTrajectoryDataset(Dataset):
-    def __init__(self, data_dir, window_size=10, stride=1):
+    def __init__(self, data_dir, window_size=10, stride=1, preload=False, cache_indices=True):
         self.data_dir = data_dir
         self.window_size = window_size
         self.stride = stride
+        self.preload = preload
         
         # Get list of all .npy files in directory
         self.episode_files = sorted([f for f in os.listdir(data_dir) if f.endswith('.npy')])
         
-        # Pre-calculate indices for all windows
-        self.window_indices = []  # (file_idx, start_idx, end_idx)
+        # Cache for loaded episodes
+        self.episodes_cache = {}
         
-        for file_idx, episode_file in enumerate(self.episode_files):
-            episode_data = np.load(os.path.join(data_dir, episode_file), allow_pickle=True)
-            n_frames = len(episode_data)
+        # Calculate total number of windows and their locations
+        print(f"Calculating indices for {len(self.episode_files)} episode files...")
+        
+        # Either calculate and cache indices or load them if already cached
+        indices_cache_path = os.path.join(data_dir, f"indices_cache_w{window_size}_s{stride}.npy")
+        
+        if cache_indices and os.path.exists(indices_cache_path):
+            print(f"Loading cached indices from {indices_cache_path}")
+            self.window_indices = np.load(indices_cache_path, allow_pickle=True).tolist()
+            self.n_samples = len(self.window_indices)
+        else:
+            # For progress tracking during initialization
+            print("Calculating window indices...")
+            self.window_indices = []
             
-            for start_idx in range(0, n_frames - window_size + 1, stride):
-                end_idx = start_idx + window_size
-                self.window_indices.append((file_idx, start_idx, end_idx))
+            for file_idx, episode_file in enumerate(tqdm(self.episode_files, desc="Processing episodes")):
+                episode_path = os.path.join(data_dir, episode_file)
+                # Just load the length of the episode to calculate indices
+                episode_data = np.load(episode_path, allow_pickle=True)
+                n_frames = len(episode_data)
+                
+                for start_idx in range(0, n_frames - window_size + 1, stride):
+                    end_idx = start_idx + window_size
+                    self.window_indices.append((file_idx, start_idx, end_idx))
+                
+                # Clear memory
+                del episode_data
+            
+            self.n_samples = len(self.window_indices)
+            print(f"Total windows: {self.n_samples}")
+            
+            # Cache indices for future use
+            if cache_indices:
+                print(f"Caching indices to {indices_cache_path}")
+                np.save(indices_cache_path, self.window_indices)
         
-        # Pre-load all episodes into memory
-        self.episodes = {}
-        for file_idx, episode_file in enumerate(self.episode_files):
-            episode_path = os.path.join(data_dir, episode_file)
-            self.episodes[file_idx] = np.load(episode_path, allow_pickle=True)
+        # Optionally preload all data (only if requested)
+        if preload:
+            print("Preloading all episodes into memory...")
+            for file_idx, episode_file in enumerate(tqdm(self.episode_files, desc="Preloading episodes")):
+                episode_path = os.path.join(data_dir, episode_file)
+                self.episodes_cache[file_idx] = np.load(episode_path, allow_pickle=True)
+            print("Preloading complete")
 
     def __len__(self):
-        return len(self.window_indices)
+        return self.n_samples
 
     def __getitem__(self, idx):
         file_idx, start_idx, end_idx = self.window_indices[idx]
-        episode_data = self.episodes[file_idx]  # Get from memory instead of disk
+        
+        # Load episode data if not already in cache
+        if file_idx not in self.episodes_cache:
+            episode_path = os.path.join(self.data_dir, self.episode_files[file_idx])
+            episode_data = np.load(episode_path, allow_pickle=True)
+        else:
+            episode_data = self.episodes_cache[file_idx]
         
         # Extract window data
         window_data = episode_data[start_idx:end_idx]
         
-        # Get states sequence (shape: window_size x 19)
-        states = np.stack([frame['state'] for frame in window_data]) 
-
-        # Only take the first 6 state values
-        # states = states[:, :6]       
+        # Get states sequence
+        states = np.stack([frame['state'] for frame in window_data])
         
         # Get the risk for the last timestep
-        # Convert to numpy array first, then to tensor
         risk = np.array(window_data[-1]['risk'], dtype=np.float32)
         
+        # If we haven't preloaded everything, clean up this episode to save memory
+        if not self.preload and file_idx not in self.episodes_cache:
+            del episode_data
+        
         return {
-            'states': torch.FloatTensor(states).transpose(0, 1),  # Transform to (19 x window_size) for 1D convolution
-            'risk': torch.FloatTensor(risk)  # Convert numpy array to tensor
+            'states': torch.FloatTensor(states).transpose(0, 1),
+            'risk': torch.FloatTensor(risk)
         }
 
-def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size=32, num_workers=4):
-    """Create train and validation data loaders."""
+def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size=32, num_workers=4, preload=False):
+    """Create train and validation data loaders with optimization options."""
     
-    # Create datasets
+    # Create datasets with optimizations
     train_dataset = RobotTrajectoryDataset(
         data_dir=train_dir,
         window_size=window_size,
-        stride=stride
+        stride=stride,
+        preload=preload,  # Set to True only if you have enough RAM
+        cache_indices=True  # Use cached indices if available
     )
     
     val_dataset = RobotTrajectoryDataset(
         data_dir=val_dir,
         window_size=window_size,
-        stride=stride
+        stride=stride,
+        preload=preload,
+        cache_indices=True
     )
     
     # Create data loaders
@@ -114,13 +156,15 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
     """Train the model and validate periodically with progress tracking and logging."""
     
     criterion = nn.MSELoss()
-    optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+    optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=0.0001)
     
     # Compute total steps for warmup and decay
     n_steps_per_epoch = len(train_loader)
     n_warmup_steps = warmup_epochs * n_steps_per_epoch
     n_total_steps = num_epochs * n_steps_per_epoch
-    
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     def get_lr(step):
         if step < n_warmup_steps:
             # Linear warmup
@@ -135,10 +179,18 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
     # print(f"CUDA available: {torch.cuda.is_available()}")
     # print(f"Number of GPUs: {torch.cuda.device_count()}")
     if torch.cuda.device_count() > 1:
-        print(f"Using {torch.cuda.device_count()} GPUs!")
-        model = nn.DataParallel(model)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
+        print(f"Using {torch.cuda.device_count()} GPUs with DistributedDataParallel!")
+        # Set up process group
+        torch.distributed.init_process_group(backend='nccl')
+        # Create model on current device
+        local_rank = torch.distributed.get_rank()
+        torch.cuda.set_device(local_rank)
+        model = model.cuda()
+        model = torch.nn.parallel.DistributedDataParallel(model, 
+                                                        device_ids=[local_rank],
+                                                        output_device=local_rank)
+    else:
+        model = model.to(device)
     
     best_val_mse = float('inf')
     global_step = 0
@@ -147,6 +199,8 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
     epoch_pbar = tqdm(range(num_epochs), desc="Training Progress")
     
     for epoch in epoch_pbar:
+        print_gpu_memory_stats()
+
         # Training phase
         model.train()
         train_metrics = {
@@ -332,7 +386,17 @@ def visualize_predictions(predictions, ground_truth):
         title="Model Predictions vs Ground Truth"
     )})
 
-
+# Add this function to monitor GPU memory
+def print_gpu_memory_stats():
+    if torch.cuda.is_available():
+        for i in range(torch.cuda.device_count()):
+            total_memory = torch.cuda.get_device_properties(i).total_memory / 1e9  # GB
+            reserved = torch.cuda.memory_reserved(i) / 1e9  # GB
+            allocated = torch.cuda.memory_allocated(i) / 1e9  # GB
+            free = total_memory - allocated
+            print(f"GPU {i}: Total: {total_memory:.2f}GB, Reserved: {reserved:.2f}GB, "
+                  f"Allocated: {allocated:.2f}GB, Free: {free:.2f}GB")
+            
 if __name__ == "__main__":
     os.environ['QT_X11_NO_MITSHM'] = '1'
     # Initialize wandb
@@ -342,19 +406,20 @@ if __name__ == "__main__":
     train_loader, val_loader = create_data_loaders(
         train_dir='data/train',
         val_dir='data/val',
-        window_size=1,
+        window_size=30,
         stride=1,
-        batch_size=1016,
-        num_workers=8
+        batch_size=128,
+        num_workers=4
     )
     
+    input_channels = 15 # 19
     # Example of using different ResNet architectures
     models = {
-        'ResNet18': resnet18(input_channels=15)
-        # 'ResNet34': resnet34(input_channels=19),
-        # 'ResNet50': resnet50(input_channels=19),
-        # 'ResNet101': resnet101(input_channels=19),
-        # 'ResNet152': resnet152(input_channels=19)
+        'ResNet18': resnet18(input_channels=input_channels, dropout_rate=0.3)
+        # 'ResNet34': resnet34(input_channels=input_channels, dropout_rate=0.3),
+        # 'ResNet50': resnet50(input_channels=input_channels, dropout_rate=0.3),
+        # 'ResNet101': resnet101(input_channels=input_channels, dropout_rate=0.3),
+        # 'ResNet152': resnet152(input_channels=input_channels, dropout_rate=0.3)
     }
 
     wandb_disabled = False
@@ -363,9 +428,9 @@ if __name__ == "__main__":
     for name, model in models.items():
         print(f"\nTraining {name}")
         # Initialize wandb
-        num_epochs=50
+        num_epochs=100
         warmup_epochs=10
-        initial_lr=0.001
+        initial_lr=0.01
         min_lr=1e-6
         wandb.init(
             project="robot-trajectory-prediction",
@@ -379,7 +444,7 @@ if __name__ == "__main__":
                 "batch_size": train_loader.batch_size,
                 "window_size": train_loader.dataset.window_size,
                 "stride": train_loader.dataset.stride,
-                "state_dimensions": 6  # Update this to reflect the new state dimension
+                "state_dimensions": input_channels  # Update this to reflect the new state dimension
             },
             mode="disabled" if wandb_disabled else None
         )
