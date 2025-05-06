@@ -17,7 +17,6 @@ import random
 import math
 
 
-
 # Add project root to path to ensure imports work correctly
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, '../..'))
@@ -85,7 +84,7 @@ parser.add_argument("--n_rounds", type=int, default=2,
 # Output settings
 parser.add_argument("--out_dir", type=str, default="../videos/")
 parser.add_argument("--model", "--model_checkpoint_path", type=str, default="../checkpoints/sam2.1_hiera_tiny.pt")
-parser.add_argument("--cfg", "--model_config_path", type=str, default="configs/sam2.1/sam2.1_hiera_t_512")
+parser.add_argument("--cfg", "--model_config_path", type=str, default="configs/sam2.1/sam2.1_hiera_t_512_noCompile")
 
 
 args = parser.parse_args()
@@ -416,7 +415,7 @@ def collect_points_both(frame_top, frame_front, pts_top, lbls_top, pts_front, lb
 
 
 def main():
-    """ # Initialize robot
+    # Initialize robot
     robot_left = urx.Robot(args.robot_ip)
     print(f"Connected to robot at {args.robot_ip}")
     
@@ -426,7 +425,7 @@ def main():
     
     # Get initial robot joint positions
     joints_left = robot_left.getj()
-    print('Initial robot joints: ', joints_left)"""
+    print('Initial robot joints: ', joints_left)
     
     # Robot execution flag (for thread coordination)
     is_executing = [False]
@@ -448,6 +447,9 @@ def main():
     else:
         predictor_top = build_sam2_camera_predictor(model_cfg, sam2_checkpoint)
         predictor_front = build_sam2_camera_predictor(model_cfg, sam2_checkpoint)
+
+    print("Model (top) instance ID:", id(predictor_top))
+    print("Model (front) instance ID:", id(predictor_front))
         
     print(f"Predictor (top cam) device: {predictor_top.device}")
     print(f"Predictor (front cam) device: {predictor_front.device}")
@@ -502,7 +504,7 @@ def main():
         if output_path[-3:] != 'mp4':
             output_path = output_path + f"_{timestamp}_.mp4"
     else:
-        camera_id = args.camera_serial if args.camera_serial else f"cam{args.camera_index}"
+        camera_id = args.camera_serial_top if args.camera_serial_top else f"cam{args.camera_index_top}"
         output_path = f"{args.out_dir}realsense_{camera_id}_{timestamp}.mp4"
     
     out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), 30.0, (frame_width, frame_height * 2))
@@ -561,11 +563,11 @@ def main():
             # Add prompts for each selected object
             for i in ann_obj_id:
                 if len(points_top[i]) > 0:
-                    _, out_obj_ids, out_mask_logits = predictor_top.add_new_prompt(
+                    _, out_obj_ids_top, out_mask_logits_top = predictor_top.add_new_prompt(
                         frame_idx=ann_frame_idx, obj_id=i, points=points_top[i], labels=labels_top[i]
                     )
                 if len(points_front[i]) > 0:
-                    _, out_obj_ids, out_mask_logits = predictor_front.add_new_prompt(
+                    _, out_obj_ids_front, out_mask_logits_front = predictor_front.add_new_prompt(
                         frame_idx=ann_frame_idx, obj_id=i, points=points_front[i], labels=labels_front[i]
                     )
 
@@ -592,7 +594,7 @@ def main():
             # print("out_obj_ids", out_obj_ids)
             
             # Process masks for visualization and feature extraction
-            if len(out_obj_ids) >= 2:  # Make sure we have at least two objects
+            if len(out_obj_ids_top) >= 2:  # Make sure we have at least two objects
 
                 # Get the top camera object and panel masks
                 top_camera_object_out_mask = (out_mask_logits_top[0] > 0.0).permute(1, 2, 0).cpu().numpy().astype(np.uint8)
@@ -641,7 +643,7 @@ def main():
                     end_effector_pos_array = np.array([x, y, z], dtype=np.float32)
 
                     episode.append({
-                        'full_top_frame_rgb': frame_rgb,
+                        'full_top_frame_rgb': frame_rgb_top,
                         # 'wrist_image': np.asarray(np.random.rand(64, 64, 3) * 255, dtype=np.uint8),
                         'time_step': np.asarray(step_num, dtype=np.float32),
                         'object_top_contour': np.asarray(top_camera_object_current_contours, dtype=np.float32),
@@ -658,20 +660,20 @@ def main():
                 # top camera 
                 top_camera_object_out_mask = cv2.cvtColor(top_camera_object_out_mask, cv2.COLOR_GRAY2RGB)
                 top_camera_object_out_mask[:, :, 0] = np.clip(top_camera_object_out_mask[:, :, 0] * 255, 0, 255).astype(np.uint8)
-                frame_rgb = cv2.addWeighted(frame_rgb, 1, top_camera_object_out_mask, 0.5, 0)
+                frame_rgb_top = cv2.addWeighted(frame_rgb_top, 1, top_camera_object_out_mask, 0.5, 0)
                 
                 top_camera_panel_out_mask = cv2.cvtColor(top_camera_panel_out_mask, cv2.COLOR_GRAY2RGB)
                 top_camera_panel_out_mask[:, :, 1] = np.clip(top_camera_panel_out_mask[:, :, 1] * 255, 0, 255).astype(np.uint8)
-                frame_rgb = cv2.addWeighted(frame_rgb, 1, top_camera_panel_out_mask, 0.5, 0)
+                frame_rgb_top = cv2.addWeighted(frame_rgb_top, 1, top_camera_panel_out_mask, 0.5, 0)
 
                 # front camera
                 front_camera_object_out_mask = cv2.cvtColor(front_camera_object_out_mask, cv2.COLOR_GRAY2RGB)
                 front_camera_object_out_mask[:, :, 0] = np.clip(front_camera_object_out_mask[:, :, 0] * 255, 0, 255).astype(np.uint8)
-                frame_rgb = cv2.addWeighted(frame_rgb, 1, front_camera_object_out_mask, 0.5, 0)
+                frame_rgb_front = cv2.addWeighted(frame_rgb_front, 1, front_camera_object_out_mask, 0.5, 0)
                 
                 front_camera_panel_out_mask = cv2.cvtColor(front_camera_panel_out_mask, cv2.COLOR_GRAY2RGB)
                 front_camera_panel_out_mask[:, :, 1] = np.clip(front_camera_panel_out_mask[:, :, 1] * 255, 0, 255).astype(np.uint8)
-                frame_rgb = cv2.addWeighted(frame_rgb, 1, front_camera_panel_out_mask, 0.5, 0)
+                frame_rgb_front = cv2.addWeighted(frame_rgb_front, 1, front_camera_panel_out_mask, 0.5, 0)
 
 
             step_num+=1
@@ -688,7 +690,7 @@ def main():
         # Check for quit key
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
-    np.save(f"{args.out_dir}/episode_{timestamp}_cube_raw.npy", episode)
+    # np.save(f"{args.out_dir}/episode_{timestamp}_cube_raw.npy", episode)
 
     # Cleanup
     print(f"Video saved at {output_path}")
