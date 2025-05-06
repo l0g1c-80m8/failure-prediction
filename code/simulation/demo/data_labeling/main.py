@@ -10,6 +10,14 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
 from PyQt5.QtCore import Qt, QSize
 from widgets import (ContourImageWidget, ValuePlotter, FileListDialog)
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, '..'))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+# Import the function from common_functions
+from common_functions import (piecewise_bezier_interpolation, spline_interpolation, hermite_spline_interpolation)
+
 # Set environment variable to avoid Qt conflicts
 os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = ""
 
@@ -28,6 +36,7 @@ class EpisodeEditor(QMainWindow):
         self.current_dir_path = None
         self.file_list = []
         self.current_file_index = -1
+        self.original_risk_values = None
         
         self.init_ui()
         
@@ -92,9 +101,15 @@ class EpisodeEditor(QMainWindow):
         self.save_button.clicked.connect(self.save_episode_data)
         self.save_button.setEnabled(False)
         
+        # Add restore button
+        self.restore_button = QPushButton("Restore Original Values")
+        self.restore_button.clicked.connect(self.restore_original_risk_values)
+        self.restore_button.setEnabled(False)
+
         file_controls.addWidget(self.load_file_button)
         file_controls.addWidget(self.load_folder_button)
         file_controls.addWidget(self.save_button)
+        file_controls.addWidget(self.restore_button)
         main_layout.addLayout(file_controls)
         
         # Split view: top for images, bottom for controls
@@ -233,6 +248,7 @@ class EpisodeEditor(QMainWindow):
         self.interpolate_button.setEnabled(enabled)
         self.apply_markers_button.setEnabled(enabled)
         self.save_button.setEnabled(enabled)
+        self.restore_button.setEnabled(enabled and self.original_risk_values is not None)
     
     def load_folder(self):
         """Load a folder of .npy files"""
@@ -326,6 +342,9 @@ class EpisodeEditor(QMainWindow):
                 self.status_bar.showMessage("Warning: 'risk' key not found in data")
                 return
             
+            # Save the original risk values
+            self.original_risk_values = [np.copy(step['risk']) for step in self.episode_data]
+                                     
             # Set up controls
             num_steps = len(self.episode_data)
             self.total_steps_label.setText(str(num_steps))
@@ -358,6 +377,31 @@ class EpisodeEditor(QMainWindow):
             import traceback
             traceback.print_exc()
     
+    def restore_original_risk_values(self):
+        """Restore the risk values to their original state when the file was loaded"""
+        if self.episode_data is None or self.original_risk_values is None:
+            self.status_bar.showMessage("No data loaded or no original values to restore")
+            return
+        
+        try:
+            # Restore the original risk values
+            for i, original_risk in enumerate(self.original_risk_values):
+                self.episode_data[i]['risk'] = np.copy(original_risk)
+            
+            # Update the plot
+            risk_values = [step['risk'][0] for step in self.episode_data]
+            self.value_plot.set_data(risk_values)
+            
+            # Update display
+            self.update_display()
+            
+            self.status_bar.showMessage("Restored original risk values")
+        except Exception as e:
+            self.status_bar.showMessage(f"Error restoring original values: {str(e)}")
+            print(f"Error details: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
     def save_episode_data(self):
         """Save the modified episode data"""
         if self.episode_data is None:
@@ -602,7 +646,7 @@ class EpisodeEditor(QMainWindow):
         self.front_object_view.setFixedSize(320, 240)
 
     def apply_risk_markers(self):
-        """Apply risk values based on the marker positions"""
+        """Apply risk values based on the marker positions using advanced interpolation"""
         if self.episode_data is None:
             return
         
@@ -621,37 +665,75 @@ class EpisodeEditor(QMainWindow):
             self.status_bar.showMessage("Error: First failure must be before failure complete")
             return
         
-        # Corrected linear interpolation function
-        def linear_interpolation(first_failure_time_step, failure_time_step_trim):
-            return np.linspace(0, 1, failure_time_step_trim - first_failure_time_step + 1)
-        
         try:
-            # Set all values before first_failure to 0
-            for i in range(first_failure):
-                self.episode_data[i]['risk'] = np.asarray([0.0], dtype=np.float32)
-                
-            # Set interpolated values between markers
-            interpolated = linear_interpolation(first_failure, failure_trim)
-            for i, value in enumerate(interpolated):
-                idx = first_failure + i
-                self.episode_data[idx]['risk'] = np.asarray([value], dtype=np.float32)
-                
-            # Set all values after failure_trim to 1
-            for i in range(failure_trim + 1, len(self.episode_data)):
-                self.episode_data[i]['risk'] = np.asarray([1.0], dtype=np.float32)
-                
-            # Update plot with new values
-            risk_values = [step['risk'][0] for step in self.episode_data]
-            self.value_plot.set_data(risk_values)
+            # Create interpolation dialog to let user choose the interpolation method
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Choose Interpolation Method")
             
-            # Update display
-            self.update_display()
+            dialog_layout = QFormLayout()
             
-            self.status_bar.showMessage(f"Applied risk values: 0 before step {first_failure}, " +
-                                       f"interpolated to step {failure_trim}, 1 after")
+            # Interpolation type
+            interp_combo = QComboBox()
+            interp_combo.addItems(["Linear", "Bezier", "Cubic Spline", "Hermite Spline"])
+            dialog_layout.addRow("Interpolation Type:", interp_combo)
+            
+            # Buttons
+            button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+            button_box.accepted.connect(dialog.accept)
+            button_box.rejected.connect(dialog.reject)
+            dialog_layout.addRow(button_box)
+            
+            dialog.setLayout(dialog_layout)
+            
+            # Handle dialog result
+            if dialog.exec_() == QDialog.Accepted:
+                interp_type = interp_combo.currentText()
+                
+                # Set all values before first_failure to 0
+                for i in range(first_failure):
+                    self.episode_data[i]['risk'] = np.asarray([0.0], dtype=np.float32)
+                
+                # Map our markers correctly:
+                # 0 = start_idx (beginning of the episode with value 0.0)
+                # first_failure = middle_idx (point with value 0.5)
+                # failure_trim = end_idx (point with value 1.0)
+                start_idx = 0
+                middle_idx = first_failure
+                end_idx = failure_trim
+                
+                # Get interpolated values based on selected method
+                if interp_type == "Linear":
+                    # Simple linear interpolation
+                    interpolated = np.linspace(0, 1, failure_trim + 1)
+                elif interp_type == "Bezier":
+                    interpolated = piecewise_bezier_interpolation(start_idx, middle_idx, end_idx)
+                elif interp_type == "Cubic Spline":
+                    interpolated = spline_interpolation(start_idx, middle_idx, end_idx)
+                elif interp_type == "Hermite Spline":
+                    interpolated = hermite_spline_interpolation(start_idx, middle_idx, end_idx)
+                
+                # Apply interpolated values (entire range from 0 to failure_trim)
+                for i, value in enumerate(interpolated):
+                    if i < len(self.episode_data):  # Ensure we don't go out of bounds
+                        self.episode_data[i]['risk'] = np.asarray([value], dtype=np.float32)
+                
+                # Set all values after failure_trim to 1
+                for i in range(failure_trim + 1, len(self.episode_data)):
+                    self.episode_data[i]['risk'] = np.asarray([1.0], dtype=np.float32)
+                
+                # Update plot with new values
+                risk_values = [step['risk'][0] for step in self.episode_data]
+                self.value_plot.set_data(risk_values)
+                
+                # Update display
+                self.update_display()
+                
+                self.status_bar.showMessage(f"Applied {interp_type} interpolation with {first_failure} as midpoint and {failure_trim} as endpoint")
         except Exception as e:
             self.status_bar.showMessage(f"Error applying risk values: {str(e)}")
             print(f"Error details: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
 def main():
     # Create Qt application

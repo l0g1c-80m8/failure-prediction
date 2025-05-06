@@ -93,7 +93,7 @@ def main():
     parser = argparse.ArgumentParser(description='Split dataset into training and validation sets')
     parser.add_argument('--source', default='demo/data/train_raw/new/',
                         help='Source directory containing dataset files')
-    parser.add_argument('--target', default='code/simple_model/data',
+    parser.add_argument('--target', default='../../code/simple_model/data',
                         help='Target directory for train and val subdirectories')
     parser.add_argument('--train-ratio', type=float, default=0.8,
                         help='Ratio of files to use for training (default: 0.8)')
