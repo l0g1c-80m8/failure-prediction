@@ -676,6 +676,7 @@ def main():
                         'full_front_frame_rgb': frame_rgb_front,
                         'time_step': np.asarray(step_num, dtype=np.float32),
                         'end_effector_pos': end_effector_pos_array,
+                        'failure_phase_value': np.asarray([0.0], dtype=np.float32),  # Placeholder for failure_phase_value
                         'risk': np.asarray([0.0], dtype=np.float32)  # Placeholder for risk prediction
                         # 'failure_phase_value': np.asarray([failure_phase_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
                         # 'language_instruction': 'dummy instruction',
