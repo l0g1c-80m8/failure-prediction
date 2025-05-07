@@ -154,7 +154,7 @@ class EpisodeEditor(QMainWindow):
         risk_label.setStyleSheet("font-weight: bold; color: #1a5276;")
         risk_layout.addWidget(risk_label)
 
-        self.risk_value_plot = ValuePlotter()
+        self.risk_value_plot = ValuePlotter("Risk Value")
         risk_layout.addWidget(self.risk_value_plot)
         plot_tabs.addTab(risk_tab, "Risk Values")
 
@@ -167,7 +167,7 @@ class EpisodeEditor(QMainWindow):
         failure_label.setStyleSheet("font-weight: bold; color: #a93226;")
         failure_layout.addWidget(failure_label)
 
-        self.failure_phase_plot = ValuePlotter()
+        self.failure_phase_plot = ValuePlotter("Failure Phase Value")
         failure_layout.addWidget(self.failure_phase_plot)
         plot_tabs.addTab(failure_tab, "Failure Phase Values")
 
@@ -943,7 +943,7 @@ class EpisodeEditor(QMainWindow):
         self.status_bar.showMessage(f"Applied {interp_type} interpolation to failure phase from step {start_step} to {end_step}")
 
     def apply_failure_phase_markers(self):
-        """Apply failure phase values based on the marker positions using advanced interpolation"""
+        """Apply failure phase values based on the marker positions using a simple three-step approach"""
         if self.episode_data is None:
             return
         
@@ -963,69 +963,33 @@ class EpisodeEditor(QMainWindow):
             return
         
         try:
-            # Create interpolation dialog to let user choose the interpolation method
-            dialog = QDialog(self)
-            dialog.setWindowTitle("Choose Interpolation Method for Failure Phase")
+            # Apply the simplified three-step values:
+            # 1. Before first_failure: all values are 0.0
+            # 2. Between first_failure and failure_trim: all values are 0.5
+            # 3. After failure_trim: all values are 1.0
             
-            dialog_layout = QFormLayout()
+            # Step 1: Set all values to 0.0 before first_failure
+            for i in range(first_failure):
+                self.episode_data[i]['failure_phase_value'] = np.asarray([0.0], dtype=np.float32)
             
-            # Interpolation type
-            interp_combo = QComboBox()
-            interp_combo.addItems(["Linear", "Bezier", "Cubic Spline", "Hermite Spline"])
-            dialog_layout.addRow("Interpolation Type:", interp_combo)
+            # Step 2: Set all values to 0.5 between first_failure and failure_trim
+            for i in range(first_failure, failure_trim + 1):
+                if i < len(self.episode_data):  # Ensure we don't go out of bounds
+                    self.episode_data[i]['failure_phase_value'] = np.asarray([0.5], dtype=np.float32)
             
-            # Buttons
-            button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-            button_box.accepted.connect(dialog.accept)
-            button_box.rejected.connect(dialog.reject)
-            dialog_layout.addRow(button_box)
+            # Step 3: Set all values to 1.0 after failure_trim
+            for i in range(failure_trim + 1, len(self.episode_data)):
+                self.episode_data[i]['failure_phase_value'] = np.asarray([1.0], dtype=np.float32)
             
-            dialog.setLayout(dialog_layout)
+            # Update plot with new values
+            failure_phase_values = [step['failure_phase_value'][0] for step in self.episode_data]
+            self.failure_phase_plot.set_data(failure_phase_values)
             
-            # Handle dialog result
-            if dialog.exec_() == QDialog.Accepted:
-                interp_type = interp_combo.currentText()
-                
-                # Set all values before first_failure to 0
-                for i in range(first_failure):
-                    self.episode_data[i]['failure_phase_value'] = np.asarray([0.0], dtype=np.float32)
-                
-                # Map our markers correctly:
-                # 0 = start_idx (beginning of the episode with value 0.0)
-                # first_failure = middle_idx (point with value 0.5)
-                # failure_trim = end_idx (point with value 1.0)
-                start_idx = 0
-                middle_idx = first_failure
-                end_idx = failure_trim
-                
-                # Get interpolated values based on selected method
-                if interp_type == "Linear":
-                    # Simple linear interpolation
-                    interpolated = np.linspace(0, 1, failure_trim + 1)
-                elif interp_type == "Bezier":
-                    interpolated = piecewise_bezier_interpolation(start_idx, middle_idx, end_idx)
-                elif interp_type == "Cubic Spline":
-                    interpolated = spline_interpolation(start_idx, middle_idx, end_idx)
-                elif interp_type == "Hermite Spline":
-                    interpolated = hermite_spline_interpolation(start_idx, middle_idx, end_idx)
-                
-                # Apply interpolated values (entire range from 0 to failure_trim)
-                for i, value in enumerate(interpolated):
-                    if i < len(self.episode_data):  # Ensure we don't go out of bounds
-                        self.episode_data[i]['failure_phase_value'] = np.asarray([value], dtype=np.float32)
-                
-                # Set all values after failure_trim to 1
-                for i in range(failure_trim + 1, len(self.episode_data)):
-                    self.episode_data[i]['failure_phase_value'] = np.asarray([1.0], dtype=np.float32)
-                
-                # Update plot with new values
-                failure_phase_values = [step['failure_phase_value'][0] for step in self.episode_data]
-                self.failure_phase_plot.set_data(failure_phase_values)
-                
-                # Update display
-                self.update_display()
-                
-                self.status_bar.showMessage(f"Applied {interp_type} interpolation to failure phase with {first_failure} as midpoint and {failure_trim} as endpoint")
+            # Update display
+            self.update_display()
+            
+            self.status_bar.showMessage(f"Applied step-wise failure phase values: 0.0 before step {first_failure}, 0.5 between steps {first_failure} and {failure_trim}, 1.0 after step {failure_trim}")
+        
         except Exception as e:
             self.status_bar.showMessage(f"Error applying failure phase values: {str(e)}")
             print(f"Error details: {str(e)}")
