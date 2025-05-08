@@ -498,7 +498,8 @@ class EpisodeEditor(QMainWindow):
             dirname = os.path.dirname(self.current_file_path)
             basename = os.path.basename(self.current_file_path)
             name, ext = os.path.splitext(basename)
-            default_path = os.path.join(dirname, f"{name}_modified{ext}")
+            # default_path = os.path.join(dirname, f"{name}_modified{ext}")
+            default_path = os.path.join(dirname, f"{basename}")
             
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Save Modified Data", default_path, "NumPy Files (*.npy)")

@@ -33,7 +33,8 @@ class ContourImageWidget(QLabel):
         if image is None:
             self.clear()
             return
-            
+        
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         self.original_image = image
         self.update_display()
         

@@ -138,11 +138,12 @@ def execute_trajectory(robot, trajectories, n, is_executing):
 
     for _ in range(n):
         # Forward sequence (top to bottom)
-        acc_scale = random.uniform(0.1, 0.15)
+        acc_scale = random.uniform(0.15, 0.2)
+        tilt_angle = 20
         for i, trajectory in enumerate(trajectories):
             randomized_trajectory = trajectory[:]  # Create a copy of the trajectory
             # Add a random gain of ±10 degrees to the 6th joint
-            random_gain = random.uniform(0, 5)  # Generate random angle in degrees
+            random_gain = random.uniform(0, tilt_angle)  # Generate random tilt angle in degrees
             randomized_trajectory[5] += math.radians(random_gain)  # Convert to radians and apply
             
             print(f"Moving to position {i} with randomized trajectory: {randomized_trajectory}")
@@ -151,7 +152,7 @@ def execute_trajectory(robot, trajectories, n, is_executing):
         # Reverse sequence (bottom to top)
         for i, trajectory in enumerate(reversed(trajectories)):
             randomized_trajectory = trajectory[:]  # Create a copy of the trajectory
-            random_gain = random.uniform(-5, 0)
+            random_gain = random.uniform(-tilt_angle, 0)
             randomized_trajectory[5] += math.radians(random_gain)
             
             print(f"Moving to position {len(trajectories)-1-i} with randomized trajectory: {randomized_trajectory}")
