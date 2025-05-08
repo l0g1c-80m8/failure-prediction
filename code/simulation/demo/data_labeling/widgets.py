@@ -33,7 +33,8 @@ class ContourImageWidget(QLabel):
         if image is None:
             self.clear()
             return
-            
+        
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         self.original_image = image
         self.update_display()
         
@@ -81,7 +82,7 @@ class ContourImageWidget(QLabel):
 class ValuePlotter(FigureCanvas):
     """Widget for plotting risk values with draggable markers"""
     
-    def __init__(self, parent=None):
+    def __init__(self, ylabel, parent=None):
         self.fig, self.ax = plt.subplots(figsize=(6, 3), dpi=100)
         super().__init__(self.fig)
         self.setParent(parent)
@@ -103,6 +104,8 @@ class ValuePlotter(FigureCanvas):
         # Variables for dragging
         self.dragging = False
         self.active_marker = None
+
+        self.ylabel = ylabel
         
     def set_data(self, values):
         """Set the data to plot"""
@@ -146,7 +149,7 @@ class ValuePlotter(FigureCanvas):
             
             self.ax.set_ylim(-0.1, 1.1)  # Assuming values are between 0 and 1
             self.ax.set_xlabel('Time Step')
-            self.ax.set_ylabel('Risk Value')
+            self.ax.set_ylabel(self.ylabel)
             self.ax.grid(True)
             
             if self.first_failure_time_step is not None or self.failure_time_step_trim is not None:
@@ -175,7 +178,7 @@ class ValuePlotter(FigureCanvas):
                 self.ax.plot(self.current_index, state_data[self.current_index][i], 'ro', markersize=4)
         
         self.ax.set_xlabel('Time Step')
-        self.ax.set_ylabel('State Value')
+        self.ax.set_ylabel(self.ylabel)
         self.ax.grid(True)
         
         # Add a legend, but only for a reasonable number of dimensions

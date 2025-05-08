@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QLabel, QPushButton, QFileDialog, QSlider, QSpinBox, QDoubleSpinBox,
                              QSplitter, QGridLayout, QGroupBox, QStatusBar, QComboBox, QDialog, 
                              QFormLayout, QDialogButtonBox, QListWidget, QMenu, QAction,
-                             QSizePolicy, QTextEdit)
+                             QSizePolicy, QTextEdit, QMessageBox, QTabWidget)
 from PyQt5.QtCore import Qt, QSize
 from widgets import (ContourImageWidget, ValuePlotter, FileListDialog)
 
@@ -103,7 +103,7 @@ class EpisodeEditor(QMainWindow):
         
         # Add restore button
         self.restore_button = QPushButton("Restore Original Values")
-        self.restore_button.clicked.connect(self.restore_original_risk_values)
+        self.restore_button.clicked.connect(self.restore_original_values)
         self.restore_button.setEnabled(False)
 
         file_controls.addWidget(self.load_file_button)
@@ -141,19 +141,48 @@ class EpisodeEditor(QMainWindow):
         image_layout.addWidget(top_group, 0, 0)
         image_layout.addWidget(front_group, 0, 1)
         
-        # Value plot
-        self.value_plot = ValuePlotter()
-        image_layout.addWidget(self.value_plot, 1, 0, 1, 2)
-        
-        # New: State values display
+        ## Create a tab widget for plots
+        plot_tabs = QTabWidget()
+        plot_tabs.setTabPosition(QTabWidget.North)
+
+        # Risk value plot tab
+        risk_tab = QWidget()
+        risk_layout = QVBoxLayout(risk_tab)
+
+        # Add explicit label for risk values
+        risk_label = QLabel("Risk Values (0-1)")
+        risk_label.setStyleSheet("font-weight: bold; color: #1a5276;")
+        risk_layout.addWidget(risk_label)
+
+        self.risk_value_plot = ValuePlotter("Risk Value")
+        risk_layout.addWidget(self.risk_value_plot)
+        plot_tabs.addTab(risk_tab, "Risk Values")
+
+        # Failure phase plot tab
+        failure_tab = QWidget()
+        failure_layout = QVBoxLayout(failure_tab)
+
+        # Add explicit label for failure phase values
+        failure_label = QLabel("Failure Phase Values (0-1)")
+        failure_label.setStyleSheet("font-weight: bold; color: #a93226;")
+        failure_layout.addWidget(failure_label)
+
+        self.failure_phase_plot = ValuePlotter("Failure Phase Value")
+        failure_layout.addWidget(self.failure_phase_plot)
+        plot_tabs.addTab(failure_tab, "Failure Phase Values")
+
+        # Add the tab widget to the main layout
+        image_layout.addWidget(plot_tabs, 1, 0, 1, 2)
+
+        # Move the state group down one position
         state_group = QGroupBox("State Values")
         state_layout = QVBoxLayout()
         self.state_display = QTextEdit()
         self.state_display.setReadOnly(True)
-        self.state_display.setFixedHeight(150)
+        self.state_display.setFixedHeight(100)  # Reduced from 150
         state_layout.addWidget(self.state_display)
         state_group.setLayout(state_layout)
-        image_layout.addWidget(state_group, 2, 0, 1, 2)
+        image_layout.addWidget(state_group, 3, 0, 1, 2)  # Changed from 2, 0, 1, 2
         
         image_widget.setLayout(image_layout)
         splitter.addWidget(image_widget)
@@ -190,26 +219,47 @@ class EpisodeEditor(QMainWindow):
         step_info_layout.addStretch()
         
         # Value editing
-        value_edit_layout = QHBoxLayout()
-        self.value_label = QLabel("Risk:")
-        value_edit_layout.addWidget(self.value_label)
-        self.value_spin = QDoubleSpinBox()
-        self.value_spin.setRange(0.0, 1.0)
-        self.value_spin.setSingleStep(0.1)
-        self.value_spin.valueChanged.connect(self.value_changed)
-        value_edit_layout.addWidget(self.value_spin)
+        risk_value_edit_layout = QHBoxLayout()
+        self.risk_value_label = QLabel("Risk:")
+        risk_value_edit_layout.addWidget(self.risk_value_label)
+        self.risk_value_spin = QDoubleSpinBox()
+        self.risk_value_spin.setRange(0.0, 1.0)
+        self.risk_value_spin.setSingleStep(0.1)
+        self.risk_value_spin.valueChanged.connect(self.risk_value_changed)
+        risk_value_edit_layout.addWidget(self.risk_value_spin)
+
+        # Failure phase value editing
+        failure_phase_layout = QHBoxLayout()
+        self.failure_phase_label = QLabel("Failure Phase:")
+        failure_phase_layout.addWidget(self.failure_phase_label)
+        self.failure_phase_spin = QDoubleSpinBox()
+        self.failure_phase_spin.setRange(0.0, 1.0)
+        self.failure_phase_spin.setSingleStep(0.1)
+        self.failure_phase_spin.valueChanged.connect(self.failure_phase_changed)
+        failure_phase_layout.addWidget(self.failure_phase_spin)
         
-        # Add new button for applying the markers
-        self.apply_markers_button = QPushButton("Apply Risk Markers")
-        self.apply_markers_button.clicked.connect(self.apply_risk_markers)
-        self.apply_markers_button.setEnabled(False)
-        value_edit_layout.addWidget(self.apply_markers_button)
+        # Add new button for applying the markers to risk values
+        self.apply_risk_markers_button = QPushButton("Apply Risk Markers")
+        self.apply_risk_markers_button.clicked.connect(self.apply_risk_markers)
+        self.apply_risk_markers_button.setEnabled(False)
+        risk_value_edit_layout.addWidget(self.apply_risk_markers_button)
+
+        # Add button for applying markers to failure phase
+        self.apply_failure_markers_button = QPushButton("Apply Failure Phase Markers")
+        self.apply_failure_markers_button.clicked.connect(self.apply_failure_phase_markers)
+        self.apply_failure_markers_button.setEnabled(False)
+        failure_phase_layout.addWidget(self.apply_failure_markers_button)
         
-        self.interpolate_button = QPushButton("Interpolate Values")
-        self.interpolate_button.clicked.connect(self.interpolate_values)
-        value_edit_layout.addWidget(self.interpolate_button)
+        self.interpolate_risk_button = QPushButton("Interpolate Values")
+        self.interpolate_risk_button.clicked.connect(self.interpolate_risk_values)
+        risk_value_edit_layout.addWidget(self.interpolate_risk_button)
+
+        self.interpolate_failure_button = QPushButton("Interpolate Failure Phase")
+        self.interpolate_failure_button.clicked.connect(self.interpolate_failure_phase)
+        failure_phase_layout.addWidget(self.interpolate_failure_button)
         
-        value_edit_layout.addStretch()
+        risk_value_edit_layout.addStretch()
+        failure_phase_layout.addStretch()
         
         # Add instructions label
         instructions_label = QLabel("Click on plot to set first failure marker (green), click again to set failure complete marker (red). Then press 'Apply Risk Markers'.")
@@ -218,8 +268,10 @@ class EpisodeEditor(QMainWindow):
         # Add all layouts to controls
         controls_layout.addLayout(nav_layout)
         controls_layout.addLayout(step_info_layout)
-        controls_layout.addLayout(value_edit_layout)
+        controls_layout.addLayout(risk_value_edit_layout)
+        controls_layout.addLayout(failure_phase_layout)
         controls_layout.addWidget(instructions_label)
+        
         
         controls_widget.setLayout(controls_layout)
         splitter.addWidget(controls_widget)
@@ -244,11 +296,17 @@ class EpisodeEditor(QMainWindow):
         self.step_slider.setEnabled(enabled)
         self.next_button.setEnabled(enabled)
         self.step_spin.setEnabled(enabled)
-        self.value_spin.setEnabled(enabled)
-        self.interpolate_button.setEnabled(enabled)
-        self.apply_markers_button.setEnabled(enabled)
+        self.risk_value_spin.setEnabled(enabled)
+        self.interpolate_risk_button.setEnabled(enabled)
+        self.apply_risk_markers_button.setEnabled(enabled)
         self.save_button.setEnabled(enabled)
         self.restore_button.setEnabled(enabled and self.original_risk_values is not None)
+
+        # Add these lines for the new failure phase controls
+        has_failure_phase = enabled and self.episode_data is not None and 'failure_phase_value' in self.episode_data[0]
+        self.failure_phase_spin.setEnabled(has_failure_phase)
+        self.interpolate_failure_button.setEnabled(has_failure_phase)
+        self.apply_failure_markers_button.setEnabled(has_failure_phase)
     
     def load_folder(self):
         """Load a folder of .npy files"""
@@ -337,6 +395,17 @@ class EpisodeEditor(QMainWindow):
             self.current_file_path = file_path
             self.file_label.setText(f"File: {os.path.basename(file_path)}")
             
+            # Check if 'failure_phase_value' key exists in data
+            if 'failure_phase_value' not in self.episode_data[0]:
+                # msg_box = QMessageBox()
+                # msg_box.setIcon(QMessageBox.Warning)
+                # msg_box.setWindowTitle("Missing Key")
+                # msg_box.setText("The key 'failure_phase_value' was not found in the loaded data.")
+                # msg_box.setStandardButtons(QMessageBox.Ok)
+                # msg_box.exec_()
+                self.status_bar.showMessage("Warning: 'failure_phase_value' key not found in data")
+                return
+
             # Check if 'risk' key exists in data
             if 'risk' not in self.episode_data[0]:
                 self.status_bar.showMessage("Warning: 'risk' key not found in data")
@@ -344,6 +413,8 @@ class EpisodeEditor(QMainWindow):
             
             # Save the original risk values
             self.original_risk_values = [np.copy(step['risk']) for step in self.episode_data]
+            # Save the original failure phase values
+            self.original_failure_phase_values = [np.copy(step['failure_phase_value']) for step in self.episode_data]
                                      
             # Set up controls
             num_steps = len(self.episode_data)
@@ -357,10 +428,14 @@ class EpisodeEditor(QMainWindow):
             
             # Extract risk values for plotting
             risk_values = [step['risk'][0] for step in self.episode_data]
-            self.value_plot.set_data(risk_values)
-            
+            self.risk_value_plot.set_data(risk_values)
             # Reset markers
-            self.value_plot.set_markers(None, None)
+            self.risk_value_plot.set_markers(None, None)
+
+            failure_phase_values = [step['failure_phase_value'][0] for step in self.episode_data]
+            self.failure_phase_plot.set_data(failure_phase_values)
+            # Reset markers
+            self.failure_phase_plot.set_markers(None, None)
             
             # Enable controls
             self.set_controls_enabled(True)
@@ -377,25 +452,35 @@ class EpisodeEditor(QMainWindow):
             import traceback
             traceback.print_exc()
     
-    def restore_original_risk_values(self):
-        """Restore the risk values to their original state when the file was loaded"""
+    def restore_original_values(self):
+        """Restore the risk values and failure phase values to their original state when the file was loaded"""
         if self.episode_data is None or self.original_risk_values is None:
             self.status_bar.showMessage("No data loaded or no original values to restore")
             return
         
         try:
             # Restore the original risk values
-            for i, original_risk in enumerate(self.original_risk_values):
-                self.episode_data[i]['risk'] = np.copy(original_risk)
+            if self.original_risk_values is not None:
+                for i, original_risk in enumerate(self.original_risk_values):
+                    self.episode_data[i]['risk'] = np.copy(original_risk)
+                
+                # Update the plot
+                risk_values = [step['risk'][0] for step in self.episode_data]
+                self.risk_value_plot.set_data(risk_values)
             
-            # Update the plot
-            risk_values = [step['risk'][0] for step in self.episode_data]
-            self.value_plot.set_data(risk_values)
+            # Restore the original failure phase values if they exist
+            if hasattr(self, 'original_failure_phase_values') and self.original_failure_phase_values is not None:
+                for i, original_failure_phase in enumerate(self.original_failure_phase_values):
+                    self.episode_data[i]['failure_phase_value'] = np.copy(original_failure_phase)
+                
+                # Update the plot
+                failure_phase_values = [step['failure_phase_value'][0] for step in self.episode_data]
+                self.failure_phase_plot.set_data(failure_phase_values)
             
             # Update display
             self.update_display()
             
-            self.status_bar.showMessage("Restored original risk values")
+            self.status_bar.showMessage("Restored original values")
         except Exception as e:
             self.status_bar.showMessage(f"Error restoring original values: {str(e)}")
             print(f"Error details: {str(e)}")
@@ -413,7 +498,8 @@ class EpisodeEditor(QMainWindow):
             dirname = os.path.dirname(self.current_file_path)
             basename = os.path.basename(self.current_file_path)
             name, ext = os.path.splitext(basename)
-            default_path = os.path.join(dirname, f"{name}_modified{ext}")
+            # default_path = os.path.join(dirname, f"{name}_modified{ext}")
+            default_path = os.path.join(dirname, f"{basename}")
             
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Save Modified Data", default_path, "NumPy Files (*.npy)")
@@ -471,17 +557,27 @@ class EpisodeEditor(QMainWindow):
         # Update risk value
         if 'risk' in step_data:
             risk_value = step_data['risk'][0]
-            self.value_spin.blockSignals(True)
-            self.value_spin.setValue(risk_value)
-            self.value_spin.blockSignals(False)
+            self.risk_value_spin.blockSignals(True)
+            self.risk_value_spin.setValue(risk_value)
+            self.risk_value_spin.blockSignals(False)
             
             # Update plot to highlight current point
-            self.value_plot.set_current_index(self.current_step)
+            self.risk_value_plot.set_current_index(self.current_step)
+            
+        # Update failure phase value if it exists
+        if 'failure_phase_value' in step_data:
+            failure_phase_value = step_data['failure_phase_value'][0]
+            self.failure_phase_spin.blockSignals(True)
+            self.failure_phase_spin.setValue(failure_phase_value)
+            self.failure_phase_spin.blockSignals(False)
+            
+            # Update plot to highlight current point
+            self.failure_phase_plot.set_current_index(self.current_step)
             
             # Update status
-            self.status_bar.showMessage(f"Step {self.current_step}, Risk: {risk_value:.2f}")
+            self.status_bar.showMessage(f"Step {self.current_step}, Risk: {risk_value:.2f}, Failure Phase: {failure_phase_value:.2f}")
         else:
-            self.status_bar.showMessage(f"Step {self.current_step}, 'risk' key not found")
+            self.status_bar.showMessage(f"Step {self.current_step}, Risk: {risk_value:.2f}")
         
         # Update state values display
         if 'state' in step_data:
@@ -523,7 +619,7 @@ class EpisodeEditor(QMainWindow):
             self.current_step = value
             self.update_display()
     
-    def value_changed(self, value):
+    def risk_value_changed(self, value):
         """Update the risk value for the current step"""
         if self.episode_data is None:
             return
@@ -533,11 +629,11 @@ class EpisodeEditor(QMainWindow):
         
         # Update the plot
         risk_values = [step['risk'][0] for step in self.episode_data]
-        self.value_plot.set_data(risk_values)
+        self.risk_value_plot.set_data(risk_values)
         
         self.status_bar.showMessage(f"Updated step {self.current_step} risk to {value:.2f}")
     
-    def interpolate_values(self):
+    def interpolate_risk_values(self):
         """Open dialog to interpolate values between two points"""
         if self.episode_data is None:
             return
@@ -596,9 +692,9 @@ class EpisodeEditor(QMainWindow):
             interp_type = interp_combo.currentText()
             
             # Apply interpolation
-            self.apply_interpolation(start_step, start_value, end_step, end_value, interp_type)
+            self.apply_risk_interpolation(start_step, start_value, end_step, end_value, interp_type)
     
-    def apply_interpolation(self, start_step, start_value, end_step, end_value, interp_type):
+    def apply_risk_interpolation(self, start_step, start_value, end_step, end_value, interp_type):
         """Apply interpolation between two points"""
         if start_step >= end_step:
             self.status_bar.showMessage("Error: Start step must be less than end step")
@@ -629,7 +725,7 @@ class EpisodeEditor(QMainWindow):
         
         # Update plot
         risk_values = [step['risk'][0] for step in self.episode_data]
-        self.value_plot.set_data(risk_values)
+        self.risk_value_plot.set_data(risk_values)
         
         # Update current display
         self.update_display()
@@ -651,7 +747,7 @@ class EpisodeEditor(QMainWindow):
             return
         
         # Get marker positions
-        first_failure, failure_trim = self.value_plot.get_markers()
+        first_failure, failure_trim = self.risk_value_plot.get_markers()
         
         if first_failure is None:
             self.status_bar.showMessage("Error: First failure marker not set")
@@ -723,7 +819,7 @@ class EpisodeEditor(QMainWindow):
                 
                 # Update plot with new values
                 risk_values = [step['risk'][0] for step in self.episode_data]
-                self.value_plot.set_data(risk_values)
+                self.risk_value_plot.set_data(risk_values)
                 
                 # Update display
                 self.update_display()
@@ -731,6 +827,172 @@ class EpisodeEditor(QMainWindow):
                 self.status_bar.showMessage(f"Applied {interp_type} interpolation with {first_failure} as midpoint and {failure_trim} as endpoint")
         except Exception as e:
             self.status_bar.showMessage(f"Error applying risk values: {str(e)}")
+            print(f"Error details: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+    def failure_phase_changed(self, value):
+        """Update the failure phase value for the current step"""
+        if self.episode_data is None:
+            return
+            
+        # Update the value in the data
+        self.episode_data[self.current_step]['failure_phase_value'] = np.asarray([value], dtype=np.float32)
+        
+        # Update the plot
+        failure_phase_values = [step['failure_phase_value'][0] for step in self.episode_data]
+        self.failure_phase_plot.set_data(failure_phase_values)
+        
+        self.status_bar.showMessage(f"Updated step {self.current_step} failure phase to {value:.2f}")
+
+    def interpolate_failure_phase(self):
+        """Open dialog to interpolate failure phase values between two points"""
+        if self.episode_data is None:
+            return
+            
+        # Create dialog window
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Interpolate Failure Phase Values")
+        
+        dialog_layout = QFormLayout()
+        
+        # Start step
+        start_spin = QSpinBox()
+        start_spin.setRange(0, len(self.episode_data) - 1)
+        start_spin.setValue(max(0, self.current_step - 10))
+        dialog_layout.addRow("Start Step:", start_spin)
+        
+        # Start value
+        start_value_spin = QDoubleSpinBox()
+        start_value_spin.setRange(0.0, 1.0)
+        start_value_spin.setSingleStep(0.1)
+        start_value_spin.setValue(0.0)
+        dialog_layout.addRow("Start Value:", start_value_spin)
+        
+        # End step
+        end_spin = QSpinBox()
+        end_spin.setRange(0, len(self.episode_data) - 1)
+        end_spin.setValue(min(len(self.episode_data) - 1, self.current_step + 10))
+        dialog_layout.addRow("End Step:", end_spin)
+        
+        # End value
+        end_value_spin = QDoubleSpinBox()
+        end_value_spin.setRange(0.0, 1.0)
+        end_value_spin.setSingleStep(0.1)
+        end_value_spin.setValue(1.0)
+        dialog_layout.addRow("End Value:", end_value_spin)
+        
+        # Interpolation type
+        interp_combo = QComboBox()
+        interp_combo.addItems(["Linear", "Step", "Smooth"])
+        dialog_layout.addRow("Interpolation Type:", interp_combo)
+        
+        # Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        dialog_layout.addRow(button_box)
+        
+        dialog.setLayout(dialog_layout)
+        
+        # Handle dialog result
+        if dialog.exec_() == QDialog.Accepted:
+            start_step = start_spin.value()
+            start_value = start_value_spin.value()
+            end_step = end_spin.value()
+            end_value = end_value_spin.value()
+            interp_type = interp_combo.currentText()
+            
+            # Apply interpolation for failure phase values
+            self.apply_failure_phase_interpolation(start_step, start_value, end_step, end_value, interp_type)
+
+    def apply_failure_phase_interpolation(self, start_step, start_value, end_step, end_value, interp_type):
+        """Apply interpolation between two points for failure phase values"""
+        if start_step >= end_step:
+            self.status_bar.showMessage("Error: Start step must be less than end step")
+            return
+            
+        # Generate interpolated values
+        num_steps = end_step - start_step + 1
+        
+        if interp_type == "Linear":
+            # Linear interpolation
+            values = np.linspace(start_value, end_value, num_steps)
+        elif interp_type == "Step":
+            # Step function
+            values = np.zeros(num_steps)
+            mid_point = num_steps // 2
+            values[:mid_point] = start_value
+            values[mid_point:] = end_value
+        else:  # Smooth
+            # Smooth S-curve interpolation
+            t = np.linspace(0, 1, num_steps)
+            # Use cubic function for smoother transition
+            values = start_value + (end_value - start_value) * (3 * t**2 - 2 * t**3)
+        
+        # Apply values to the data
+        for i, value in enumerate(values, start=start_step):
+            self.episode_data[i]["failure_phase_value"] = np.asarray([value], dtype=np.float32)
+        
+        # Update plot
+        failure_phase_values = [step['failure_phase_value'][0] for step in self.episode_data]
+        self.failure_phase_plot.set_data(failure_phase_values)
+        
+        # Update current display
+        self.update_display()
+        
+        self.status_bar.showMessage(f"Applied {interp_type} interpolation to failure phase from step {start_step} to {end_step}")
+
+    def apply_failure_phase_markers(self):
+        """Apply failure phase values based on the marker positions using a simple three-step approach"""
+        if self.episode_data is None:
+            return
+        
+        # Get marker positions
+        first_failure, failure_trim = self.failure_phase_plot.get_markers()
+        
+        if first_failure is None:
+            self.status_bar.showMessage("Error: First failure marker not set")
+            return
+            
+        if failure_trim is None:
+            self.status_bar.showMessage("Error: Failure complete marker not set")
+            return
+            
+        if first_failure >= failure_trim:
+            self.status_bar.showMessage("Error: First failure must be before failure complete")
+            return
+        
+        try:
+            # Apply the simplified three-step values:
+            # 1. Before first_failure: all values are 0.0
+            # 2. Between first_failure and failure_trim: all values are 0.5
+            # 3. After failure_trim: all values are 1.0
+            
+            # Step 1: Set all values to 0.0 before first_failure
+            for i in range(first_failure):
+                self.episode_data[i]['failure_phase_value'] = np.asarray([0.0], dtype=np.float32)
+            
+            # Step 2: Set all values to 0.5 between first_failure and failure_trim
+            for i in range(first_failure, failure_trim + 1):
+                if i < len(self.episode_data):  # Ensure we don't go out of bounds
+                    self.episode_data[i]['failure_phase_value'] = np.asarray([0.5], dtype=np.float32)
+            
+            # Step 3: Set all values to 1.0 after failure_trim
+            for i in range(failure_trim + 1, len(self.episode_data)):
+                self.episode_data[i]['failure_phase_value'] = np.asarray([1.0], dtype=np.float32)
+            
+            # Update plot with new values
+            failure_phase_values = [step['failure_phase_value'][0] for step in self.episode_data]
+            self.failure_phase_plot.set_data(failure_phase_values)
+            
+            # Update display
+            self.update_display()
+            
+            self.status_bar.showMessage(f"Applied step-wise failure phase values: 0.0 before step {first_failure}, 0.5 between steps {first_failure} and {failure_trim}, 1.0 after step {failure_trim}")
+        
+        except Exception as e:
+            self.status_bar.showMessage(f"Error applying failure phase values: {str(e)}")
             print(f"Error details: {str(e)}")
             import traceback
             traceback.print_exc()
