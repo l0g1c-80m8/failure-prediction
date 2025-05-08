@@ -133,13 +133,15 @@ def parse_trajectory(file_path, shuffle=True):
 def execute_trajectory(robot, trajectories, n, is_executing):
     print("Robot execution thread starting...")
     is_executing[0] = True
-    t_tmp = random.uniform(1.4, 2.0)
+    t_tmp = random.uniform(1.0, 1.5)
     print(f"Using time parameter: {t_tmp}")
 
+    vel_scale = random.uniform(0.05, 0.1)
+    acc_scale = random.uniform(0.05, 0.1)
+    
     for _ in range(n):
         # Forward sequence (top to bottom)
-        acc_scale = random.uniform(0.15, 0.2)
-        tilt_angle = 20
+        tilt_angle = 10
         for i, trajectory in enumerate(trajectories):
             randomized_trajectory = trajectory[:]  # Create a copy of the trajectory
             # Add a random gain of ±10 degrees to the 6th joint
@@ -147,7 +149,7 @@ def execute_trajectory(robot, trajectories, n, is_executing):
             randomized_trajectory[5] += math.radians(random_gain)  # Convert to radians and apply
             
             print(f"Moving to position {i} with randomized trajectory: {randomized_trajectory}")
-            robot.servoj(randomized_trajectory, vel=0.1, acc=acc_scale, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
+            robot.servoj(randomized_trajectory, vel=vel_scale, acc=acc_scale, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
         
         # Reverse sequence (bottom to top)
         for i, trajectory in enumerate(reversed(trajectories)):
@@ -156,11 +158,11 @@ def execute_trajectory(robot, trajectories, n, is_executing):
             randomized_trajectory[5] += math.radians(random_gain)
             
             print(f"Moving to position {len(trajectories)-1-i} with randomized trajectory: {randomized_trajectory}")
-            robot.servoj(randomized_trajectory, vel=0.1, acc=acc_scale, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
+            robot.servoj(randomized_trajectory, vel=vel_scale, acc=acc_scale, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
             
         time.sleep(0.5)  # Pause between rounds
 
-    robot.servoj(trajectories[0], vel=0.1, acc=acc_scale, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
+    robot.servoj(trajectories[0], vel=vel_scale, acc=acc_scale, t=t_tmp, lookahead_time=0.2, gain=100, wait=True)
     print('Finished moving the robot through all positions.')
     is_executing[0] = False
 
@@ -421,7 +423,7 @@ def main():
     print(f"Connected to robot at {args.robot_ip}")
     
     # Parse robot trajectory
-    trajectory = parse_trajectory(args.traj_file, shuffle=True)
+    trajectory = parse_trajectory(args.traj_file, shuffle=False)
     print(f"Parsed trajectory from {args.traj_file} with {len(trajectory)} points")
     
     # Get initial robot joint positions
