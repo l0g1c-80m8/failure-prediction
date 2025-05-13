@@ -840,7 +840,7 @@ class Projectile(MuJoCoBase):
             
             # Plot after simulation
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            plot_raw_metrics(self.episode, episode_num, self.dataset_type, save_path, current_object_name, timestamp)
+            # plot_raw_metrics(self.episode, episode_num, self.dataset_type, save_path, current_object_name, timestamp)
 
             if self.config.get('simulation_related', {}).get('save_data', 'N/A'):
                 print(f"Generating {self.dataset_type} raw examples...")

@@ -25,7 +25,9 @@ pip install -r requirements.txt
 
 # 4. Model training
 ```shell
-python3 -m torch.distributed.launch --nproc_per_node=2 main.py
+python3 -m torch.distributed.launch --nproc_per_node=2 main_multimodal.py --training-mode standard
+python3 -m torch.distributed.launch --nproc_per_node=2 main_multimodal.py --training-mode dual_input_max_loss
+python3 -m torch.distributed.launch --nproc_per_node=2 main_multimodal.py --training-mode dual_models
 ```
 
 
