@@ -201,6 +201,27 @@ class MultiModalResNet(nn.Module):
         rgb1_features = self.rgb_encoder1(rgb1)
         rgb2_features = self.rgb_encoder2(rgb2)
         
+        # Ensure all features have the same sequence length dimension for concatenation
+        # Assuming the sequence dimension is the last dimension (dim=2)
+        target_seq_len = states.shape[2]
+        
+        # Resize RGB features if necessary
+        if rgb1_features.shape[2] != target_seq_len:
+            rgb1_features = torch.nn.functional.interpolate(
+                rgb1_features, 
+                size=target_seq_len,
+                mode='linear', 
+                align_corners=False
+            )
+            
+        if rgb2_features.shape[2] != target_seq_len:
+            rgb2_features = torch.nn.functional.interpolate(
+                rgb2_features, 
+                size=target_seq_len,
+                mode='linear', 
+                align_corners=False
+            )
+        
         # Fusion of different modalities
         if self.fusion_type == 'concat':
             # Concatenate along channel dimension

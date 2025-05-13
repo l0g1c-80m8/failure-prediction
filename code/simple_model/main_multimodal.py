@@ -358,15 +358,19 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
         
         with torch.no_grad():
             for batch in val_pbar:
+                # Get RGB data and prepare it for the model
+                rgb_cam1 = prepare_rgb_data(batch['rgb_cam1'].to(device))
+                rgb_cam2 = prepare_rgb_data(batch['rgb_cam2'].to(device))
+                risks = batch['risk'].to(device)
+                
                 if training_mode == "dual_input_max_loss":
                     # Mode 1: Single model with dual inputs, max loss
                     states_cam1 = batch['states_cam1'].to(device)
                     states_cam2 = batch['states_cam2'].to(device)
-                    risks = batch['risk'].to(device)
                     
-                    # Forward pass for both camera inputs
-                    outputs_cam1 = model(states_cam1)
-                    outputs_cam2 = model(states_cam2)
+                    # Forward pass for both camera inputs WITH RGB data (fixed)
+                    outputs_cam1 = model(states_cam1, rgb_cam1, rgb_cam2)
+                    outputs_cam2 = model(states_cam2, rgb_cam1, rgb_cam2)
                     
                     # For validation, use the maximum prediction
                     outputs = torch.max(outputs_cam1, outputs_cam2)
@@ -374,7 +378,6 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
                 else:
                     # Standard mode: Single input
                     states = batch['states'].to(device)
-                    risks = batch['risk'].to(device)
                     outputs = model(states, rgb_cam1, rgb_cam2)
                     loss = criterion(outputs, risks)
 
@@ -640,7 +643,7 @@ if __name__ == "__main__":
         val_dir='data/val',
         window_size=30,
         stride=1,
-        batch_size=128,
+        batch_size=512,
         num_workers=4,
         dual_input=dual_input
     )
