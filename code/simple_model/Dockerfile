@@ -91,6 +91,11 @@ RUN python3.10 -m pip install --no-cache-dir \
     mujoco-python-viewer \
     virtualenv
 
+# Update and upgrade system packages
+RUN apt update && apt upgrade -y
+
+RUN pip install torch torchvision numpy matplotlib opencv-python decord tqdm
+
 # Install X11 and Qt dependencies
 RUN apt-get install -y --no-install-recommends \
     libxcb-icccm4 \
