@@ -5,6 +5,9 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 import os
+
+os.environ.setdefault("MASTER_PORT", "29601")
+
 from tqdm import tqdm
 import wandb
 from datetime import datetime
@@ -12,14 +15,26 @@ import matplotlib
 matplotlib.use("TkAgg")  # or "Qt5Agg"
 import matplotlib.pyplot as plt
 
+from concurrent.futures import ThreadPoolExecutor
+
 from resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
+import argparse
 
 
 class RobotTrajectoryDataset(Dataset):
-    def __init__(self, data_dir, window_size=10, stride=1):
+    def __init__(self, data_dir, window_size=10, stride=1, use_cache=True, cache_size=1000):
         self.data_dir = data_dir
         self.window_size = window_size
         self.stride = stride
+        self.use_cache = use_cache
+        self.cache_size = cache_size
+        self.cache = {}
+        # self.episodes = {}
+        self.cache_hits = 0
+
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+        print(f"Loading data from {data_dir} with window size {window_size} and stride {stride}")
         
         # Get list of all .npy files in directory
         self.episode_files = sorted([f for f in os.listdir(data_dir) if f.endswith('.npy')])
@@ -27,8 +42,12 @@ class RobotTrajectoryDataset(Dataset):
         # Pre-calculate indices for all windows
         self.window_indices = []  # (file_idx, start_idx, end_idx)
         
-        for file_idx, episode_file in enumerate(self.episode_files):
+        for file_idx, episode_file in tqdm(enumerate(self.episode_files), desc="Loading data files", total=len(self.episode_files)):
+            if episode_file == "indices_cache_w30_s1.npy":
+                print(f"Skipping {episode_file} as it is a cache file")
+                continue
             episode_data = np.load(os.path.join(data_dir, episode_file), allow_pickle=True)
+            # self.episodes[file_idx] = episode_data # Pre-load all episodes into memory
             n_frames = len(episode_data)
             
             for start_idx in range(0, n_frames - window_size + 1, stride):
@@ -36,27 +55,50 @@ class RobotTrajectoryDataset(Dataset):
                 self.window_indices.append((file_idx, start_idx, end_idx))
         
         # Pre-load all episodes into memory
-        self.episodes = {}
-        for file_idx, episode_file in enumerate(self.episode_files):
-            episode_path = os.path.join(data_dir, episode_file)
-            self.episodes[file_idx] = np.load(episode_path, allow_pickle=True)
-
-    def __len__(self):
-        return len(self.window_indices)
-
-    def __getitem__(self, idx):
-        file_idx, start_idx, end_idx = self.window_indices[idx]
-        episode_data = self.episodes[file_idx]  # Get from memory instead of disk
+        # self.episodes = {}
+        # for file_idx, episode_file in tqdm(enumerate(self.episode_files), desc="Loading episodes into memory", total=len(self.episode_files)):
+        #     episode_path = os.path.join(data_dir, episode_file)
+        #     self.episodes[file_idx] = np.load(episode_path, allow_pickle=True)
         
-        # Extract window data
-        window_data = episode_data[start_idx:end_idx]
+        """ # Helper for loading one file
+        def load_episode(file_idx, episode_file):
+            path = os.path.join(self.data_dir, episode_file)
+            return file_idx, np.load(path, allow_pickle=True)
+
+        # Parallel loading of episodes
+        print("Loading episodes into memory in parallel...")
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(tqdm(
+                executor.map(lambda args: load_episode(*args), enumerate(self.episode_files)),
+                total=len(self.episode_files),
+                desc="Loading episodes"
+            ))
+
+        self.episodes = dict(results)"""
+
+    def load_episode(self, file_idx):
         
+        if self.use_cache and file_idx in self.cache:
+            # print(f"Loading episode {file_idx} from cache")
+            self.cache_hits += 1
+            return self.cache[file_idx]
+        
+        path = os.path.join(self.data_dir, self.episode_files[file_idx])
+        # print(f"Loading episode {file_idx} from disk: {path}")
+        episode_data = np.load(path, allow_pickle=True)
+        data = [[frame['state'], frame['risk']] for frame in episode_data]
+
+        if self.use_cache:
+            if len(self.cache) >= self.cache_size:
+                self.cache.pop(next(iter(self.cache)))  # remove oldest
+            self.cache[file_idx] = data
+
+        return data
+    
+    @staticmethod
+    def process_sample(window_data):
         # Get states sequence (shape: window_size x 15)
-        states = np.stack([frame['state'] for frame in window_data]) # (window_size x 15) 
-
-        # Only take the first 6 state values
-        # states = states[:, :6]
-
+        states = np.stack([frame[0] for frame in window_data]) # (window_size x 15) 
         states_cam1 = states[:, :6]
         states_cam2 = states[:, 6:12]
         ee_pos = states[:, 12:15]  # End effector position (3 values)
@@ -69,29 +111,55 @@ class RobotTrajectoryDataset(Dataset):
         
         # Get the risk for the last timestep
         # Convert to numpy array first, then to tensor
-        risk = np.array(window_data[-1]['risk'], dtype=np.float32)
+        risk = np.array(window_data[-1][1], dtype=np.float32)
+
+        return torch.FloatTensor(states_cam1).transpose(0, 1), torch.FloatTensor(states_cam2).transpose(0, 1), torch.FloatTensor(risk)
+
+    def __len__(self):
+        return len(self.window_indices)
+
+    def __getitem__(self, idx):
+        file_idx, start_idx, end_idx = self.window_indices[idx]
+        # episode_data = self.episodes[file_idx]  # Get from memory instead of disk
+        episode_data = self.load_episode(file_idx)
+
+        window_data = episode_data[start_idx:end_idx]
+        states_cam1, states_cam2, risk = self.process_sample(window_data)
+
+        # print(type(episode_data))
+        # print(episode_data.shape)
         
         return {
-            'states_cam1': torch.FloatTensor(states_cam1).transpose(0, 1),  # Transform to (19 x window_size) for 1D convolution
-            'states_cam2': torch.FloatTensor(states_cam2).transpose(0, 1),  # Transform to (19 x window_size) for 1D convolution
-            'risk': torch.FloatTensor(risk)  # Convert numpy array to tensor
+            'states_cam1': states_cam1,  # Transform to (19 x window_size) for 1D convolution
+            'states_cam2': states_cam2,  # Transform to (19 x window_size) for 1D convolution
+            'risk': risk  # Convert numpy array to tensor
         }
 
-def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size=32, num_workers=4):
+def create_datasets(data_dir, window_size=10, stride=1, split="train"):
+    datasplit_dir=f'{data_dir}/{split}'
+
+    print(f"Creating data loaders with window size {window_size} and stride {stride}")
     """Create train and validation data loaders."""
     
     # Create datasets
-    train_dataset = RobotTrajectoryDataset(
-        data_dir=train_dir,
+    dataset = RobotTrajectoryDataset(
+        data_dir=datasplit_dir,
         window_size=window_size,
         stride=stride
     )
-    
-    val_dataset = RobotTrajectoryDataset(
-        data_dir=val_dir,
-        window_size=window_size,
-        stride=stride
-    )
+    # Save dataset
+    torch.save(dataset, f'{data_dir}/{split}_dataset.pt')
+    print(f"Number of {split.upper()} samples: {len(dataset)}")
+
+    print(f"Dataset saved as {split}_dataset.pt and val_dataset.pt in {data_dir}")
+
+def load_datasets_to_dataloaders(trainset_path, testset_path, batch_size=32, num_workers=4):
+
+    """Load datasets for training and testing."""
+    train_dataset = torch.load(trainset_path, weights_only=False)
+    val_dataset = torch.load(testset_path, weights_only=False)
+    print(f"Loaded train dataset with {len(train_dataset)} samples")
+    print(f"Loaded test dataset with {len(val_dataset)} samples")
     
     # Create data loaders
     train_loader = DataLoader(
@@ -99,17 +167,21 @@ def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
-        pin_memory=True
+        pin_memory=True,
+        prefetch_factor=4
     )
+    print(f"Cache hits while loading trainset: {train_dataset.cache_hits}")
     
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=True
+        pin_memory=True,
+        prefetch_factor=4
     )
-    
+    print(f"Cache hits while loading valset: {val_dataset.cache_hits}")
+
     return train_loader, val_loader
 
 def compute_metrics(outputs, targets):
@@ -148,7 +220,7 @@ def train_model(model, train_loader, val_loader, model_name, camera_name, run_na
     if torch.cuda.device_count() > 1:
         print(f"Using {torch.cuda.device_count()} GPUs!")
         model = nn.DataParallel(model)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     
     best_val_mse = float('inf')
@@ -169,6 +241,7 @@ def train_model(model, train_loader, val_loader, model_name, camera_name, run_na
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]", leave=False)
         
         for batch in train_pbar:
+            
             states = batch[f'states_{camera_name}'].to(device)
             risks = batch['risk'].to(device)
 
@@ -220,13 +293,10 @@ def train_model(model, train_loader, val_loader, model_name, camera_name, run_na
         
         with torch.no_grad():
             for batch in val_pbar:
-                states_cam1 = batch['states_cam1'].to(device)
-                states_cam2 = batch['states_cam2'].to(device)
+                states = batch[f'states_{camera_name}'].to(device)
                 risks = batch['risk'].to(device)
                 
-                outputs = model(states_cam1)
-                outputs_cam2 = model(states_cam2)
-                outputs = torch.maximum(outputs, outputs_cam2) # takes the maximum elements from both the outputs
+                outputs = model(states)
                 # Compute loss
                 loss = criterion(outputs, risks)
 
@@ -258,7 +328,7 @@ def train_model(model, train_loader, val_loader, model_name, camera_name, run_na
         # Save best model based on validation mse
         if val_metrics['mse'] < best_val_mse:
             best_val_mse = val_metrics['mse']
-            torch.save(model.state_dict(), f'{run_name}/best_model_{model_name}.pth')
+            torch.save(model.state_dict(), f'runs/{run_name}/best_model_{model_name}.pth')
             wandb.save(f'{run_name}/best_model_{model_name}.pth')
             patient_epoch = 0
         else:
@@ -271,13 +341,13 @@ def train_model(model, train_loader, val_loader, model_name, camera_name, run_na
         epoch_pbar.set_postfix({
             'lr': f"{current_lr:.6f}"
         })
-    
 
-def evaluate_model(model, test_loader, model_name):
+def evaluate_model(model_cam1, model_cam2, test_loader, model_name):
     """Evaluate the model on test data with progress tracking and visualization."""
     
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.eval()
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model_cam1.eval()
+    model_cam2.eval()
     total_mse = 0
     
     # Create progress bar for evaluation
@@ -295,9 +365,9 @@ def evaluate_model(model, test_loader, model_name):
             states_cam2 = batch['states_cam2'].to(device)
             risks = batch['risk'].to(device)
             
-            outputs = model(states_cam1)
-            outputs_cam2 = model(states_cam2)
-            outputs = torch.maximum(outputs, outputs_cam2) # takes the maximum elements from both the outputs
+            outputs_cam1 = model_cam1(states_cam1)
+            outputs_cam2 = model_cam2(states_cam2)
+            outputs = torch.maximum(outputs_cam1, outputs_cam2) # takes the maximum elements from both the outputs
 
             mse = nn.MSELoss()(outputs, risks).item()
             total_mse += mse
@@ -325,8 +395,10 @@ def evaluate_model(model, test_loader, model_name):
 def visualize_predictions(predictions, ground_truth):
     """Create visualizations comparing predictions to ground truth."""
     # Print shapes for verification
-    print("predictions", predictions.shape)
-    print("ground_truth", ground_truth.shape)
+    # print("predictions", predictions.shape)
+    # print("ground_truth", ground_truth.shape)
+
+    assert predictions.shape == ground_truth.shape, "Shape mismatch"
     
     # Create indices for x-axis
     indices = np.arange(len(predictions))
@@ -360,18 +432,56 @@ def visualize_predictions(predictions, ground_truth):
 
 
 if __name__ == "__main__":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Train and evaluate a ResNet model for robot trajectory prediction.")
+    parser.add_argument('--data_dir', type=str, default='/data/zeyu/PHD_LAB/Material_handling_2024/zeyu-failure-prediction/code/simple_model/data', help='Directory for training data')
+    parser.add_argument('--mode', type=str, help='Directory for validation data')
+    parser.add_argument('--camera_name', type=str, default=None, help='Camera name for training')
+    parser.add_argument('--window_size', type=int, default=1, help='Window size for data')
+    parser.add_argument('--stride', type=int, default=1, help='Stride for data')
+    parser.add_argument('--batch_size', type=int, default=1016, help='Batch size for training')
+    parser.add_argument('--num_workers', type=int, default=8, help='Number of workers for data loading')
+    parser.add_argument('--num_epochs', type=int, default=100, help='Number of epochs for training')
+    parser.add_argument('--warmup_epochs', type=int, default=10, help='Number of warmup epochs')
+    parser.add_argument('--initial_lr', type=float, default=0.001, help='Initial learning rate')
+    parser.add_argument('--min_lr', type=float, default=1e-6, help='Minimum learning rate')
+    parser.add_argument('--patience', type=int, default=10, help='Patience for early stopping')
+
+    parser.add_argument("--ckpt_1", '--model_checkpoint_cam1', type=str, default=None, help='Path to model checkpoint (top cam (1)) for evaluation')
+    parser.add_argument("--ckpt_2",'--model_checkpoint_cam2', type=str, default=None, help='Path to model checkpoint (top cam (2)) for evaluation')
+
+    parser.add_argument('--custom_tag', type=str, default="", help='Specific tag you want to add to the run name')
+
+    parser.add_argument("--local-rank", type=int, default=0, help="Local rank for distributed training") #ignore this for now
+    
+    args = parser.parse_args()
+
     os.environ['QT_X11_NO_MITSHM'] = '1'
     # Initialize wandb
     wandb.login()
     
     # Create data loaders
-    train_loader, val_loader = create_data_loaders(
-        train_dir='data/train',
-        val_dir='data/val',
-        window_size=1,
-        stride=1,
-        batch_size=1016,
-        num_workers=8
+    if not os.path.exists(f'{args.data_dir}/train_dataset.pt'):
+        create_datasets(
+            data_dir=args.data_dir,
+            window_size= args.window_size,
+            stride=args.stride,
+            split="train"
+        )
+    if not os.path.exists(f'{args.data_dir}/val_dataset.pt'):
+        create_datasets(
+            data_dir=args.data_dir,
+            window_size= args.window_size,
+            stride=args.stride,
+            split="val"
+        )
+    
+    print("Datasets already exist. Loading from disk...")
+    train_loader, val_loader = load_datasets_to_dataloaders(
+        trainset_path=f'{args.data_dir}/train_dataset.pt',
+        testset_path=f'{args.data_dir}/val_dataset.pt',
+        batch_size=args.batch_size,
+        num_workers=args.num_workers
     )
     
     # Example of using different ResNet architectures
@@ -389,14 +499,23 @@ if __name__ == "__main__":
     for model_name, model in models.items():
         print(f"\nTraining {model_name}")
         # Initialize wandb
-        num_epochs=100
-        warmup_epochs=10
-        initial_lr=0.001
-        min_lr=1e-6
-        patience=10
-        camera_name = "cam2"  # or "cam2"
-        assert camera_name in ["cam1", "cam2"], "camera_name must be either 'cam1' or 'cam2'"
-        run_name = f"{model_name}_{camera_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        num_epochs=args.num_epochs
+        warmup_epochs=args.warmup_epochs
+        initial_lr=args.initial_lr
+        min_lr=args.min_lr
+        patience=args.patience
+
+        assert args.mode in ["train", "eval"], "mode must be either 'train' or 'eval'"
+
+        if args.mode == "train":
+            assert args.camera_name in ["cam1", "cam2"], "camera_name must be either 'cam1' or 'cam2'"
+            tag = args.camera_name
+        elif args.mode == "eval":
+            assert args.ckpt_1 is not None, "model checkpoint for cam1 must be provided for evaluation"
+            assert args.ckpt_2 is not None, "model checkpoint for cam2 must be provided for evaluation"
+            tag = "eval"
+        # assert camera_name in ["cam1", "cam2"], "camera_name must be either 'cam1' or 'cam2'"
+        run_name = f"{model_name}_{tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.custom_tag}"
 
         os.makedirs(f"runs/{run_name}", exist_ok=True)
 
@@ -420,13 +539,24 @@ if __name__ == "__main__":
             },
             mode="disabled" if wandb_disabled else None
         )
-        # Train the model
-        train_model(model, train_loader, val_loader, model_name, camera_name, run_name, num_epochs=num_epochs,
-                    warmup_epochs=warmup_epochs,
-                    initial_lr=initial_lr,
-                    min_lr=min_lr, patience=patience)
+        if args.mode == "train":
+            # Train the model
+            train_model(model, train_loader, val_loader, model_name, args.camera_name, run_name, num_epochs=num_epochs,
+                        warmup_epochs=warmup_epochs,
+                        initial_lr=initial_lr,
+                        min_lr=min_lr, patience=patience)
         
-        # Evaluate on validation set
-        val_mse = evaluate_model(model, val_loader, model_name)
-        print(f"Validation MSE for {model_name}: {val_mse:.4f}")
+        elif args.mode == "eval":
+            # Evaluate on validation set
+            def remove_module_prefix(state_dict):
+                return {k.replace('module.', ''): v for k, v in state_dict.items()}
+            
+            device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            model_cam1 = resnet18(input_channels=9).to(device)
+            model_cam2 = resnet18(input_channels=9).to(device)
+            model_cam1.load_state_dict(remove_module_prefix(torch.load(f'runs/{args.model_checkpoint_cam1}', map_location=device)))
+            model_cam2.load_state_dict(remove_module_prefix(torch.load(f'runs/{args.model_checkpoint_cam2}', map_location=device)))
+            val_mse = evaluate_model(model_cam1, model_cam2, val_loader, model_name)
+            print(f"Validation MSE for {model_name}: {val_mse:.4f}")
+
         wandb.finish()

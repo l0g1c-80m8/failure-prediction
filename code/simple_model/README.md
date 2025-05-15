@@ -26,6 +26,8 @@ pip install -r requirements.txt
 # 4. Model training
 ```shell
 python3 -m torch.distributed.launch --nproc_per_node=2 main.py
+
+python3 -m torch.distributed.launch --nproc_per_node=1 main_two_agents.py --data_dir /home/rajas/data/ --mode train --camera_name cam1  
 ```
 
 
