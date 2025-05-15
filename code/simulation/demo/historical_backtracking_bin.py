@@ -798,6 +798,7 @@ class Projectile(MuJoCoBase):
                             'gripper_front_contour': np.asarray(front_panel_contour, dtype=np.float32),
                             'end_effector_pos': np.asarray(end_effector_pos, dtype=np.float32),
                             'failure_phase_value': np.asarray([failure_phase_value], dtype=np.float32),  # Ensure action is a tensor of shape (1,)
+                            'risk': np.asarray([0.0], dtype=np.float32)  # Placeholder for risk prediction
                             # 'language_instruction': 'dummy instruction',
                                 })
                             # For plot     
