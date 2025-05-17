@@ -122,6 +122,7 @@ class RobotTrajectoryDataset(Dataset):
             sub_batch_path = os.path.join(self.data_dir, "sub_batches", sub_batch_file)
             sub_batch_data = np.load(sub_batch_path, allow_pickle=True)
             self.loaded_batch_samples.extend(sub_batch_data)
+            self.subbatch_files.remove(sub_batch_file)  # Remove loaded sub-batch file to avoid reloading
 
     def __len__(self):
         return self.total_samples
@@ -442,9 +443,9 @@ if __name__ == "__main__":
     parser.add_argument('--camera_name', type=str, default=None, help='Camera name for training')
     parser.add_argument('--window_size', type=int, default=1, help='Window size for data')
     parser.add_argument('--stride', type=int, default=1, help='Stride for data')
-    parser.add_argument('--batch_size', type=int, default=1024, help='Batch size for training')
+    parser.add_argument('--batch_size', type=int, default=1536, help='Batch size for training')
     parser.add_argument('--num_workers', type=int, default=8, help='Number of workers for data loading')
-    parser.add_argument('--num_epochs', type=int, default=100, help='Number of epochs for training')
+    parser.add_argument('--num_epochs', type=int, default=200, help='Number of epochs for training')
     parser.add_argument('--warmup_epochs', type=int, default=10, help='Number of warmup epochs')
     parser.add_argument('--initial_lr', type=float, default=0.001, help='Initial learning rate')
     parser.add_argument('--min_lr', type=float, default=1e-6, help='Minimum learning rate')
