@@ -6,8 +6,6 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 import os
 
-os.environ.setdefault("MASTER_PORT", "29601")
-
 from tqdm import tqdm
 import wandb
 from datetime import datetime
