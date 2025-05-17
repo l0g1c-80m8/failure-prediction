@@ -38,21 +38,23 @@ class RobotTrajectoryDataset(Dataset):
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+        assert batch_size % sub_batch_size == 0, "batch_size must be divisible by sub_batch_size"
+
         print(f"Loading data from {data_dir} with window size {window_size} and stride {stride}")
 
         os.makedirs(f"{data_dir}/sub_batches/", exist_ok=True)
         
         # Get list of all .npy files in directory
-        self.episode_files = random.shuffle([f for f in os.listdir(data_dir) if f.endswith('.npy')])
+        self.episode_files = [f for f in os.listdir(data_dir) if f.endswith('.npy')]
+        random.shuffle(self.episode_files)
         total_files = len(self.episode_files)
         self.total_samples = 0
 
         splitted_episodes = [self.episode_files[i:i + cache_size] for i in range(0, total_files, cache_size)]
         for split_id, split_list in enumerate(splitted_episodes):
-            print(f"Loading {len(split_list)} files into cache")
             bulk_samples = []
 
-            for episode_file in split_list:
+            for episode_file in tqdm(split_list, desc=f"Createting sub-batches from list {split_id+1}/{len(splitted_episodes)}", total=len(split_list)):
                 if episode_file == "indices_cache_w30_s1.npy":
                     continue
                 episode_data = np.load(os.path.join(data_dir, episode_file), allow_pickle=True)
@@ -64,7 +66,7 @@ class RobotTrajectoryDataset(Dataset):
                     # self.window_indices.append((episode_file, start_idx, end_idx))
                     bulk_samples.append(self.process_sample(episode_data[start_idx:end_idx]))
             
-            bulk_samples = random.shuffle(bulk_samples)
+            random.shuffle(bulk_samples)
             for idx, sub_batch in enumerate([bulk_samples[i:i + sub_batch_size] for i in range(0, len(bulk_samples), sub_batch_size)]):
                 sub_batch = np.array(sub_batch)
                 np.save(os.path.join(data_dir, f'sub_batches/{split_id}_sub_batch_{idx}.npy'), sub_batch)
@@ -74,42 +76,6 @@ class RobotTrajectoryDataset(Dataset):
         self.subbatch_files = [f for f in os.listdir(f"{data_dir}/sub_batches/") if f.endswith('.npy')]
 
         self.loaded_batch_samples = []
-        # Pre-calculate indices for all windows
-        """self.window_indices = []  # (file_idx, start_idx, end_idx)
-        
-        for file_idx, episode_file in tqdm(enumerate(self.episode_files), desc="Loading data files", total=len(self.episode_files)):
-            if episode_file == "indices_cache_w30_s1.npy":
-                print(f"Skipping {episode_file} as it is a cache file")
-                continue
-            episode_data = np.load(os.path.join(data_dir, episode_file), allow_pickle=True)
-            # self.episodes[file_idx] = episode_data # Pre-load all episodes into memory
-            n_frames = len(episode_data)
-            
-            for start_idx in range(0, n_frames - window_size + 1, stride):
-                end_idx = start_idx + window_size
-                self.window_indices.append((file_idx, start_idx, end_idx))"""
-        
-        # Pre-load all episodes into memory
-        # self.episodes = {}
-        # for file_idx, episode_file in tqdm(enumerate(self.episode_files), desc="Loading episodes into memory", total=len(self.episode_files)):
-        #     episode_path = os.path.join(data_dir, episode_file)
-        #     self.episodes[file_idx] = np.load(episode_path, allow_pickle=True)
-        
-        """ # Helper for loading one file
-        def load_episode(file_idx, episode_file):
-            path = os.path.join(self.data_dir, episode_file)
-            return file_idx, np.load(path, allow_pickle=True)
-
-        # Parallel loading of episodes
-        print("Loading episodes into memory in parallel...")
-        with ThreadPoolExecutor(max_workers=8) as executor:
-            results = list(tqdm(
-                executor.map(lambda args: load_episode(*args), enumerate(self.episode_files)),
-                total=len(self.episode_files),
-                desc="Loading episodes"
-            ))
-
-        self.episodes = dict(results)"""
 
     def load_episode(self, file_idx):
         
@@ -133,7 +99,7 @@ class RobotTrajectoryDataset(Dataset):
     @staticmethod
     def process_sample(window_data):
         # Get states sequence (shape: window_size x 15)
-        states = np.stack([frame[0] for frame in window_data]) # (window_size x 15) 
+        states = np.stack([frame['state'] for frame in window_data]) # (window_size x 15) 
         states_cam1 = states[:, :6]
         states_cam2 = states[:, 6:12]
         ee_pos = states[:, 12:15]  # End effector position (3 values)
@@ -146,7 +112,7 @@ class RobotTrajectoryDataset(Dataset):
         
         # Get the risk for the last timestep
         # Convert to numpy array first, then to tensor
-        risk = np.array(window_data[-1][1], dtype=np.float32)
+        risk = np.array(window_data[-1]['risk'], dtype=np.float32)
 
         return {"states_cam1":torch.FloatTensor(states_cam1).transpose(0, 1), "states_cam2":torch.FloatTensor(states_cam2).transpose(0, 1), "risk":torch.FloatTensor(risk)}
 
@@ -158,25 +124,21 @@ class RobotTrajectoryDataset(Dataset):
             self.loaded_batch_samples.extend(sub_batch_data)
 
     def __len__(self):
-        return len(self.total_samples)
+        return self.total_samples
 
     def __getitem__(self, idx):
         if len(self.loaded_batch_samples) == 0:
             self.load_sub_batches()
-
-        # Get a sample from the loaded batch
-        data_sample = self.loaded_batch_samples.pop(idx%self.batch_size)
+        
+        
+        try:
+            # Get a sample from the loaded batch
+            data_sample = self.loaded_batch_samples[idx%len(self.loaded_batch_samples)]
+        except Exception as e:
+            print(f"Error:{e}", idx%self.batch_size, len(self.loaded_batch_samples))
 
         return data_sample
 
-        # print(type(episode_data))
-        # print(episode_data.shape)
-        
-        return {
-            'states_cam1': states_cam1,  # Transform to (19 x window_size) for 1D convolution
-            'states_cam2': states_cam2,  # Transform to (19 x window_size) for 1D convolution
-            'risk': risk  # Convert numpy array to tensor
-        }
 
 def create_datasets(data_dir, window_size=10, stride=1, split="train"):
     datasplit_dir=f'{data_dir}/{split}'
@@ -208,12 +170,11 @@ def load_datasets_to_dataloaders(trainset_path, testset_path, batch_size=32, num
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=False,
         num_workers=num_workers,
         pin_memory=True,
         prefetch_factor=4
     )
-    print(f"Cache hits while loading trainset: {train_dataset.cache_hits}")
     
     val_loader = DataLoader(
         val_dataset,
@@ -223,7 +184,6 @@ def load_datasets_to_dataloaders(trainset_path, testset_path, batch_size=32, num
         pin_memory=True,
         prefetch_factor=4
     )
-    print(f"Cache hits while loading valset: {val_dataset.cache_hits}")
 
     return train_loader, val_loader
 
@@ -482,13 +442,13 @@ if __name__ == "__main__":
     parser.add_argument('--camera_name', type=str, default=None, help='Camera name for training')
     parser.add_argument('--window_size', type=int, default=1, help='Window size for data')
     parser.add_argument('--stride', type=int, default=1, help='Stride for data')
-    parser.add_argument('--batch_size', type=int, default=1016, help='Batch size for training')
+    parser.add_argument('--batch_size', type=int, default=1024, help='Batch size for training')
     parser.add_argument('--num_workers', type=int, default=8, help='Number of workers for data loading')
     parser.add_argument('--num_epochs', type=int, default=100, help='Number of epochs for training')
     parser.add_argument('--warmup_epochs', type=int, default=10, help='Number of warmup epochs')
     parser.add_argument('--initial_lr', type=float, default=0.001, help='Initial learning rate')
     parser.add_argument('--min_lr', type=float, default=1e-6, help='Minimum learning rate')
-    parser.add_argument('--patience', type=int, default=10, help='Patience for early stopping')
+    parser.add_argument('--patience', type=int, default=20, help='Patience for early stopping')
 
     parser.add_argument("--ckpt_1", '--model_checkpoint_cam1', type=str, default=None, help='Path to model checkpoint (top cam (1)) for evaluation')
     parser.add_argument("--ckpt_2",'--model_checkpoint_cam2', type=str, default=None, help='Path to model checkpoint (top cam (2)) for evaluation')
@@ -503,21 +463,25 @@ if __name__ == "__main__":
     # Initialize wandb
     wandb.login()
     
-    # Create data loaders
-    if not os.path.exists(f'{args.data_dir}/train_dataset.pt'):
-        create_datasets(
-            data_dir=args.data_dir,
-            window_size= args.window_size,
-            stride=args.stride,
-            split="train"
-        )
-    if not os.path.exists(f'{args.data_dir}/val_dataset.pt'):
-        create_datasets(
-            data_dir=args.data_dir,
-            window_size= args.window_size,
-            stride=args.stride,
-            split="val"
-        )
+    # # Create data loaders
+    # # if not os.path.exists(f'{args.data_dir}/train/sub_batches/'):
+    # os.makedirs(f'{args.data_dir}/train/sub_batches/', exist_ok=True)
+    # print("Creating Train batch files...")
+    # create_datasets(
+    #     data_dir=args.data_dir,
+    #     window_size= args.window_size,
+    #     stride=args.stride,
+    #     split="train"
+    # )
+    # # if not os.path.exists(f'{args.data_dir}/val/sub_batches/'):
+    # os.makedirs(f'{args.data_dir}/val/sub_batches/', exist_ok=True)
+    # print("Creating Val batch files...")
+    # create_datasets(
+    #     data_dir=args.data_dir,
+    #     window_size= args.window_size,
+    #     stride=args.stride,
+    #     split="val"
+    # )
     
     print("Datasets already exist. Loading from disk...")
     train_loader, val_loader = load_datasets_to_dataloaders(
