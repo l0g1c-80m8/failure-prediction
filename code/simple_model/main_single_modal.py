@@ -13,126 +13,158 @@ matplotlib.use("TkAgg")  # or "Qt5Agg"
 import matplotlib.pyplot as plt
 import sys
 import argparse
+import random
+
+from concurrent.futures import ThreadPoolExecutor
 
 from resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
 
 
 class RobotTrajectoryDataset(Dataset):
-    def __init__(self, data_dir, window_size=10, stride=1, preload=False, cache_indices=True, dual_input=False):
+    def __init__(self, data_dir, window_size=10, stride=1, use_cache=True, cache_size=1000, batch_size=1024, sub_batch_size=128, dual_input=False):
         self.data_dir = data_dir
         self.window_size = window_size
         self.stride = stride
-        self.preload = preload
-        self.dual_input = dual_input  # Flag to determine if we need both camera inputs separately
+        self.use_cache = use_cache
+        self.cache_size = cache_size
+        self.batch_size = batch_size
+        self.sub_batch_size = sub_batch_size
+        self.cache = {}
+        self.cache_hits = 0
+        self.dual_input = dual_input
+
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+        assert batch_size % sub_batch_size == 0, "batch_size must be divisible by sub_batch_size"
+
+        print(f"Loading data from {data_dir} with window size {window_size} and stride {stride}")
+
+        os.makedirs(f"{data_dir}/sub_batches/", exist_ok=True)
         
         # Get list of all .npy files in directory
-        self.episode_files = sorted([f for f in os.listdir(data_dir) if f.endswith('.npy')])
-        
-        # Cache for loaded episodes
-        self.episodes_cache = {}
-        
-        # Calculate total number of windows and their locations
-        print(f"Calculating indices for {len(self.episode_files)} episode files...")
-        
-        # Either calculate and cache indices or load them if already cached
+        self.episode_files = [f for f in os.listdir(data_dir) if f.endswith('.npy')]
+        random.shuffle(self.episode_files)
+        total_files = len(self.episode_files)
+        self.total_samples = 0
+
         indices_cache_path = os.path.join(data_dir, f"indices_cache_w{window_size}_s{stride}.npy")
         
-        if cache_indices and os.path.exists(indices_cache_path):
-            print(f"Loading cached indices from {indices_cache_path}")
-            self.window_indices = np.load(indices_cache_path, allow_pickle=True).tolist()
-            self.n_samples = len(self.window_indices)
+        # Check if we have already processed the data
+        if os.path.exists(f"{data_dir}/sub_batches/") and len(os.listdir(f"{data_dir}/sub_batches/")) > 0:
+            print(f"Sub-batches directory exists with data. Skipping pre-processing.")
+            self.subbatch_files = [f for f in os.listdir(f"{data_dir}/sub_batches/") if f.endswith('.npy')]
+            
+            # Estimate total samples from existing sub-batches
+            self.total_samples = len(self.subbatch_files) * sub_batch_size
         else:
-            # For progress tracking during initialization
-            print("Calculating window indices...")
-            self.window_indices = []
-            
-            for file_idx, episode_file in enumerate(tqdm(self.episode_files, desc="Processing episodes")):
-                episode_path = os.path.join(data_dir, episode_file)
-                # Just load the length of the episode to calculate indices
-                episode_data = np.load(episode_path, allow_pickle=True)
-                n_frames = len(episode_data)
-                
-                for start_idx in range(0, n_frames - window_size + 1, stride):
-                    end_idx = start_idx + window_size
-                    self.window_indices.append((file_idx, start_idx, end_idx))
-                
-                # Clear memory
-                del episode_data
-            
-            self.n_samples = len(self.window_indices)
-            print(f"Total windows: {self.n_samples}")
-            
-            # Cache indices for future use
-            if cache_indices:
-                print(f"Caching indices to {indices_cache_path}")
-                np.save(indices_cache_path, self.window_indices)
-        
-        # Optionally preload all data (only if requested)
-        if preload:
-            print("Preloading all episodes into memory...")
-            for file_idx, episode_file in enumerate(tqdm(self.episode_files, desc="Preloading episodes")):
-                episode_path = os.path.join(data_dir, episode_file)
-                self.episodes_cache[file_idx] = np.load(episode_path, allow_pickle=True)
-            print("Preloading complete")
+            # Process data into sub-batches
+            splitted_episodes = [self.episode_files[i:i + cache_size] for i in range(0, total_files, cache_size)]
+            for split_id, split_list in enumerate(splitted_episodes):
+                bulk_samples = []
 
-    def __len__(self):
-        return self.n_samples
+                for episode_file in tqdm(split_list, desc=f"Creating sub-batches from list {split_id+1}/{len(splitted_episodes)}", total=len(split_list)):
+                    if episode_file == f"indices_cache_w{window_size}_s{stride}.npy":
+                        continue
+                    episode_data = np.load(os.path.join(data_dir, episode_file), allow_pickle=True)
+                    n_frames = len(episode_data)
+                    
+                    for start_idx in range(0, n_frames - window_size + 1, stride):
+                        end_idx = start_idx + window_size
+                        bulk_samples.append(self.process_sample(episode_data[start_idx:end_idx]))
+                
+                random.shuffle(bulk_samples)
+                for idx, sub_batch in enumerate([bulk_samples[i:i + sub_batch_size] for i in range(0, len(bulk_samples), sub_batch_size)]):
+                    sub_batch = np.array(sub_batch)
+                    np.save(os.path.join(data_dir, f'sub_batches/{split_id}_sub_batch_{idx}.npy'), sub_batch)
 
-    def __getitem__(self, idx):
-        file_idx, start_idx, end_idx = self.window_indices[idx]
-        
-        # Load episode data if not already in cache
-        if file_idx not in self.episodes_cache:
-            episode_path = os.path.join(self.data_dir, self.episode_files[file_idx])
-            episode_data = np.load(episode_path, allow_pickle=True)
-        else:
-            episode_data = self.episodes_cache[file_idx]
-        
-        # Extract window data
-        window_data = episode_data[start_idx:end_idx]
-        
+                self.total_samples += len(bulk_samples)
+
+            self.subbatch_files = [f for f in os.listdir(f"{data_dir}/sub_batches/") if f.endswith('.npy')]
+
+        print(f"Total samples: {self.total_samples}, Total sub-batches: {len(self.subbatch_files)}")
+        self.loaded_batch_samples = []
+
+    def process_sample(self, window_data):
         # Get states sequence
         states = np.stack([frame['state'] for frame in window_data])
         
-        states_cam1 = states[:, :6]
-        states_cam2 = states[:, 6:12]
-        ee_pos = states[:, 12:15]  # End effector position (3 values)
-
-        # Concatenate the 3 EE_pos values to the first camera's 6 values (RT) (Total 9 values)
-        states_cam1 = np.concatenate((states_cam1, ee_pos), axis=1)
-
-        # Concatenate the 3 EE_pos values to the second camera's 6 values (RT) (Total 9 values)
-        states_cam2 = np.concatenate((states_cam2, ee_pos), axis=1)
-
-        # Get the risk for the last timestep
-        risk = np.array(window_data[-1]['risk'], dtype=np.float32)
-        
-        # If we haven't preloaded everything, clean up this episode to save memory
-        if not self.preload and file_idx not in self.episodes_cache:
-            del episode_data
-        
         if self.dual_input:
+            states_cam1 = states[:, :6]
+            states_cam2 = states[:, 6:12]
+            ee_pos = states[:, 12:15]  # End effector position (3 values)
+
+            # Concatenate the 3 EE_pos values to the first camera's 6 values (RT) (Total 9 values)
+            states_cam1 = np.concatenate((states_cam1, ee_pos), axis=1)
+
+            # Concatenate the 3 EE_pos values to the second camera's 6 values (RT) (Total 9 values)
+            states_cam2 = np.concatenate((states_cam2, ee_pos), axis=1)
+            
+            # Get the risk for the last timestep
+            risk = np.array(window_data[-1]['risk'], dtype=np.float32)
+            
             return {
                 'states_cam1': torch.FloatTensor(states_cam1).transpose(0, 1),
                 'states_cam2': torch.FloatTensor(states_cam2).transpose(0, 1),
                 'risk': torch.FloatTensor(risk)
             }
         else:
+            # Get the risk for the last timestep
+            risk = np.array(window_data[-1]['risk'], dtype=np.float32)
+            
             return {
                 'states': torch.FloatTensor(states).transpose(0, 1),
                 'risk': torch.FloatTensor(risk)
             }
 
-def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size=32, num_workers=4, preload=False, dual_input=False):
+    def load_sub_batches(self):
+        if len(self.subbatch_files) < self.batch_size//self.sub_batch_size:
+            # If we're running out of sub-batches, reset the list
+            self.subbatch_files = [f for f in os.listdir(f"{self.data_dir}/sub_batches/") if f.endswith('.npy')]
+            
+        self.loaded_batch_samples = []
+        current_batch_files = random.sample(self.subbatch_files, min(self.batch_size//self.sub_batch_size, len(self.subbatch_files)))
+        
+        for sub_batch_file in current_batch_files:
+            sub_batch_path = os.path.join(self.data_dir, "sub_batches", sub_batch_file)
+            sub_batch_data = np.load(sub_batch_path, allow_pickle=True)
+            self.loaded_batch_samples.extend(sub_batch_data)
+            self.subbatch_files.remove(sub_batch_file)  # Remove loaded sub-batch file to avoid reloading
+
+    def __len__(self):
+        return self.total_samples
+
+    def __getitem__(self, idx):
+        if len(self.loaded_batch_samples) == 0 or idx % self.batch_size == 0:
+            self.load_sub_batches()
+        
+        try:
+            # Get a sample from the loaded batch
+            data_sample = self.loaded_batch_samples[idx % len(self.loaded_batch_samples)]
+        except Exception as e:
+            print(f"Error: {e}", idx % self.batch_size, len(self.loaded_batch_samples))
+            # Fallback mechanism if there's an issue
+            self.load_sub_batches()
+            data_sample = self.loaded_batch_samples[0]
+
+        return data_sample
+
+def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size=32, num_workers=4, dual_input=False):
     """Create train and validation data loaders with optimization options."""
+    
+    # Calculate appropriate sub_batch_size (must divide evenly into batch_size)
+    sub_batch_size = min(128, batch_size // 8)  # Aim for 8 sub-batches per batch
+    if batch_size % sub_batch_size != 0:
+        sub_batch_size = batch_size // (batch_size // sub_batch_size)  # Adjust to ensure divisibility
     
     # Create datasets with optimizations
     train_dataset = RobotTrajectoryDataset(
         data_dir=train_dir,
         window_size=window_size,
         stride=stride,
-        preload=preload,  # Set to True only if you have enough RAM
-        cache_indices=True,  # Use cached indices if available
+        use_cache=True,
+        cache_size=1000,
+        batch_size=batch_size,
+        sub_batch_size=sub_batch_size,
         dual_input=dual_input
     )
     
@@ -140,8 +172,10 @@ def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size
         data_dir=val_dir,
         window_size=window_size,
         stride=stride,
-        preload=preload,
-        cache_indices=True,
+        use_cache=True,
+        cache_size=1000,
+        batch_size=batch_size,
+        sub_batch_size=sub_batch_size,
         dual_input=dual_input
     )
     
@@ -149,9 +183,10 @@ def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=False,  # No need to shuffle as we already shuffle when creating sub-batches
         num_workers=num_workers,
-        pin_memory=True
+        pin_memory=True,
+        prefetch_factor=2  # Reduce prefetch factor to save memory
     )
     
     val_loader = DataLoader(
@@ -159,7 +194,8 @@ def create_data_loaders(train_dir, val_dir, window_size=10, stride=1, batch_size
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=True
+        pin_memory=True,
+        prefetch_factor=2
     )
     
     return train_loader, val_loader
@@ -177,7 +213,7 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
     """Train the model and validate periodically with progress tracking and logging."""
     
     criterion = nn.MSELoss()
-    optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=0.0001)
+    optimizer = optim.SGD(model.parameters(), lr=initial_lr, momentum=0.9, weight_decay=0.0001)
     
     # Compute total steps for warmup and decay
     n_steps_per_epoch = len(train_loader)
@@ -577,7 +613,7 @@ if __name__ == "__main__":
         dual_input=dual_input
     )
     
-    wandb_disabled = True
+    wandb_disabled = False
     
     # Common training parameters
     num_epochs = 100

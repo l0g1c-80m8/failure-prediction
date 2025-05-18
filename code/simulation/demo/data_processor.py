@@ -214,11 +214,11 @@ def main(data_dir, interpolate_type = "linear"):
             print(f"WARNING: No data in episode_resampled in resampled episode {file_idx}")
         else:
             print(f"Generating {dataset_type} resampled examples...")
-            plot_metrics(episodes_file_idx, episode_resampled, episode_folder_path, episode_name=episode_name)
+            # plot_metrics(episodes_file_idx, episode_resampled, episode_folder_path, episode_name=episode_name)
             # 5. Save the resampled data
             np.save(f"{episode_folder_path}/new/{episode_name}.npy", episode_resampled)
 
 
 if __name__ == "__main__":
-    data_dir = "demo/data/train_raw" # demo/data/test_data_0403/val_raw
+    data_dir = "../simple_model/history_data/realworld_0507/processed" # demo/data/test_data_0403/val_raw
     main(data_dir, interpolate_type = "bezier") # linear
