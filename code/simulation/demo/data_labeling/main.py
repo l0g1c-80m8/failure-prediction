@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QSizePolicy, QTextEdit, QMessageBox, QTabWidget)
 from PyQt5.QtCore import Qt, QSize
 from widgets import (ContourImageWidget, ValuePlotter, FileListDialog)
+import cv2
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, '..'))
@@ -520,28 +521,48 @@ class EpisodeEditor(QMainWindow):
             
         step_data = self.episode_data[self.current_step]
         
+        debug_imwrite = False
+
         # Update images and contours
         if 'full_top_frame_rgb' in step_data and step_data['full_top_frame_rgb'] is not None:
             self.top_panel_view.set_image(step_data['full_top_frame_rgb'])
+            if debug_imwrite:
+                origin_image = self.top_panel_view.get_origin_image()
+                cv2.imwrite("full_top_frame_rgb.png", origin_image)
             self.top_panel_view.set_contour(step_data['gripper_top_contour'])
+            if debug_imwrite:
+                display_image = self.top_panel_view.get_display_image()
+                cv2.imwrite("full_top_frame_rgb_panel_contour.png", display_image)
         else:
             self.top_panel_view.clear()
         
         if 'full_top_frame_rgb' in step_data and step_data['full_top_frame_rgb'] is not None:
             self.top_object_view.set_image(step_data['full_top_frame_rgb'])
             self.top_object_view.set_contour(step_data['object_top_contour'])
+            if debug_imwrite:
+                display_image = self.top_object_view.get_display_image()
+                cv2.imwrite("full_top_frame_rgb_object_contour.png", display_image)
         else:
             self.top_object_view.clear()
         
         if 'full_front_frame_rgb' in step_data and step_data['full_front_frame_rgb'] is not None:
             self.front_panel_view.set_image(step_data['full_front_frame_rgb'])
+            if debug_imwrite:
+                origin_image = self.front_panel_view.get_origin_image()
+                cv2.imwrite("full_front_frame_rgb.png", origin_image)
             self.front_panel_view.set_contour(step_data['gripper_front_contour'])
+            if debug_imwrite:
+                display_image = self.front_panel_view.get_display_image()
+                cv2.imwrite("full_front_frame_rgb_panel_contour.png", display_image)
         else:
             self.front_panel_view.clear()
         
         if 'full_front_frame_rgb' in step_data and step_data['full_front_frame_rgb'] is not None:
             self.front_object_view.set_image(step_data['full_front_frame_rgb'])
             self.front_object_view.set_contour(step_data['object_front_contour'])
+            if debug_imwrite:
+                display_image = self.front_object_view.get_display_image()
+                cv2.imwrite("full_front_frame_rgb_object_contour.png", display_image)
         else:
             self.front_object_view.clear()
         

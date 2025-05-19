@@ -152,8 +152,11 @@ class RobotTrajectoryDataset(Dataset):
         # Create a transformation pipeline
         transform = transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Resize((width, height)),  # Reduce size to 64x64
-            transforms.ToTensor(),  # This also normalizes to [0, 1]
+            transforms.Resize((width, height)),
+            transforms.RandomHorizontalFlip(p=0.3),  # Randomly flip images
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),  # Color variations
+            transforms.RandomAffine(degrees=5, translate=(0.05, 0.05)),  # Small rotations and translations
+            transforms.ToTensor(),
         ])
         
         # Process each frame in the sequence
@@ -226,11 +229,12 @@ def prepare_rgb_data(rgb_data):
     return rgb_data.permute(0, 1, 3, 4, 2)
 
 def train_model(model, train_loader, val_loader, model_name, num_epochs=50, 
-              warmup_epochs=10, initial_lr=0.01, min_lr=1e-6, training_mode="standard"):
+              warmup_epochs=10, initial_lr=0.01, min_lr=1e-6, training_mode="standard",
+              patience=10):
     """Train the model and validate periodically with progress tracking and logging."""
     
     criterion = nn.MSELoss()
-    optimizer = optim.SGD(model.parameters(), lr=initial_lr, momentum=0.9, weight_decay=0.0001)
+    optimizer = optim.SGD(model.parameters(), lr=initial_lr, momentum=0.9, weight_decay=0.001)
     
     # Compute total steps for warmup and decay
     n_steps_per_epoch = len(train_loader)
@@ -268,6 +272,7 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
     
     best_val_mse = float('inf')
     global_step = 0
+    patience_counter = 0  # Track epochs without improvement
     
     # Create progress bar for epochs
     epoch_pbar = tqdm(range(num_epochs), desc="Training Progress")
@@ -406,11 +411,19 @@ def train_model(model, train_loader, val_loader, model_name, num_epochs=50,
             'val_mse': val_metrics['mse']
         })
         
-        # Save best model based on validation mse
+        # Early stopping check
         if val_metrics['mse'] < best_val_mse:
             best_val_mse = val_metrics['mse']
             torch.save(model.state_dict(), f'best_model_{model_name}.pth')
             wandb.save(f'best_model_{model_name}.pth')
+            patience_counter = 0  # Reset counter when we find a better model
+        else:
+            patience_counter += 1
+            
+        # If no improvement for 'patience' epochs, stop training
+        if patience_counter >= patience:
+            print(f"Early stopping triggered after {epoch+1} epochs")
+            break
 
         # Update epoch progress bar
         epoch_pbar.set_postfix({
@@ -636,12 +649,14 @@ if __name__ == "__main__":
     
     # Determine if we need dual input based on training mode
     dual_input = training_mode in ["dual_input_max_loss", "dual_models"]
-    
+
+    window_size=30
+
     # Create data loaders
     train_loader, val_loader = create_data_loaders(
         train_dir='data/train',
         val_dir='data/val',
-        window_size=30,
+        window_size=window_size,
         stride=1,
         batch_size=512,
         num_workers=4,
@@ -658,12 +673,14 @@ if __name__ == "__main__":
     
     if training_mode == "standard":
         input_channels = 15
+        rgb_feature_dim = 128
         # Original single model mode
         models = {
             'ResNet18': multimodal_resnet18(state_channels=input_channels, 
                                            fusion_type='concat', 
-                                           rgb_feature_dim=128, 
-                                           dropout_rate=0.3)
+                                           rgb_feature_dim=rgb_feature_dim, 
+                                           dropout_rate=0.5,
+                                           target_seq_len=window_size)
         }
         
         # Train and evaluate each model
@@ -684,7 +701,7 @@ if __name__ == "__main__":
                     "window_size": train_loader.dataset.window_size,
                     "stride": train_loader.dataset.stride,
                     "state_dimensions": input_channels,
-                    "rgb_feature_dim": 128,
+                    "rgb_feature_dim": rgb_feature_dim,
                     "fusion_type": "concat"
                 },
                 mode="disabled" if wandb_disabled else None

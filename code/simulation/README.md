@@ -1,1 +1,1 @@
-python3 demo/utils/split_dataset.py --source demo/data/train_raw/new/ --target ../simple_model/data --train-ratio 0.8 --seed 42
+python3 demo/utils/split_dataset.py --source demo/data/train_raw/new/ --target ../simple_model/data --train-ratio 0.8 --val-ratio 0.1 --test-ratio 0.1 --seed 42

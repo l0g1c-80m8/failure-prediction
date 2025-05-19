@@ -19,7 +19,7 @@ NPY_DIR="demo/data/train_raw/new/"
 RAW_DATA_DIR="demo/data/train_raw/"
 
 # File to store processed object names
-PROCESSED_OBJECTS_FILE="demo/processed_objects.txt"
+PROCESSED_OBJECTS_FILE="demo/data/processed_objects.txt"
 
 # Backup directory for removed files (optional)
 BACKUP_DIR="demo/data/train_raw/backup"
@@ -55,8 +55,8 @@ mkdir -p "$NEW_NPY_DIR"
 mkdir -p "$BACKUP_DIR"
 
 # Run the script to extract processed object names
-echo "Extracting processed object names from NPY files..."
-python3 demo/utils/check_processed_files.py --npy_dir "$NPY_DIR" --output "$PROCESSED_OBJECTS_FILE"
+# echo "Extracting processed object names from NPY files..."
+# python3 demo/utils/check_processed_files.py --npy_dir "$NPY_DIR" --output "$PROCESSED_OBJECTS_FILE"
 
 # Ask user if they want to clean up unprocessed files
 echo ""

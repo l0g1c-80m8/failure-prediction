@@ -26,6 +26,7 @@ class ContourImageWidget(QLabel):
         # Disable size adjustments
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.original_image = None
+        self.display_image = None
         self.contour = None
         
     def set_image(self, image):
@@ -37,7 +38,15 @@ class ContourImageWidget(QLabel):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         self.original_image = image
         self.update_display()
-        
+
+    def get_origin_image(self):
+        """Return the current image data"""
+        return self.original_image
+
+    def get_display_image(self):
+        """Return the current image data"""
+        return self.display_image
+    
     def set_contour(self, contour):
         """Set the contour to overlay"""
         self.contour = contour
@@ -49,24 +58,24 @@ class ContourImageWidget(QLabel):
             return
             
         # Make a copy of the image to draw on
-        display_img = self.original_image.copy()
+        self.display_image = self.original_image.copy()
         
         # Draw contours if they exist
         if self.contour is not None and len(self.contour) > 0:
             # Convert to list of points for OpenCV
             contour_points = self.contour.reshape((-1, 1, 2)).astype(np.int32)
-            cv2.drawContours(display_img, [contour_points], 0, (0, 255, 0), 2)
+            cv2.drawContours(self.display_image, [contour_points], 0, (0, 255, 0), 2)
         
         # Convert to QImage and display
-        height, width, channel = display_img.shape
+        height, width, channel = self.display_image.shape
         bytes_per_line = 3 * width
         
         # We need to handle different OpenCV color order
         # Convert BGR to RGB if needed
-        if len(display_img.shape) == 3 and display_img.shape[2] == 3:
-            display_img = cv2.cvtColor(display_img, cv2.COLOR_BGR2RGB)
+        if len(self.display_image.shape) == 3 and self.display_image.shape[2] == 3:
+            window_display_image = cv2.cvtColor(self.display_image, cv2.COLOR_BGR2RGB)
             
-        q_img = QImage(display_img.data, width, height, bytes_per_line, QImage.Format_RGB888)
+        q_img = QImage(window_display_image.data, width, height, bytes_per_line, QImage.Format_RGB888)
         pixmap = QPixmap.fromImage(q_img)
         
         # Scale the pixmap to fit our fixed size but maintain aspect ratio
