@@ -19,6 +19,39 @@ from concurrent.futures import ThreadPoolExecutor
 
 from resnet_models import resnet18, resnet34, resnet50, resnet101, resnet152
 
+def load_model(model_path, model_architecture, input_channels, dropout_rate=0.3):
+    """Load a trained model from disk."""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Create the model
+    if model_architecture == 'resnet18':
+        model = resnet18(input_channels=input_channels, dropout_rate=dropout_rate)
+    elif model_architecture == 'resnet34':
+        model = resnet34(input_channels=input_channels, dropout_rate=dropout_rate)
+    elif model_architecture == 'resnet50':
+        model = resnet50(input_channels=input_channels, dropout_rate=dropout_rate)
+    elif model_architecture == 'resnet101':
+        model = resnet101(input_channels=input_channels, dropout_rate=dropout_rate)
+    elif model_architecture == 'resnet152':
+        model = resnet152(input_channels=input_channels, dropout_rate=dropout_rate)
+    else:
+        raise ValueError(f"Unsupported model architecture: {model_architecture}")
+    
+    # Load the state dict
+    state_dict = torch.load(model_path, map_location=device)
+    
+    # Handle case where model was saved with DistributedDataParallel (has 'module.' prefix)
+    if list(state_dict.keys())[0].startswith('module.'):
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            name = k[7:] if k.startswith('module.') else k  # remove 'module.' prefix
+            new_state_dict[name] = v
+        state_dict = new_state_dict
+    
+    model.load_state_dict(state_dict)
+    model = model.to(device)
+    
+    return model
 
 class RobotTrajectoryDataset(Dataset):
     def __init__(self, data_dir, window_size=10, stride=1, use_cache=True, cache_size=1000, batch_size=1024, sub_batch_size=128, dual_input=False):
@@ -148,36 +181,13 @@ class RobotTrajectoryDataset(Dataset):
 
         return data_sample
 
-def create_data_loaders(train_dir, val_dir, test_dir, window_size=10, stride=1, batch_size=32, num_workers=4, dual_input=False):
+def create_data_loaders(test_dir, window_size=10, stride=1, batch_size=32, num_workers=4, dual_input=False):
     """Create train and validation data loaders with optimization options."""
     
     # Calculate appropriate sub_batch_size (must divide evenly into batch_size)
     sub_batch_size = min(128, batch_size // 8)  # Aim for 8 sub-batches per batch
     if batch_size % sub_batch_size != 0:
         sub_batch_size = batch_size // (batch_size // sub_batch_size)  # Adjust to ensure divisibility
-    
-    # Create datasets with optimizations
-    train_dataset = RobotTrajectoryDataset(
-        data_dir=train_dir,
-        window_size=window_size,
-        stride=stride,
-        use_cache=True,
-        cache_size=1000,
-        batch_size=batch_size,
-        sub_batch_size=sub_batch_size,
-        dual_input=dual_input
-    )
-    
-    val_dataset = RobotTrajectoryDataset(
-        data_dir=val_dir,
-        window_size=window_size,
-        stride=stride,
-        use_cache=True,
-        cache_size=1000,
-        batch_size=batch_size,
-        sub_batch_size=sub_batch_size,
-        dual_input=dual_input
-    )
        
     test_dataset = RobotTrajectoryDataset(
         data_dir=test_dir,
@@ -190,25 +200,6 @@ def create_data_loaders(train_dir, val_dir, test_dir, window_size=10, stride=1, 
         dual_input=dual_input
     )
 
-    # Create data loaders
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=False,  # No need to shuffle as we already shuffle when creating sub-batches
-        num_workers=num_workers,
-        pin_memory=True,
-        prefetch_factor=2  # Reduce prefetch factor to save memory
-    )
-    
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True,
-        prefetch_factor=2
-    )
-    
     test_loader = DataLoader(
         test_dataset,
         batch_size=batch_size,
@@ -217,232 +208,7 @@ def create_data_loaders(train_dir, val_dir, test_dir, window_size=10, stride=1, 
         pin_memory=True,
         prefetch_factor=2
     )
-    return train_loader, val_loader, test_loader
-
-def compute_metrics(outputs, targets):
-    """Compute MSE and normalized MSE metrics."""
-    mse = nn.MSELoss()(outputs, targets).item()
-    
-    return {
-        'mse': mse
-    }
-
-def train_model(model, train_loader, val_loader, model_name, num_epochs=50, 
-              warmup_epochs=10, initial_lr=0.01, min_lr=1e-6, training_mode="standard"):
-    """Train the model and validate periodically with progress tracking and logging."""
-    
-    criterion = nn.MSELoss()
-    optimizer = optim.SGD(model.parameters(), lr=initial_lr, momentum=0.9, weight_decay=0.0001)
-    
-    # Compute total steps for warmup and decay
-    n_steps_per_epoch = len(train_loader)
-    n_warmup_steps = warmup_epochs * n_steps_per_epoch
-    n_total_steps = num_epochs * n_steps_per_epoch
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    def get_lr(step):
-        if step < n_warmup_steps:
-            # Linear warmup
-            return min_lr + (initial_lr - min_lr) * (step / n_warmup_steps)
-        else:
-            # Cosine decay
-            decay_steps = n_total_steps - n_warmup_steps
-            decay_step = step - n_warmup_steps
-            cosine_decay = 0.5 * (1 + np.cos(np.pi * decay_step / decay_steps))
-            return min_lr + (initial_lr - min_lr) * cosine_decay
-    
-    print(f"CUDA available: {torch.cuda.is_available()}")
-    print(f"Number of GPUs: {torch.cuda.device_count()}")
-    if torch.cuda.device_count() > 1:
-        print(f"Using {torch.cuda.device_count()} GPUs with DistributedDataParallel!")
-        # Set up process group
-        torch.distributed.init_process_group(backend='nccl')
-        # Create model on current device
-        local_rank = torch.distributed.get_rank()
-        torch.cuda.set_device(local_rank)
-        model = model.cuda()
-        model = torch.nn.parallel.DistributedDataParallel(model, 
-                                                        device_ids=[local_rank],
-                                                        output_device=local_rank)
-    else:
-        model = model.to(device)
-    
-    best_val_mse = float('inf')
-    global_step = 0
-    
-    # Create progress bar for epochs
-    epoch_pbar = tqdm(range(num_epochs), desc="Training Progress")
-    
-    for epoch in epoch_pbar:
-
-        # Training phase
-        model.train()
-        train_metrics = {
-            'loss': 0.0,
-            'mse': 0.0
-        }
-        
-        # Create progress bar for training batches
-        train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]", leave=False)
-        
-        for batch in train_pbar:
-            # Update learning rate
-            current_lr = get_lr(global_step)
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = current_lr
-
-            optimizer.zero_grad()
-            
-            if training_mode == "dual_input_max_loss":
-                # Mode 1: Single model with dual inputs, max loss
-                states_cam1 = batch['states_cam1'].to(device)
-                states_cam2 = batch['states_cam2'].to(device)
-                risks = batch['risk'].to(device)
-                
-                # Forward pass for both camera inputs
-                outputs_cam1 = model(states_cam1)
-                outputs_cam2 = model(states_cam2)
-                
-                # Calculate loss for each output and take the maximum
-                loss_cam1 = criterion(outputs_cam1, risks)
-                loss_cam2 = criterion(outputs_cam2, risks)
-                loss = torch.max(loss_cam1, loss_cam2)
-                
-                # For metrics tracking, use the maximum prediction
-                outputs = torch.max(outputs_cam1, outputs_cam2)
-            else:
-                # Standard mode: Single input (combined or specific camera)
-                states = batch['states'].to(device)
-                risks = batch['risk'].to(device)
-                outputs = model(states)
-                loss = criterion(outputs, risks)
-            
-            loss.backward()
-            optimizer.step()
-            
-            print_gpu_memory_stats()
-            
-            # Compute batch metrics
-            batch_metrics = compute_metrics(outputs, risks)
-            
-            # Update running metrics
-            train_metrics['loss'] += loss.item()
-            train_metrics['mse'] += batch_metrics['mse']
-            
-            global_step += 1
-            
-            # Update training progress bar
-            train_pbar.set_postfix({
-                'loss': f"{loss.item():.4f}",
-                'lr': f"{current_lr:.6f}"
-            })
-        
-        # Compute average training metrics
-        for key in train_metrics:
-            train_metrics[key] /= len(train_loader)
-        
-        # Validation phase
-        model.eval()
-        val_metrics = {
-            'loss': 0.0,
-            'mse': 0.0
-        }
-
-        # Create progress bar for validation batches
-        val_pbar = tqdm(val_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Val]", leave=False)
-        
-        with torch.no_grad():
-            for batch in val_pbar:
-                if training_mode == "dual_input_max_loss":
-                    # Mode 1: Single model with dual inputs, max loss
-                    states_cam1 = batch['states_cam1'].to(device)
-                    states_cam2 = batch['states_cam2'].to(device)
-                    risks = batch['risk'].to(device)
-                    
-                    # Forward pass for both camera inputs
-                    outputs_cam1 = model(states_cam1)
-                    outputs_cam2 = model(states_cam2)
-                    
-                    # For validation, use the maximum prediction
-                    outputs = torch.max(outputs_cam1, outputs_cam2)
-                    loss = criterion(outputs, risks)
-                else:
-                    # Standard mode: Single input
-                    states = batch['states'].to(device)
-                    risks = batch['risk'].to(device)
-                    outputs = model(states)
-                    loss = criterion(outputs, risks)
-
-                # Compute batch metrics
-                batch_metrics = compute_metrics(outputs, risks)
-                
-                # Update running metrics
-                val_metrics['loss'] += loss.item()
-                val_metrics['mse'] += batch_metrics['mse']
-                
-                val_pbar.set_postfix({
-                    'loss': f"{loss.item():.4f}"
-                })
-
-        # Compute average validation metrics
-        for key in val_metrics:
-            val_metrics[key] /= len(val_loader)
-        
-        # Log metrics to wandb
-        wandb.log({
-            'epoch': epoch + 1,
-            'learning_rate': current_lr,
-            'train_loss': train_metrics['loss'],
-            'train_mse': train_metrics['mse'],
-            'val_loss': val_metrics['loss'],
-            'val_mse': val_metrics['mse']
-        })
-        
-        # Save best model based on validation mse
-        if val_metrics['mse'] < best_val_mse:
-            best_val_mse = val_metrics['mse']
-            torch.save(model.state_dict(), f'best_model_{model_name}.pth')
-            wandb.save(f'best_model_{model_name}.pth')
-
-        # Update epoch progress bar
-        epoch_pbar.set_postfix({
-            'lr': f"{current_lr:.6f}"
-        })
-    
-    return best_val_mse  # Return best validation MSE for reference
-
-def train_dual_models(model_cam1, model_cam2, train_loader, val_loader, model_name_prefix, 
-                      num_epochs=50, warmup_epochs=10, initial_lr=0.01, min_lr=1e-6):
-    """Train two separate models for the two camera inputs."""
-    
-    # First, train the model for camera 1
-    print(f"\nTraining model for Camera 1")
-    best_val_mse_cam1 = train_model(
-        model_cam1, 
-        train_loader, 
-        val_loader, 
-        f"{model_name_prefix}_cam1", 
-        num_epochs=num_epochs,
-        warmup_epochs=warmup_epochs,
-        initial_lr=initial_lr,
-        min_lr=min_lr
-    )
-    
-    # Then, train the model for camera 2
-    print(f"\nTraining model for Camera 2")
-    best_val_mse_cam2 = train_model(
-        model_cam2, 
-        train_loader, 
-        val_loader, 
-        f"{model_name_prefix}_cam2", 
-        num_epochs=num_epochs,
-        warmup_epochs=warmup_epochs,
-        initial_lr=initial_lr,
-        min_lr=min_lr
-    )
-    
-    return best_val_mse_cam1, best_val_mse_cam2
+    return test_loader
 
 def evaluate_model(model, test_loader, model_name, training_mode="standard"):
     """Evaluate the model on test data with progress tracking and visualization."""
@@ -590,29 +356,25 @@ def visualize_predictions(predictions, ground_truth):
         title="Model Predictions vs Ground Truth"
     )})
 
-# Add this function to monitor GPU memory
-def print_gpu_memory_stats():
-    if torch.cuda.is_available():
-        for i in range(torch.cuda.device_count()):
-            total_memory = torch.cuda.get_device_properties(i).total_memory / 1e9  # GB
-            reserved = torch.cuda.memory_reserved(i) / 1e9  # GB
-            allocated = torch.cuda.memory_allocated(i) / 1e9  # GB
-            free = total_memory - allocated
-            print(f"GPU {i}: Total: {total_memory:.2f}GB, Reserved: {reserved:.2f}GB, "
-                  f"Allocated: {allocated:.2f}GB, Free: {free:.2f}GB")
-            
 if __name__ == "__main__":
     os.environ['QT_X11_NO_MITSHM'] = '1'
     # Initialize wandb
     wandb.login()
     
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Train risk prediction models')
+    parser = argparse.ArgumentParser(description='Evaluate trained risk prediction models')
     parser.add_argument('--training-mode', type=str, default='standard',
                       choices=['standard', 'dual_input_max_loss', 'dual_models'],
                       help='Training mode to use')
     parser.add_argument('--local-rank', type=int, default=0, 
                       help='Local rank for distributed training')
+    parser.add_argument('--model-path', type=str, required=True,
+                      help='Path to the trained model file')
+    parser.add_argument('--model-architecture', type=str, default='resnet18',
+                      choices=['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152'],
+                      help='Architecture of the model')
+    parser.add_argument('--dual-model-path-cam2', type=str, default=None,
+                      help='Path to the second model for dual model evaluation')
     
     args = parser.parse_args()
     training_mode = args.training_mode
@@ -622,9 +384,7 @@ if __name__ == "__main__":
     dual_input = training_mode in ["dual_input_max_loss", "dual_models"]
     
     # Create data loaders
-    train_loader, val_loader, test_loader = create_data_loaders(
-        train_dir='data/train',
-        val_dir='data/val',
+    test_loader = create_data_loaders(
         test_dir='data/test',
         window_size=30,
         stride=1,
@@ -635,19 +395,13 @@ if __name__ == "__main__":
     
     wandb_disabled = True
     
-    # Common training parameters
-    num_epochs = 100
-    warmup_epochs = 10
-    initial_lr = 0.01
-    min_lr = 1e-6
-    
     if training_mode == "standard":
         input_channels = 15
         # Original single model mode
         model_name = 'ResNet18_Standard'
         model = resnet18(input_channels=input_channels, dropout_rate=0.3)
         
-        # Train and evaluate each model
+        # Evaluate each model
         print(f"\nTraining {model_name}")
         # Initialize wandb
         wandb.init(
@@ -656,25 +410,19 @@ if __name__ == "__main__":
             config={
                 "architecture": model_name,
                 "training_mode": training_mode,
-                "epochs": num_epochs,
-                "warmup_epochs": warmup_epochs,
-                "initial_lr": initial_lr,
-                "min_lr": min_lr,
-                "batch_size": train_loader.batch_size,
-                "window_size": train_loader.dataset.window_size,
-                "stride": train_loader.dataset.stride,
+                "batch_size": test_loader.batch_size,
+                "window_size": test_loader.dataset.window_size,
+                "stride": test_loader.dataset.stride,
                 "state_dimensions": input_channels  # Original state dimension
             },
             mode="disabled" if wandb_disabled else None
         )
-        # Train the model
-        train_model(model, train_loader, val_loader, model_name, 
-                    num_epochs=num_epochs,
-                    warmup_epochs=warmup_epochs,
-                    initial_lr=initial_lr,
-                    min_lr=min_lr,
-                    training_mode=training_mode)
-        
+        # Load a single model
+        model = load_model(
+            args.model_path,
+            args.model_architecture,
+            input_channels
+        )
         # Evaluate on test set
         test_mse = evaluate_model(model, test_loader, model_name, training_mode=training_mode)
         print(f"Test MSE for {model_name}: {test_mse:.4f}")
@@ -697,26 +445,19 @@ if __name__ == "__main__":
             config={
                 "architecture": model_name,
                 "training_mode": training_mode,
-                "epochs": num_epochs,
-                "warmup_epochs": warmup_epochs,
-                "initial_lr": initial_lr,
-                "min_lr": min_lr,
-                "batch_size": train_loader.batch_size,
-                "window_size": train_loader.dataset.window_size,
-                "stride": train_loader.dataset.stride,
+                "batch_size": test_loader.batch_size,
+                "window_size": test_loader.dataset.window_size,
+                "stride": test_loader.dataset.stride,
                 "state_dimensions": input_channels
             },
             mode="disabled" if wandb_disabled else None
         )
-        
-        # Train the model
-        train_model(model, train_loader, val_loader, model_name, 
-                    num_epochs=num_epochs,
-                    warmup_epochs=warmup_epochs,
-                    initial_lr=initial_lr,
-                    min_lr=min_lr,
-                    training_mode=training_mode)
-        
+        # Load a single model
+        model = load_model(
+            args.model_path,
+            args.model_architecture,
+            input_channels
+        )
         # Evaluate on test set
         test_mse = evaluate_model(model, test_loader, model_name, training_mode=training_mode)
         print(f"Test MSE for {model_name}: {test_mse:.4f}")
@@ -742,38 +483,32 @@ if __name__ == "__main__":
             config={
                 "architecture": model_name,
                 "training_mode": training_mode,
-                "epochs": num_epochs,
-                "warmup_epochs": warmup_epochs,
-                "initial_lr": initial_lr,
-                "min_lr": min_lr,
-                "batch_size": train_loader.batch_size,
-                "window_size": train_loader.dataset.window_size,
-                "stride": train_loader.dataset.stride,
+                "batch_size": test_loader.batch_size,
+                "window_size": test_loader.dataset.window_size,
+                "stride": test_loader.dataset.stride,
                 "state_dimensions": input_channels
             },
             mode="disabled" if wandb_disabled else None
         )
         
-        # Train both models
-        best_val_mse_cam1, best_val_mse_cam2 = train_dual_models(
-            model_cam1, model_cam2, 
-            train_loader, val_loader, 
-            model_name,
-            num_epochs=num_epochs,
-            warmup_epochs=warmup_epochs,
-            initial_lr=initial_lr,
-            min_lr=min_lr
+        # Load both models for dual model evaluation
+        model_cam1 = load_model(
+            args.model_path,
+            args.model_architecture,
+            args.input_channels
+        )
+        
+        model_cam2 = load_model(
+            args.dual_model_path_cam2,
+            args.model_architecture,
+            args.input_channels
         )
         
         # Evaluate the ensemble on testing set
         test_mse_ensemble = evaluate_dual_models(model_cam1, model_cam2, test_loader, model_name)
-        print(f"Validation MSE for Camera 1 model: {best_val_mse_cam1:.4f}")
-        print(f"Validation MSE for Camera 2 model: {best_val_mse_cam2:.4f}")
         print(f"Test MSE for Ensemble: {test_mse_ensemble:.4f}")
         
         wandb.log({
-            "val_mse_cam1": best_val_mse_cam1,
-            "val_mse_cam2": best_val_mse_cam2,
             "test_mse_ensemble": test_mse_ensemble
         })
         

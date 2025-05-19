@@ -33,6 +33,9 @@ python3 -m torch.distributed.launch --nproc_per_node=2 main_multimodal.py --trai
 
 # 5. Python inference
 ```shell
+# Inference test set 
+python3.10 evaluate.py --model-path ./best_model_ResNet18_Standard.pth --training-mode standard --model-architecture resnet18
+
 # Inference single data value 
 python3.10 inference.py --model_path ./best_model_ResNet18.pth --model_type ResNet18 --input_channels 8 --window_size 1 --output_dir ./results --single_window
 
